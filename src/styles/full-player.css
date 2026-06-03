@@ -250,6 +250,11 @@
   color: var(--accent);
 }
 
+.full-player__lyric-line.preview:not(.active) {
+  color: rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.075);
+}
+
 .full-player__lyric-line.active:hover {
   color: var(--accent);
   background: rgba(var(--accent-rgb), 0.14);
@@ -293,7 +298,9 @@
 .full-player__lyric-line:hover .full-player__lyric-play,
 .full-player__lyric-line:hover .full-player__lyric-time,
 .full-player__lyrics-scroll--previewing .full-player__lyric-line.active .full-player__lyric-play,
-.full-player__lyrics-scroll--previewing .full-player__lyric-line.active .full-player__lyric-time {
+.full-player__lyrics-scroll--previewing .full-player__lyric-line.active .full-player__lyric-time,
+.full-player__lyrics-scroll--previewing .full-player__lyric-line.preview .full-player__lyric-play,
+.full-player__lyrics-scroll--previewing .full-player__lyric-line.preview .full-player__lyric-time {
   opacity: 1;
   transform: translateX(0) scale(1);
 }

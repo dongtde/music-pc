@@ -3,6 +3,7 @@ import {
   getPersonalizedMvs,
   getPersonalizedNewSongs,
   getPersonalizedPlaylists,
+  getLyric,
   getPlaylistDetail,
   getPlaylistTracks
 } from '../api/modules/netease'
@@ -59,6 +60,15 @@ export async function getPlaylistDetailData(id) {
     playlist: mapPlaylistDetail(rawPlaylist),
     tracks: tracks.map(mapPlaylistTrack)
   }
+}
+
+export async function getTrackLyricData(id) {
+  const response = await getLyric({ id })
+  const lines = parseLyricLines(response.lrc?.lyric, response.tlyric?.lyric)
+
+  return lines.length
+    ? lines
+    : [{ time: '--:--', text: '暂无歌词', seconds: 0, placeholder: true }]
 }
 
 function mapBanner(banner, index) {
@@ -194,4 +204,58 @@ function formatDate(value) {
   const day = String(date.getDate()).padStart(2, '0')
 
   return `${date.getFullYear()}-${month}-${day} 更新`
+}
+
+function parseLyricLines(lyric = '', translatedLyric = '') {
+  const translatedLines = parseLrc(translatedLyric)
+  const translatedByTime = new Map(
+    translatedLines.map((line) => [line.seconds.toFixed(3), line.text])
+  )
+
+  return parseLrc(lyric).map((line) => {
+    const translatedText = translatedByTime.get(line.seconds.toFixed(3))
+
+    return {
+      ...line,
+      text: translatedText ? `${line.text} / ${translatedText}` : line.text
+    }
+  })
+}
+
+function parseLrc(lyric = '') {
+  return lyric
+    .split(/\r?\n/)
+    .flatMap((line) => {
+      const timestamps = [...line.matchAll(/\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/g)]
+      const text = line.replace(/\[[^\]]+\]/g, '').trim()
+
+      if (!timestamps.length || !text || isLyricMetadata(text)) {
+        return []
+      }
+
+      return timestamps.map((match) => {
+        const minutes = Number(match[1])
+        const seconds = Number(match[2])
+        const milliseconds = Number((match[3] ?? '0').padEnd(3, '0'))
+        const totalSeconds = minutes * 60 + seconds + milliseconds / 1000
+
+        return {
+          time: formatLyricTime(totalSeconds),
+          text,
+          seconds: totalSeconds
+        }
+      })
+    })
+    .sort((current, next) => current.seconds - next.seconds)
+}
+
+function formatLyricTime(value) {
+  const minutes = Math.floor(value / 60)
+  const seconds = String(Math.floor(value % 60)).padStart(2, '0')
+
+  return `${minutes}:${seconds}`
+}
+
+function isLyricMetadata(text) {
+  return /^(作词|作曲|编曲|制作人|监制|录音|混音|母带|和声|发行|出品|版权)\s*[:：]/.test(text)
 }

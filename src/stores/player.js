@@ -113,12 +113,25 @@ export function usePlayerStore() {
     audio.volume = nextVolume
   }
 
+  function seekTo(value) {
+    const nextTime = Math.max(0, Number(value))
+
+    if (!Number.isFinite(nextTime)) {
+      return
+    }
+
+    audio.currentTime = nextTime
+    state.currentTime = nextTime
+    state.currentTrack.elapsed = formatTime(nextTime)
+  }
+
   return {
     state,
     playTrack,
     togglePlay,
     setQueue,
-    setVolume
+    setVolume,
+    seekTo
   }
 }
 

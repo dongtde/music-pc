@@ -58,10 +58,11 @@
           >
             <button
               v-for="(line, index) in lyricLines"
-              :key="line.text"
+              :key="`${line.seconds}-${line.text}-${index}`"
               class="full-player__lyric-line"
               :class="{
-                active: displayLyricIndex === index,
+                active: playbackLyricIndex === index,
+                preview: lyricsPreviewing && previewLyricIndex === index,
               }"
               type="button"
               :data-lyric-index="index"
@@ -105,6 +106,8 @@ import {
   watch,
 } from 'vue';
 import { ChevronDown, Play } from 'lucide-vue-next';
+import { getTrackLyricData } from '../services/netease';
+import { usePlayerStore } from '../stores/player';
 import '../styles/full-player.css';
 
 const props = defineProps({
@@ -123,6 +126,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close', 'cover-flight-end']);
+const player = usePlayerStore();
 
 const coverLabel = ref(null);
 const coverFlyer = ref(null);
@@ -130,9 +134,10 @@ const coverFlightActive = ref(false);
 const lyricsScroll = ref(null);
 const lyricsDragging = ref(false);
 const lyricsWheeling = ref(false);
-const playbackLyricIndex = ref(4);
+const playbackLyricIndex = ref(0);
 const previewLyricIndex = ref(null);
 const lyricsPreviewing = ref(false);
+const lyricLines = ref(createLyricPlaceholder('歌词加载中...'));
 const lyricsDragState = {
   startY: 0,
   startScrollTop: 0,
@@ -142,6 +147,7 @@ const lyricsWheelScrollSpeed = 1.2;
 let coverFlightAnimation = null;
 let lyricsPreviewTimer = null;
 let lyricsWheelTimer = null;
+let lyricRequestId = 0;
 
 const fallbackCoverPalette = {
   primary: '#213245',
@@ -162,25 +168,7 @@ const coverStyle = computed(() => {
   };
 });
 
-const lyricLines = [
-  { time: '01:02', text: '夜空中最亮的星', active: false },
-  { time: '01:08', text: '能否听清', active: false },
-  { time: '01:14', text: '那仰望的人', active: false },
-  { time: '01:20', text: '心底的孤独和叹息', active: false },
-  { time: '01:24', text: '夜空中最亮的星', active: true },
-  { time: '01:31', text: '能否记起', active: false },
-  { time: '01:37', text: '曾与我同行', active: false },
-  { time: '01:43', text: '消失在风里的身影', active: false },
-  { time: '01:51', text: '我祈祷拥有一颗透明的心灵', active: false },
-  { time: '01:58', text: '和会流泪的眼睛', active: false },
-  { time: '02:05', text: '给我再去相信的勇气', active: false },
-  { time: '02:12', text: '越过谎言去拥抱你', active: false },
-];
-
-const displayLyricIndex = computed(
-  () => previewLyricIndex.value ?? playbackLyricIndex.value,
-);
-const currentLyricIndex = computed(() => displayLyricIndex.value);
+const currentLyricIndex = computed(() => playbackLyricIndex.value);
 
 watch(
   () => props.open,
@@ -202,6 +190,21 @@ watch(
   { flush: 'sync' },
 );
 
+watch(
+  () => props.track.id,
+  (trackId) => {
+    loadTrackLyrics(trackId);
+  },
+  { immediate: true },
+);
+
+watch(
+  () => player.state.currentTime,
+  (currentTime) => {
+    syncPlaybackLyric(currentTime);
+  },
+);
+
 watch(currentLyricIndex, async () => {
   if (lyricsDragging.value || lyricsPreviewing.value) {
     return;
@@ -221,6 +224,87 @@ onBeforeUnmount(() => {
   clearLyricsWheelTimer();
 });
 
+async function loadTrackLyrics(trackId) {
+  lyricRequestId += 1;
+  const requestId = lyricRequestId;
+  playbackLyricIndex.value = 0;
+  previewLyricIndex.value = null;
+  lyricsPreviewing.value = false;
+
+  if (!isNeteaseTrackId(trackId)) {
+    lyricLines.value = createLyricPlaceholder('暂无歌词');
+    await nextTick();
+    centerCurrentLyric('auto');
+    return;
+  }
+
+  lyricLines.value = createLyricPlaceholder('歌词加载中...');
+
+  try {
+    const lines = await getTrackLyricData(trackId);
+
+    if (requestId !== lyricRequestId) {
+      return;
+    }
+
+    lyricLines.value = lines;
+    syncPlaybackLyric(player.state.currentTime);
+  } catch (error) {
+    if (requestId !== lyricRequestId) {
+      return;
+    }
+
+    console.warn('Failed to load lyrics:', error);
+    lyricLines.value = createLyricPlaceholder('歌词加载失败');
+  }
+
+  await nextTick();
+  centerCurrentLyric('auto');
+}
+
+function syncPlaybackLyric(currentTime) {
+  const lines = lyricLines.value;
+
+  if (!lines.length || lines[0]?.placeholder) {
+    playbackLyricIndex.value = 0;
+    return;
+  }
+
+  const nextIndex = findCurrentLyricIndex(lines, currentTime);
+
+  if (nextIndex !== playbackLyricIndex.value) {
+    playbackLyricIndex.value = nextIndex;
+  }
+}
+
+function findCurrentLyricIndex(lines, currentTime) {
+  let low = 0;
+  let high = lines.length - 1;
+  let currentIndex = 0;
+
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+
+    if (lines[middle].seconds <= currentTime + 0.16) {
+      currentIndex = middle;
+      low = middle + 1;
+      continue;
+    }
+
+    high = middle - 1;
+  }
+
+  return currentIndex;
+}
+
+function createLyricPlaceholder(text) {
+  return [{ time: '--:--', text, seconds: 0, placeholder: true }];
+}
+
+function isNeteaseTrackId(trackId) {
+  return /^\d+$/.test(String(trackId ?? ''));
+}
+
 function startLyricsDrag(event) {
   const scroller = lyricsScroll.value;
 
@@ -230,7 +314,7 @@ function startLyricsDrag(event) {
 
   lyricsDragging.value = true;
   lyricsPreviewing.value = true;
-  previewLyricIndex.value = displayLyricIndex.value;
+  previewLyricIndex.value = playbackLyricIndex.value;
   lyricsDragState.startY = event.clientY;
   lyricsDragState.startScrollTop = scroller.scrollTop;
   clearLyricsPreviewTimer();
@@ -263,7 +347,6 @@ function stopLyricsDrag(event) {
   updatePreviewLyricFromCenter();
   lyricsScroll.value?.releasePointerCapture?.(event.pointerId);
   lyricsDragging.value = false;
-  centerCurrentLyric();
   schedulePlaybackLyricReturn();
 }
 
@@ -290,18 +373,24 @@ function handleLyricsWheel(event) {
 
   lyricsWheelTimer = window.setTimeout(() => {
     lyricsWheeling.value = false;
-    centerCurrentLyric();
     schedulePlaybackLyricReturn();
   }, 140);
 }
 
 function selectLyric(index) {
+  const line = lyricLines.value[index];
+
+  if (!line || line.placeholder) {
+    return;
+  }
+
   playbackLyricIndex.value = index;
   previewLyricIndex.value = null;
   lyricsPreviewing.value = false;
   lyricsWheeling.value = false;
   clearLyricsPreviewTimer();
   clearLyricsWheelTimer();
+  player.seekTo(line.seconds);
 }
 
 function updatePreviewLyricFromCenter() {
@@ -314,7 +403,7 @@ function updatePreviewLyricFromCenter() {
   const centerY =
     scroller.getBoundingClientRect().top + scroller.clientHeight / 2;
   const lyricLines = scroller.querySelectorAll('.full-player__lyric-line');
-  let nearestIndex = displayLyricIndex.value;
+  let nearestIndex = previewLyricIndex.value ?? playbackLyricIndex.value;
   let nearestDistance = Number.POSITIVE_INFINITY;
 
   lyricLines.forEach((line) => {

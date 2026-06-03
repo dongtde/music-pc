@@ -1009,6 +1009,89 @@ button {
   text-align: right;
 }
 
+.player-progress {
+  position: relative;
+  height: 20px;
+  cursor: pointer;
+  outline: none;
+}
+
+.player-progress__rail {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 4px;
+  overflow: visible;
+  border-radius: 999px;
+  background: #516071;
+  transform: translateY(-50%);
+}
+
+.player-progress__fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.player-progress__thumb {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.32);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.82);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.player-progress:hover .player-progress__thumb,
+.player-progress:focus-visible .player-progress__thumb {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.player-progress__tooltip {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  z-index: 6;
+  display: grid;
+  width: max-content;
+  max-width: min(360px, 72vw);
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #ffffff;
+  background: rgba(18, 20, 27, 0.92);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.player-progress__tooltip strong {
+  overflow: hidden;
+  max-width: 320px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.player-progress__tooltip small {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .player-tools {
   justify-content: flex-end;
 }

@@ -93,8 +93,35 @@
         </div>
       </div>
       <div class="progress-row">
-        <span>{{ currentTrack.elapsed }}</span>
-        <n-progress type="line" :percentage="progressPercentage" :height="4" :show-indicator="false" color="var(--accent)" rail-color="#516071" />
+        <span>{{ formatTime(displayProgressTime) }}</span>
+        <div
+          ref="progressBar"
+          class="player-progress"
+          role="slider"
+          tabindex="0"
+          :aria-valuemin="0"
+          :aria-valuemax="progressAriaMax"
+          :aria-valuenow="progressAriaNow"
+          @pointerdown="startProgressDrag"
+          @pointermove="handleProgressPointerMove"
+          @pointerup="stopProgressDrag"
+          @pointercancel="cancelProgressDrag"
+          @pointerleave="hideProgressPreview"
+          @keydown="handleProgressKeydown"
+        >
+          <span class="player-progress__rail" aria-hidden="true">
+            <span class="player-progress__fill" :style="{ width: `${displayProgressPercentage}%` }" />
+            <span class="player-progress__thumb" :style="{ left: `${displayProgressPercentage}%` }" />
+          </span>
+          <span
+            v-if="progressPreviewVisible"
+            class="player-progress__tooltip"
+            :style="{ left: `${progressTooltipPercent}%` }"
+          >
+            <strong>{{ progressPreviewLyric }}</strong>
+            <small>{{ formatTime(progressPreviewTime) }}</small>
+          </span>
+        </div>
         <span>{{ currentTrack.duration }}</span>
       </div>
     </div>
@@ -144,6 +171,7 @@ import FullScreenPlayer from './FullScreenPlayer.vue'
 import SongListRow from './SongListRow.vue'
 import { useThemeStore } from '../stores/theme'
 import { usePlayerStore } from '../stores/player'
+import { getTrackLyricData } from '../services/netease'
 
 const theme = useThemeStore()
 const player = usePlayerStore()
@@ -154,10 +182,18 @@ const queueMenuOpen = ref(false)
 const fullPlayerOpen = ref(false)
 const fullPlayerCoverRect = ref(null)
 const albumArtButton = ref(null)
+const progressBar = ref(null)
 const albumArtHidden = ref(false)
 const lastAlbumArtToggleAt = ref(0)
 const playMode = ref('list')
 const volume = ref(100)
+const progressDragging = ref(false)
+const progressPreviewVisible = ref(false)
+const progressPreviewPercent = ref(0)
+const progressPreviewTime = ref(0)
+const pendingProgressTime = ref(0)
+const progressLyricLines = ref([])
+let progressLyricRequestId = 0
 
 const fallbackCoverPalette = {
   primary: '#213245',
@@ -191,6 +227,26 @@ const progressPercentage = computed(() => {
 
   return Math.min(100, (player.state.currentTime / player.state.duration) * 100)
 })
+const displayProgressTime = computed(() =>
+  progressDragging.value ? pendingProgressTime.value : player.state.currentTime
+)
+const displayProgressPercentage = computed(() => {
+  if (!player.state.duration) {
+    return 0
+  }
+
+  return Math.min(100, (displayProgressTime.value / player.state.duration) * 100)
+})
+const progressAriaMax = computed(() => Math.floor(player.state.duration || 0))
+const progressAriaNow = computed(() => Math.floor(displayProgressTime.value || 0))
+const progressPreviewLyric = computed(() => {
+  const line = findLyricLineAt(progressPreviewTime.value)
+
+  return line?.text || '暂无歌词'
+})
+const progressTooltipPercent = computed(() =>
+  Math.min(92, Math.max(8, progressPreviewPercent.value))
+)
 const queueTracks = computed(() => player.state.queue.slice(0, 8).map((song, index) => ({
   ...song,
   id: song.id ?? `queue-${song.rank}`,
@@ -203,6 +259,14 @@ const queueTracks = computed(() => player.state.queue.slice(0, 8).map((song, ind
 watch(volume, (value) => {
   player.setVolume(Number(value) / 100)
 })
+
+watch(
+  () => currentTrack.value.id,
+  (trackId) => {
+    loadProgressLyrics(trackId)
+  },
+  { immediate: true }
+)
 
 function toggleModeMenu() {
   modeMenuOpen.value = !modeMenuOpen.value
@@ -277,6 +341,175 @@ function closePlayerPopovers() {
   modeMenuOpen.value = false
   volumeMenuOpen.value = false
   queueMenuOpen.value = false
+}
+
+async function loadProgressLyrics(trackId) {
+  progressLyricRequestId += 1
+  const requestId = progressLyricRequestId
+  progressLyricLines.value = []
+
+  if (!isNeteaseTrackId(trackId)) {
+    return
+  }
+
+  try {
+    const lines = await getTrackLyricData(trackId)
+
+    if (requestId !== progressLyricRequestId) {
+      return
+    }
+
+    progressLyricLines.value = lines.filter((line) => !line.placeholder)
+  } catch (error) {
+    if (requestId !== progressLyricRequestId) {
+      return
+    }
+
+    console.warn('Failed to load progress lyrics:', error)
+    progressLyricLines.value = []
+  }
+}
+
+function startProgressDrag(event) {
+  if (!player.state.duration) {
+    return
+  }
+
+  progressDragging.value = true
+  updateProgressPreview(event)
+  pendingProgressTime.value = progressPreviewTime.value
+  event.currentTarget.setPointerCapture?.(event.pointerId)
+}
+
+function handleProgressPointerMove(event) {
+  if (!player.state.duration) {
+    return
+  }
+
+  updateProgressPreview(event)
+
+  if (progressDragging.value) {
+    pendingProgressTime.value = progressPreviewTime.value
+  }
+}
+
+function stopProgressDrag(event) {
+  if (!progressDragging.value) {
+    hideProgressPreview()
+    return
+  }
+
+  updateProgressPreview(event)
+  pendingProgressTime.value = progressPreviewTime.value
+  player.seekTo(pendingProgressTime.value)
+  progressDragging.value = false
+  progressPreviewVisible.value = false
+  event.currentTarget.releasePointerCapture?.(event.pointerId)
+}
+
+function cancelProgressDrag(event) {
+  progressDragging.value = false
+  event.currentTarget.releasePointerCapture?.(event.pointerId)
+  hideProgressPreview()
+}
+
+function hideProgressPreview() {
+  if (progressDragging.value) {
+    return
+  }
+
+  progressPreviewVisible.value = false
+}
+
+function updateProgressPreview(event) {
+  const progress = getProgressPoint(event)
+
+  if (!progress) {
+    return
+  }
+
+  progressPreviewVisible.value = true
+  progressPreviewPercent.value = progress.percent
+  progressPreviewTime.value = progress.time
+}
+
+function getProgressPoint(event) {
+  const bar = progressBar.value
+  const duration = player.state.duration
+
+  if (!bar || !duration) {
+    return null
+  }
+
+  const rect = bar.getBoundingClientRect()
+
+  if (rect.width <= 0) {
+    return null
+  }
+
+  const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
+  const time = ratio * duration
+
+  return {
+    percent: ratio * 100,
+    time
+  }
+}
+
+function handleProgressKeydown(event) {
+  if (!player.state.duration) {
+    return
+  }
+
+  const step = event.shiftKey ? 10 : 5
+
+  if (event.key === 'ArrowLeft') {
+    event.preventDefault()
+    player.seekTo(player.state.currentTime - step)
+  }
+
+  if (event.key === 'ArrowRight') {
+    event.preventDefault()
+    player.seekTo(player.state.currentTime + step)
+  }
+}
+
+function findLyricLineAt(time) {
+  const lines = progressLyricLines.value
+
+  if (!lines.length) {
+    return null
+  }
+
+  let low = 0
+  let high = lines.length - 1
+  let currentIndex = 0
+
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2)
+
+    if (lines[middle].seconds <= time + 0.16) {
+      currentIndex = middle
+      low = middle + 1
+      continue
+    }
+
+    high = middle - 1
+  }
+
+  return lines[currentIndex]
+}
+
+function formatTime(value = 0) {
+  const totalSeconds = Math.max(0, Math.floor(value))
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = String(totalSeconds % 60).padStart(2, '0')
+
+  return `${minutes}:${seconds}`
+}
+
+function isNeteaseTrackId(trackId) {
+  return /^\d+$/.test(String(trackId ?? ''))
 }
 
 async function playQueueTrack(track) {
