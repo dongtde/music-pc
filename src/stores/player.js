@@ -3,6 +3,7 @@ import { getSongUrl } from '../api/modules/netease'
 import { currentTrack as fallbackTrack, newSongs } from '../data/music'
 
 const audio = new Audio()
+const endedListeners = new Set()
 
 const state = reactive({
   currentTrack: {
@@ -46,6 +47,7 @@ audio.addEventListener('pause', () => {
 
 audio.addEventListener('ended', () => {
   state.isPlaying = false
+  notifyTrackEnded()
 })
 
 export function usePlayerStore() {
@@ -103,6 +105,27 @@ export function usePlayerStore() {
     return true
   }
 
+  async function restartCurrentTrack() {
+    state.error = null
+
+    if (!audio.src) {
+      return playTrack(state.currentTrack)
+    }
+
+    try {
+      audio.currentTime = 0
+      state.currentTime = 0
+      state.currentTrack.elapsed = '0:00'
+      await audio.play()
+      return true
+    } catch (error) {
+      state.error = error
+      state.isPlaying = false
+      console.warn('Failed to restart track:', error)
+      return false
+    }
+  }
+
   function setQueue(tracks) {
     state.queue = tracks
   }
@@ -125,14 +148,37 @@ export function usePlayerStore() {
     state.currentTrack.elapsed = formatTime(nextTime)
   }
 
+  function onTrackEnded(listener) {
+    endedListeners.add(listener)
+
+    return () => {
+      endedListeners.delete(listener)
+    }
+  }
+
   return {
     state,
     playTrack,
     togglePlay,
+    restartCurrentTrack,
     setQueue,
     setVolume,
-    seekTo
+    seekTo,
+    onTrackEnded
   }
+}
+
+function notifyTrackEnded() {
+  endedListeners.forEach((listener) => {
+    try {
+      const result = listener(state.currentTrack)
+      result?.catch?.((error) => {
+        console.warn('Track ended listener failed:', error)
+      })
+    } catch (error) {
+      console.warn('Track ended listener failed:', error)
+    }
+  })
 }
 
 function normalizeTrack(track, url) {

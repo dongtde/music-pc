@@ -36,44 +36,69 @@
           </div>
         </section>
 
-        <section class="full-player__lyrics-panel">
-          <h1>{{ track.name }}</h1>
-          <p>{{ track.artist }}</p>
+        <section class="full-player__lyrics-panel" aria-label="歌词">
+          <header class="full-player__lyrics-head">
+            <h1>{{ track.name }}</h1>
+            <p>{{ track.artist }}</p>
+          </header>
 
           <div
-            ref="lyricsScroll"
-            class="full-player__lyrics-scroll"
+            class="full-player__qq-lyrics"
             :class="{
-              'full-player__lyrics-scroll--dragging': lyricsDragging,
-              'full-player__lyrics-scroll--wheeling': lyricsWheeling,
-              'full-player__lyrics-scroll--previewing': lyricsPreviewing,
+              'full-player__qq-lyrics--dragging': lyricsDragging,
+              'full-player__qq-lyrics--wheeling': lyricsWheeling,
+              'full-player__qq-lyrics--previewing': lyricsInteractionActive,
             }"
-            aria-label="滚动歌词"
-            @pointerdown="startLyricsDrag"
-            @pointermove="handleLyricsPointerMove"
-            @pointerup="stopLyricsDrag"
-            @pointerleave="stopLyricsDrag"
-            @pointercancel="stopLyricsDrag"
-            @wheel.prevent="handleLyricsWheel"
           >
-            <button
-              v-for="(line, index) in lyricLines"
-              :key="`${line.seconds}-${line.text}-${index}`"
-              class="full-player__lyric-line"
-              :class="{
-                active: playbackLyricIndex === index,
-                preview: lyricsPreviewing && previewLyricIndex === index,
-              }"
-              type="button"
-              :data-lyric-index="index"
-              @click="selectLyric(index)"
+            <div
+              v-if="lyricsInteractionActive && previewLyric"
+              class="full-player__lyric-guide"
             >
-              <span class="full-player__lyric-play"
-                ><Play :size="15" fill="currentColor"
-              /></span>
-              <span class="full-player__lyric-text">{{ line.text }}</span>
-              <span class="full-player__lyric-time">{{ line.time }}</span>
-            </button>
+              <span class="full-player__lyric-guide-time">{{ previewLyric.time }}</span>
+              <span class="full-player__lyric-guide-line" />
+              <button
+                class="full-player__lyric-guide-play"
+                type="button"
+                :disabled="previewLyric.placeholder"
+                aria-label="跳转到选中歌词"
+                @click.stop="seekToPreviewLyric"
+              >
+                <Play :size="14" fill="currentColor" />
+              </button>
+            </div>
+
+            <div
+              ref="lyricsScroll"
+              class="full-player__lyrics-scroll"
+              aria-label="滚动歌词"
+              @pointerdown="startLyricsDrag"
+              @pointermove="handleLyricsPointerMove"
+              @pointerup="stopLyricsDrag"
+              @pointerleave="stopLyricsDrag"
+              @pointercancel="stopLyricsDrag"
+              @wheel.prevent="handleLyricsWheel"
+            >
+              <button
+                v-for="(line, index) in lyricLines"
+                :key="`${line.seconds}-${line.text}-${index}`"
+                class="full-player__lyric-line"
+                :class="{
+                  active: playbackLyricIndex === index,
+                  preview: lyricsInteractionActive && previewLyricIndex === index,
+                  past: index < playbackLyricIndex,
+                  future: index > playbackLyricIndex,
+                  placeholder: line.placeholder,
+                }"
+                type="button"
+                :data-lyric-index="index"
+                @click="selectLyric(index)"
+              >
+                <span class="full-player__lyric-text">{{ line.text }}</span>
+                <span v-if="line.translation" class="full-player__lyric-translation">
+                  {{ line.translation }}
+                </span>
+              </button>
+            </div>
           </div>
         </section>
       </div>
@@ -131,6 +156,7 @@ const player = usePlayerStore();
 const coverLabel = ref(null);
 const coverFlyer = ref(null);
 const coverFlightActive = ref(false);
+const lastSourceRect = ref(null);
 const lyricsScroll = ref(null);
 const lyricsDragging = ref(false);
 const lyricsWheeling = ref(false);
@@ -141,6 +167,7 @@ const lyricLines = ref(createLyricPlaceholder('歌词加载中...'));
 const lyricsDragState = {
   startY: 0,
   startScrollTop: 0,
+  moved: false,
 };
 const lyricsDragScrollSpeed = 2.2;
 const lyricsWheelScrollSpeed = 1.2;
@@ -148,6 +175,7 @@ let coverFlightAnimation = null;
 let lyricsPreviewTimer = null;
 let lyricsWheelTimer = null;
 let lyricRequestId = 0;
+let suppressNextLyricClick = false;
 
 const fallbackCoverPalette = {
   primary: '#213245',
@@ -169,23 +197,46 @@ const coverStyle = computed(() => {
 });
 
 const currentLyricIndex = computed(() => playbackLyricIndex.value);
+const lyricsInteractionActive = computed(
+  () => lyricsDragging.value || lyricsWheeling.value || lyricsPreviewing.value,
+);
+const previewLyric = computed(() => {
+  const index = previewLyricIndex.value ?? playbackLyricIndex.value;
+
+  return lyricLines.value[index] ?? null;
+});
+
+watch(
+  () => props.sourceRect,
+  (rect) => {
+    const nextRect = cloneRect(rect);
+
+    if (isUsableRect(nextRect)) {
+      lastSourceRect.value = nextRect;
+    }
+  },
+  { immediate: true },
+);
 
 watch(
   () => props.open,
   async (open) => {
+    const sourceRect = getFlightSourceRect();
+
     if (open) {
-      coverFlightActive.value = Boolean(props.sourceRect);
+      coverFlightActive.value = Boolean(sourceRect);
       await nextTick();
+      await waitForLayoutFrame();
       centerCurrentLyric('auto');
-      playCoverFlight('enter');
+      playCoverFlight('enter', { sourceRect });
       return;
     }
 
-    const targetRect = getCoverLabelRect();
-    coverFlightActive.value = Boolean(props.sourceRect && targetRect);
+    const targetRect = cloneRect(getCoverLabelRect());
+    coverFlightActive.value = Boolean(sourceRect && targetRect);
     hideCoverLabel();
     await nextTick();
-    playCoverFlight('leave', targetRect);
+    playCoverFlight('leave', { sourceRect, targetRect });
   },
   { flush: 'sync' },
 );
@@ -206,7 +257,7 @@ watch(
 );
 
 watch(currentLyricIndex, async () => {
-  if (lyricsDragging.value || lyricsPreviewing.value) {
+  if (lyricsInteractionActive.value) {
     return;
   }
 
@@ -230,6 +281,9 @@ async function loadTrackLyrics(trackId) {
   playbackLyricIndex.value = 0;
   previewLyricIndex.value = null;
   lyricsPreviewing.value = false;
+  lyricsWheeling.value = false;
+  clearLyricsPreviewTimer();
+  clearLyricsWheelTimer();
 
   if (!isNeteaseTrackId(trackId)) {
     lyricLines.value = createLyricPlaceholder('暂无歌词');
@@ -308,7 +362,7 @@ function isNeteaseTrackId(trackId) {
 function startLyricsDrag(event) {
   const scroller = lyricsScroll.value;
 
-  if (!scroller) {
+  if (!scroller || event.button > 0) {
     return;
   }
 
@@ -317,6 +371,7 @@ function startLyricsDrag(event) {
   previewLyricIndex.value = playbackLyricIndex.value;
   lyricsDragState.startY = event.clientY;
   lyricsDragState.startScrollTop = scroller.scrollTop;
+  lyricsDragState.moved = false;
   clearLyricsPreviewTimer();
   clearLyricsWheelTimer();
   lyricsWheeling.value = false;
@@ -332,9 +387,14 @@ function handleLyricsPointerMove(event) {
   }
 
   if (lyricsDragging.value) {
+    const deltaY = event.clientY - lyricsDragState.startY;
+
+    if (Math.abs(deltaY) > 3) {
+      lyricsDragState.moved = true;
+    }
+
     scroller.scrollTop =
-      lyricsDragState.startScrollTop -
-      (event.clientY - lyricsDragState.startY) * lyricsDragScrollSpeed;
+      lyricsDragState.startScrollTop - deltaY * lyricsDragScrollSpeed;
     updatePreviewLyricFromCenter();
   }
 }
@@ -347,6 +407,14 @@ function stopLyricsDrag(event) {
   updatePreviewLyricFromCenter();
   lyricsScroll.value?.releasePointerCapture?.(event.pointerId);
   lyricsDragging.value = false;
+
+  if (lyricsDragState.moved) {
+    suppressNextLyricClick = true;
+    window.setTimeout(() => {
+      suppressNextLyricClick = false;
+    }, 0);
+  }
+
   schedulePlaybackLyricReturn();
 }
 
@@ -380,17 +448,31 @@ function handleLyricsWheel(event) {
 function selectLyric(index) {
   const line = lyricLines.value[index];
 
+  if (suppressNextLyricClick) {
+    suppressNextLyricClick = false;
+    return;
+  }
+
+  seekToLyricLine(line, index);
+}
+
+function seekToPreviewLyric() {
+  seekToLyricLine(previewLyric.value, previewLyricIndex.value);
+}
+
+function seekToLyricLine(line, index) {
   if (!line || line.placeholder) {
     return;
   }
 
-  playbackLyricIndex.value = index;
+  playbackLyricIndex.value = Number.isInteger(index) ? index : playbackLyricIndex.value;
   previewLyricIndex.value = null;
   lyricsPreviewing.value = false;
   lyricsWheeling.value = false;
   clearLyricsPreviewTimer();
   clearLyricsWheelTimer();
   player.seekTo(line.seconds);
+  nextTick(() => centerCurrentLyric());
 }
 
 function updatePreviewLyricFromCenter() {
@@ -474,9 +556,9 @@ function handleLyricsResize() {
   centerCurrentLyric('auto');
 }
 
-function playCoverFlight(direction, targetRectOverride = null) {
-  const sourceRect = props.sourceRect;
-  const targetRect = targetRectOverride ?? getCoverLabelRect();
+function playCoverFlight(direction, options = {}) {
+  const sourceRect = cloneRect(options.sourceRect ?? getFlightSourceRect());
+  const targetRect = cloneRect(options.targetRect ?? getCoverLabelRect());
   const flyer = coverFlyer.value;
 
   if (
@@ -581,6 +663,25 @@ function getCoverLabelRect() {
   };
 }
 
+function getFlightSourceRect() {
+  const rect = cloneRect(props.sourceRect);
+
+  return isUsableRect(rect) ? rect : cloneRect(lastSourceRect.value);
+}
+
+function cloneRect(rect) {
+  if (!rect) {
+    return null;
+  }
+
+  return {
+    left: Number(rect.left),
+    top: Number(rect.top),
+    width: Number(rect.width),
+    height: Number(rect.height),
+  };
+}
+
 function isUsableRect(rect) {
   return Boolean(
     rect &&
@@ -591,6 +692,14 @@ function isUsableRect(rect) {
     rect.width > 0 &&
     rect.height > 0,
   );
+}
+
+function waitForLayoutFrame() {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(resolve);
+    });
+  });
 }
 
 function showCoverLabel() {

@@ -31,12 +31,19 @@
           <button class="track-action-button" type="button" aria-label="喜欢">
             <Heart :size="25" />
           </button>
-          <button class="track-action-button track-action-button--comment" type="button" aria-label="评论">
-            <MessageCircle :size="25" />
-            <span>{{ currentTrack.commentCount ?? 887 }}</span>
+          <button
+            class="track-action-button track-action-button--comment"
+            type="button"
+            aria-label="评论"
+            @click="openSongCommentsModal"
+          >
+            <MessageCircleMore :size="25" />
+            <span v-if="displaySongCommentTotal">
+              {{ formatCommentBadge(displaySongCommentTotal) }}
+            </span>
           </button>
           <button class="track-action-button" type="button" aria-label="更多">
-            <MoreHorizontal :size="25" />
+            <Ellipsis :size="25" />
           </button>
         </div>
       </div>
@@ -180,18 +187,34 @@
       </div>
     </div>
   </footer>
+
+  <CommentModal
+    v-model:show="songCommentsModalVisible"
+    title="歌曲评论"
+    :subtitle="`${currentTrack.name} - ${currentTrack.artist}`"
+    :total="displaySongCommentTotal"
+    :hot-comments="songHotComments"
+    :comments="songComments"
+    :loading="songCommentsLoading"
+    :error="songCommentsError"
+    :has-more="songCommentsHasMore"
+    @load-more="loadMoreSongComments"
+  />
 </template>
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { Heart, ListMusic, Maximize2, MessageCircle, Mic2, Minimize2, MoreHorizontal, Pause, Play, Plus, Repeat, Repeat1, Repeat2, Shuffle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-vue-next'
+import { Ellipsis, Heart, ListMusic, Maximize2, MessageCircleMore, Mic2, Minimize2, Pause, Play, Plus, Repeat, Repeat1, Repeat2, Shuffle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
+import CommentModal from './CommentModal.vue'
 import FullScreenPlayer from './FullScreenPlayer.vue'
 import SongListRow from './SongListRow.vue'
 import { useThemeStore } from '../stores/theme'
 import { usePlayerStore } from '../stores/player'
-import { getTrackLyricData } from '../services/netease'
+import { getSongCommentsData, getTrackLyricData } from '../services/netease'
 import '../styles/player.css'
+
+const COMMENT_LIMIT = 30
 
 const theme = useThemeStore()
 const player = usePlayerStore()
@@ -214,7 +237,18 @@ const progressPreviewPercent = ref(0)
 const progressPreviewTime = ref(0)
 const pendingProgressTime = ref(0)
 const progressLyricLines = ref([])
+const songCommentsModalVisible = ref(false)
+const songHotComments = ref([])
+const songComments = ref([])
+const songCommentTotal = ref(0)
+const songCommentsOffset = ref(0)
+const songCommentsHasMore = ref(false)
+const songCommentsLoading = ref(false)
+const songCommentsError = ref('')
+const songCommentTrackId = ref(null)
 let progressLyricRequestId = 0
+let songCommentsRequestId = 0
+let removeTrackEndedListener = null
 
 const fallbackCoverPalette = {
   primary: '#213245',
@@ -231,6 +265,9 @@ const playModes = [
 
 const activePlayMode = computed(() => playModes.find((mode) => mode.value === playMode.value) ?? playModes[3])
 const currentTrack = computed(() => player.state.currentTrack)
+const displaySongCommentTotal = computed(() =>
+  songCommentTotal.value || Number(currentTrack.value.commentCount) || 0
+)
 const currentVolumeIcon = computed(() => Number(volume.value) > 0 ? Volume2 : VolumeX)
 const currentTrackCoverStyle = computed(() => {
   const palette = currentTrack.value.coverPalette ?? fallbackCoverPalette
@@ -293,6 +330,11 @@ watch(
   () => currentTrack.value.id,
   (trackId) => {
     loadProgressLyrics(trackId)
+    resetSongComments()
+
+    if (isNeteaseTrackId(trackId)) {
+      loadSongComments(trackId, true)
+    }
   },
   { immediate: true }
 )
@@ -407,6 +449,118 @@ async function loadProgressLyrics(trackId) {
     console.warn('Failed to load progress lyrics:', error)
     progressLyricLines.value = []
   }
+}
+
+function resetSongComments() {
+  songCommentsRequestId += 1
+  songCommentTrackId.value = null
+  songHotComments.value = []
+  songComments.value = []
+  songCommentTotal.value = 0
+  songCommentsOffset.value = 0
+  songCommentsHasMore.value = false
+  songCommentsLoading.value = false
+  songCommentsError.value = ''
+}
+
+async function loadSongComments(trackId = currentTrack.value.id, reset = false) {
+  if (songCommentsLoading.value) {
+    return
+  }
+
+  if (!isNeteaseTrackId(trackId)) {
+    songCommentsError.value = '当前歌曲暂无评论数据'
+    return
+  }
+
+  const requestId = ++songCommentsRequestId
+  const offset = reset ? 0 : songCommentsOffset.value
+  songCommentsLoading.value = true
+  songCommentsError.value = ''
+
+  try {
+    const data = await getSongCommentsData({
+      id: trackId,
+      limit: COMMENT_LIMIT,
+      offset
+    })
+
+    if (
+      requestId !== songCommentsRequestId ||
+      String(trackId) !== String(currentTrack.value.id)
+    ) {
+      return
+    }
+
+    if (reset) {
+      songHotComments.value = data.hotComments
+      songComments.value = data.comments
+    } else {
+      songComments.value = [...songComments.value, ...data.comments]
+    }
+
+    songCommentTrackId.value = trackId
+    songCommentTotal.value = data.total
+    songCommentsHasMore.value = data.more || songComments.value.length < data.total
+    songCommentsOffset.value = songComments.value.length
+    currentTrack.value.commentCount = data.total
+  } catch (error) {
+    if (requestId !== songCommentsRequestId) {
+      return
+    }
+
+    console.warn('Failed to load song comments:', error)
+    songCommentsError.value = '评论加载失败'
+  } finally {
+    if (requestId === songCommentsRequestId) {
+      songCommentsLoading.value = false
+    }
+  }
+}
+
+async function openSongCommentsModal() {
+  songCommentsModalVisible.value = true
+  closePlayerPopovers()
+
+  const trackId = currentTrack.value.id
+
+  if (!isNeteaseTrackId(trackId)) {
+    songCommentsError.value = '当前歌曲暂无评论数据'
+    return
+  }
+
+  if (
+    !songCommentsLoading.value &&
+    (String(songCommentTrackId.value) !== String(trackId) || !songComments.value.length)
+  ) {
+    await loadSongComments(trackId, true)
+  }
+}
+
+function loadMoreSongComments() {
+  if (!songCommentsHasMore.value) {
+    return
+  }
+
+  loadSongComments(currentTrack.value.id)
+}
+
+function formatCommentBadge(value = 0) {
+  const count = Number(value) || 0
+
+  if (count >= 100000) {
+    return '10w+'
+  }
+
+  if (count >= 10000) {
+    return '1w+'
+  }
+
+  if (count >= 1000) {
+    return '999+'
+  }
+
+  return String(count)
 }
 
 function startProgressDrag(event) {
@@ -559,6 +713,16 @@ async function playNextTrack() {
   await playQueueRelative(1)
 }
 
+async function handleTrackEnded() {
+  if (playMode.value === 'single') {
+    const restarted = await player.restartCurrentTrack()
+    showPlaybackError(restarted)
+    return
+  }
+
+  await playQueueRelative(1)
+}
+
 async function playQueueRelative(direction) {
   const queue = player.state.queue
 
@@ -653,9 +817,12 @@ function handleOutsideClick(event) {
 
 onMounted(() => {
   document.addEventListener('pointerdown', handleOutsideClick)
+  removeTrackEndedListener = player.onTrackEnded(handleTrackEnded)
 })
 
 onUnmounted(() => {
   document.removeEventListener('pointerdown', handleOutsideClick)
+  removeTrackEndedListener?.()
+  removeTrackEndedListener = null
 })
 </script>

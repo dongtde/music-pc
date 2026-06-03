@@ -1,6 +1,8 @@
 import {
   getBanners,
+  getAlbumComments,
   getAlbumDetail,
+  getAlbumDynamic,
   getAlbumNewest,
   getArtistList,
   getArtistToplist,
@@ -19,6 +21,7 @@ import {
   getSearchHotDetail,
   getSearchMultiMatch,
   getSearchSuggestPc,
+  getSongComments,
   getToplist,
   getTopPlaylists,
   getTopAlbums
@@ -222,21 +225,54 @@ export async function getAlbumsDiscoveryData({ area = 'ALL' } = {}) {
 }
 
 export async function getAlbumDetailData(id) {
-  const response = await getAlbumDetail({ id })
+  const [response, dynamicResponse] = await Promise.all([
+    getAlbumDetail({ id }),
+    getAlbumDynamic({ id }).catch(() => ({}))
+  ])
   const album = response.album
 
   if (!album) {
     throw new Error('Album detail is empty')
   }
 
+  const songs = Array.isArray(response.songs) && response.songs.length
+    ? response.songs
+    : album.songs ?? []
+
   return {
-    album: mapAlbumDetail(album),
-    tracks: (album.songs ?? []).map(mapPlaylistTrack)
+    album: mapAlbumDetail(album, dynamicResponse),
+    tracks: songs.map(mapPlaylistTrack)
+  }
+}
+
+export async function getAlbumCommentsData({ id, limit = 20, offset = 0 }) {
+  const response = await getAlbumComments({ id, limit, offset })
+  const result = response ?? {}
+
+  return {
+    hotComments: (result.hotComments ?? []).map(mapComment),
+    comments: (result.comments ?? []).map(mapComment),
+    total: result.total ?? 0,
+    more: Boolean(result.more),
+    isFirstPage: offset <= 0
   }
 }
 
 export async function getPlaylistCommentsData({ id, limit = 20, offset = 0 }) {
   const response = await getPlaylistComments({ id, limit, offset })
+  const result = response ?? {}
+
+  return {
+    hotComments: (result.hotComments ?? []).map(mapComment),
+    comments: (result.comments ?? []).map(mapComment),
+    total: result.total ?? 0,
+    more: Boolean(result.more),
+    isFirstPage: offset <= 0
+  }
+}
+
+export async function getSongCommentsData({ id, limit = 20, offset = 0 }) {
+  const response = await getSongComments({ id, limit, offset })
   const result = response ?? {}
 
   return {
@@ -355,7 +391,7 @@ function mapAlbumCard(album, index = 0) {
     id: album.id,
     title: album.name,
     artist: album.artist?.name || '',
-    desc: [album.artist?.name, album.publishTime ? formatDate(album.publishTime) : '', album.size ? `${album.size} tracks` : ''].filter(Boolean).join(' · '),
+    desc: [album.artist?.name, album.publishTime ? formatDate(album.publishTime) : '', album.size ? `${album.size} 首歌` : ''].filter(Boolean).join(' · '),
     listeners: formatPlayCount(album.playCount ?? album.info?.count ?? 0),
     type: coverType(index),
     coverUrl: album.picUrl,
@@ -363,17 +399,28 @@ function mapAlbumCard(album, index = 0) {
   }
 }
 
-function mapAlbumDetail(album) {
+function getArtistNames(artists = []) {
+  return artists.map((artist) => artist.name).filter(Boolean).join(' / ')
+}
+
+function mapAlbumDetail(album, dynamic = {}) {
+  const artist = getArtistNames(album.artists) || album.artist?.name || '未知歌手'
+
   return {
     id: album.id,
     title: album.name,
-    description: album.description || `${album.artist?.name || '未知歌手'} 的专辑`,
-    artist: album.artist?.name || '未知歌手',
+    description: album.description || album.briefDesc || `${artist} 的专辑`,
+    artist,
     artistId: album.artist?.id ?? '',
     publishTime: formatDate(album.publishTime),
     company: album.company || '',
     size: album.size ?? album.songCount ?? 0,
-    coverUrl: album.picUrl
+    type: coverType(Number(album.id) || 0),
+    coverUrl: album.picUrl,
+    subCount: dynamic.subCount ?? album.info?.likedCount ?? 0,
+    commentCount: dynamic.commentCount ?? album.info?.commentCount ?? 0,
+    shareCount: dynamic.shareCount ?? album.info?.shareCount ?? 0,
+    isSubscribed: Boolean(dynamic.isSub)
   }
 }
 
@@ -694,7 +741,7 @@ function parseLyricLines(lyric = '', translatedLyric = '') {
 
     return {
       ...line,
-      text: translatedText ? `${line.text} / ${translatedText}` : line.text
+      translation: translatedText && translatedText !== line.text ? translatedText : ''
     }
   })
 }

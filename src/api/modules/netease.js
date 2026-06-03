@@ -96,8 +96,26 @@ export function getAlbumDetail(params = {}) {
   })
 }
 
+export function getAlbumDynamic(params = {}) {
+  return http.get('/album/detail/dynamic', {
+    params
+  })
+}
+
+export function getAlbumComments(params = {}) {
+  return http.get('/comment/album', {
+    params
+  })
+}
+
 export function getPlaylistComments(params = {}) {
   return http.get('/comment/playlist', {
+    params
+  })
+}
+
+export function getSongComments(params = {}) {
+  return http.get('/comment/music', {
     params
   })
 }

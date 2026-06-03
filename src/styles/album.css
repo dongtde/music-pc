@@ -4,8 +4,8 @@
 
 .album-hero {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 24px;
+  grid-template-columns: 188px minmax(0, 1fr);
+  gap: 22px;
   align-items: end;
   margin-top: 12px;
 }
@@ -15,41 +15,90 @@
   aspect-ratio: 1 / 1;
   overflow: hidden;
   border-radius: 10px;
-  box-shadow: 0 22px 44px var(--shadow-color);
   background: var(--panel-bg);
+  box-shadow: 0 22px 44px var(--shadow-color);
 }
 
 .album-cover__image {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.album-cover--sunset {
+  background:
+    radial-gradient(circle at 68% 28%, #f8c85b 0 16%, transparent 17%),
+    linear-gradient(150deg, #cf4f72 0 42%, #f09a4c 44% 70%, #7438a8 100%);
+}
+
+.album-cover--neon {
+  background:
+    linear-gradient(180deg, rgba(7, 9, 28, 0.08), rgba(5, 4, 18, 0.9)),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 18px,
+      rgba(0, 209, 255, 0.26) 19px 21px
+    ),
+    linear-gradient(135deg, #101331, #2a327f 48%, #f0198d);
+}
+
+.album-cover--lofi {
+  background:
+    radial-gradient(circle at 28% 24%, rgba(255, 194, 92, 0.34), transparent 22%),
+    linear-gradient(135deg, #28394b, #291b26 62%, #77433f);
+}
+
+.album-cover--stage {
+  background:
+    radial-gradient(circle at 30% 42%, rgba(193, 221, 232, 0.72), transparent 18%),
+    radial-gradient(circle at 70% 34%, rgba(255, 127, 94, 0.36), transparent 16%),
+    linear-gradient(180deg, #1a2630, #07090c);
+}
+
+.album-cover--piano {
+  background:
+    radial-gradient(circle at 22% 14%, #f6d48e 0 14%, transparent 15%),
+    linear-gradient(120deg, #7d4c20, #22140e 55%, #0d0907);
+}
+
+.album-hero__content {
+  min-width: 0;
+  padding-bottom: 4px;
 }
 
 .album-hero__content h1 {
   margin: 8px 0 0;
   color: var(--text-strong);
   font-size: 30px;
+  line-height: 1.16;
+  letter-spacing: 0;
 }
 
 .album-hero__content p {
   max-width: 760px;
   margin: 10px 0 0;
   color: var(--text-muted);
+  font-size: 14px;
   line-height: 1.8;
 }
 
 .album-meta,
-.album-actions {
+.album-actions,
+.album-stats {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 14px;
 }
 
-.album-meta span {
+.album-meta span,
+.album-stats span {
   display: inline-flex;
   height: 30px;
   align-items: center;
+  gap: 6px;
   padding: 0 10px;
   border-radius: 999px;
   color: var(--text-soft);
@@ -57,23 +106,59 @@
   font-size: 12px;
 }
 
+.album-stats {
+  margin-top: 12px;
+}
+
+.album-stats span {
+  color: var(--text-muted);
+}
+
+.album-stats svg {
+  color: var(--accent);
+}
+
 .album-action {
   display: inline-flex;
-  align-items: center;
-  gap: 7px;
   height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   padding: 0 16px;
   border: 1px solid var(--border-subtle);
   border-radius: 999px;
   color: var(--text-main);
   background: var(--control-bg);
   cursor: pointer;
+  transition:
+    background-color 220ms ease,
+    border-color 220ms ease,
+    color 220ms ease,
+    transform 220ms ease;
+}
+
+.album-action:hover {
+  border-color: rgba(var(--accent-rgb), 0.48);
+  color: var(--text-strong);
+  background: var(--control-bg-hover);
+  transform: translateY(-1px);
+}
+
+.album-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.54;
+  transform: none;
 }
 
 .album-action--primary {
   border-color: transparent;
   color: #ffffff;
   background: var(--accent);
+}
+
+.album-action--primary:hover {
+  color: #ffffff;
+  background: var(--accent-hover);
 }
 
 .album-state {
@@ -97,7 +182,11 @@
 
 @media (max-width: 1400px) {
   .album-hero {
-    grid-template-columns: 188px minmax(0, 1fr);
+    grid-template-columns: 156px minmax(0, 1fr);
     gap: 20px;
+  }
+
+  .album-hero__content h1 {
+    font-size: 26px;
   }
 }
