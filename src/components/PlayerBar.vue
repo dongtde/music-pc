@@ -22,11 +22,24 @@
           <component :is="fullPlayerOpen ? Minimize2 : Maximize2" :size="22" />
         </span>
       </button>
-      <div>
-        <strong>{{ currentTrack.name }}</strong>
-        <small>{{ currentTrack.artist }}</small>
+      <div class="track-summary__body">
+        <div class="track-summary__text">
+          <strong>{{ currentTrack.name }}</strong>
+          <small>{{ currentTrack.artist }}</small>
+        </div>
+        <div class="track-summary__actions">
+          <button class="track-action-button" type="button" aria-label="喜欢">
+            <Heart :size="25" />
+          </button>
+          <button class="track-action-button track-action-button--comment" type="button" aria-label="评论">
+            <MessageCircle :size="25" />
+            <span>{{ currentTrack.commentCount ?? 887 }}</span>
+          </button>
+          <button class="track-action-button" type="button" aria-label="更多">
+            <MoreHorizontal :size="25" />
+          </button>
+        </div>
       </div>
-      <button class="icon-button" type="button" aria-label="喜欢"><Heart :size="18" /></button>
     </div>
 
     <div class="player-center">
@@ -55,12 +68,12 @@
             </button>
           </div>
         </div>
-        <button type="button" aria-label="上一首"><SkipBack :size="19" /></button>
+        <button type="button" aria-label="上一首" @click="playPreviousTrack"><SkipBack :size="19" /></button>
         <button class="play-button" type="button" :aria-label="player.state.isPlaying ? '暂停' : '播放'" @click="player.togglePlay">
           <Pause v-if="player.state.isPlaying" :size="22" fill="currentColor" />
           <Play v-else :size="22" fill="currentColor" />
         </button>
-        <button type="button" aria-label="下一首"><SkipForward :size="19" /></button>
+        <button type="button" aria-label="下一首" @click="playNextTrack"><SkipForward :size="19" /></button>
         <div class="control-popover-wrap">
           <button
             class="volume-button"
@@ -69,14 +82,16 @@
             :class="{ active: volumeMenuOpen }"
             @click="toggleVolumeMenu"
           >
-            <Volume2 :size="20" />
+            <component :is="currentVolumeIcon" :size="20" />
           </button>
           <div v-if="volumeMenuOpen" class="player-popover volume-popover">
             <div class="volume-control">
               <span class="volume-rail" aria-hidden="true">
                 <span class="volume-fill" :style="{ height: `${volume}%` }" />
               </span>
-              <button class="volume-plus" type="button" aria-label="提高音量" @click="increaseVolume" />
+              <button class="volume-step-button" type="button" aria-label="提高音量" @click="increaseVolume">
+                <Plus :size="12" />
+              </button>
               <input
                 v-model="volume"
                 class="volume-slider"
@@ -86,9 +101,13 @@
                 aria-label="音量大小"
               />
             </div>
-            <strong>{{ volume }}%</strong>
+            <div class="volume-value-row">
+              <strong>{{ volume }}%</strong>
+            </div>
             <span class="volume-divider" />
-            <Volume2 :size="24" />
+            <button class="volume-mute-button" type="button" :aria-label="volume > 0 ? '静音' : '恢复音量'" @click="toggleMute">
+              <component :is="currentVolumeIcon" :size="22" />
+            </button>
           </div>
         </div>
       </div>
@@ -165,13 +184,14 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { Heart, ListMusic, Maximize2, Mic2, Minimize2, Pause, Play, Repeat, Repeat1, Repeat2, Shuffle, SkipBack, SkipForward, Volume2 } from 'lucide-vue-next'
+import { Heart, ListMusic, Maximize2, MessageCircle, Mic2, Minimize2, MoreHorizontal, Pause, Play, Plus, Repeat, Repeat1, Repeat2, Shuffle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import FullScreenPlayer from './FullScreenPlayer.vue'
 import SongListRow from './SongListRow.vue'
 import { useThemeStore } from '../stores/theme'
 import { usePlayerStore } from '../stores/player'
 import { getTrackLyricData } from '../services/netease'
+import '../styles/player.css'
 
 const theme = useThemeStore()
 const player = usePlayerStore()
@@ -187,6 +207,7 @@ const albumArtHidden = ref(false)
 const lastAlbumArtToggleAt = ref(0)
 const playMode = ref('list')
 const volume = ref(100)
+const lastAudibleVolume = ref(100)
 const progressDragging = ref(false)
 const progressPreviewVisible = ref(false)
 const progressPreviewPercent = ref(0)
@@ -210,6 +231,7 @@ const playModes = [
 
 const activePlayMode = computed(() => playModes.find((mode) => mode.value === playMode.value) ?? playModes[3])
 const currentTrack = computed(() => player.state.currentTrack)
+const currentVolumeIcon = computed(() => Number(volume.value) > 0 ? Volume2 : VolumeX)
 const currentTrackCoverStyle = computed(() => {
   const palette = currentTrack.value.coverPalette ?? fallbackCoverPalette
 
@@ -257,7 +279,14 @@ const queueTracks = computed(() => player.state.queue.slice(0, 8).map((song, ind
 })))
 
 watch(volume, (value) => {
-  player.setVolume(Number(value) / 100)
+  const nextVolume = Math.min(100, Math.max(0, Number(value)))
+  volume.value = nextVolume
+
+  if (nextVolume > 0) {
+    lastAudibleVolume.value = nextVolume
+  }
+
+  player.setVolume(nextVolume / 100)
 })
 
 watch(
@@ -331,6 +360,16 @@ function getAlbumArtRect() {
     width: rect.width,
     height: rect.height
   }
+}
+
+function toggleMute() {
+  if (Number(volume.value) > 0) {
+    lastAudibleVolume.value = Number(volume.value)
+    volume.value = 0
+    return
+  }
+
+  volume.value = lastAudibleVolume.value || 80
 }
 
 function increaseVolume() {
@@ -512,6 +551,74 @@ function isNeteaseTrackId(trackId) {
   return /^\d+$/.test(String(trackId ?? ''))
 }
 
+async function playPreviousTrack() {
+  await playQueueRelative(-1)
+}
+
+async function playNextTrack() {
+  await playQueueRelative(1)
+}
+
+async function playQueueRelative(direction) {
+  const queue = player.state.queue
+
+  if (!queue.length) {
+    return
+  }
+
+  const currentIndex = queue.findIndex((track) => String(track.id) === String(player.state.currentTrack.id))
+  const targetTrack = getRelativeQueueTrack(queue, currentIndex, direction)
+
+  if (!targetTrack) {
+    return
+  }
+
+  await playTrackFromControls(targetTrack)
+}
+
+function getRelativeQueueTrack(queue, currentIndex, direction) {
+  if (playMode.value === 'shuffle') {
+    return getRandomQueueTrack(queue, currentIndex)
+  }
+
+  if (playMode.value === 'single' && currentIndex >= 0) {
+    return queue[currentIndex]
+  }
+
+  const fallbackIndex = direction > 0 ? 0 : queue.length - 1
+  const baseIndex = currentIndex >= 0 ? currentIndex : fallbackIndex - direction
+  const nextIndex = baseIndex + direction
+
+  if (playMode.value === 'order' && (nextIndex < 0 || nextIndex >= queue.length)) {
+    return null
+  }
+
+  return queue[(nextIndex + queue.length) % queue.length]
+}
+
+function getRandomQueueTrack(queue, currentIndex) {
+  if (queue.length <= 1) {
+    return queue[0]
+  }
+
+  let nextIndex = currentIndex
+
+  while (nextIndex === currentIndex) {
+    nextIndex = Math.floor(Math.random() * queue.length)
+  }
+
+  return queue[nextIndex]
+}
+
+async function playTrackFromControls(track) {
+  if (track.vip) {
+    message.warning('当前歌曲为 VIP 歌曲，将尝试播放试听')
+  }
+
+  const played = await player.playTrack(track)
+  showPlaybackError(played)
+}
+
 async function playQueueTrack(track) {
   if (player.state.currentTrack.id === track.id) {
     const toggled = await player.togglePlay()
@@ -519,8 +626,7 @@ async function playQueueTrack(track) {
     return
   }
 
-  const played = await player.playTrack(track)
-  showPlaybackError(played)
+  await playTrackFromControls(track)
 }
 
 function showPlaybackError(success) {
