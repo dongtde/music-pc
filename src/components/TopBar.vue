@@ -115,6 +115,15 @@
           <div v-else-if="!searchResults.length" class="search-empty">
             <span>没有找到相关内容</span>
           </div>
+          <div v-else-if="activeSearchType === 1" class="search-song-result-list">
+            <SongListRow
+              v-for="item in searchResults"
+              :key="`song-${item.id}`"
+              :track="item"
+              compact
+              @play="handleSearchSongPlay"
+            />
+          </div>
           <div v-else class="search-result-list">
             <button
               v-for="item in searchResults"
@@ -131,7 +140,6 @@
                 <strong>{{ item.title || item.name }}</strong>
                 <small>{{ getResultSubtitle(item) }}</small>
               </div>
-              <PlayCircle v-if="activeSearchType === 1" :size="18" />
             </button>
           </div>
         </section>
@@ -171,7 +179,6 @@ import {
   Mail,
   Moon,
   Music,
-  PlayCircle,
   Search,
   Settings,
   Sun,
@@ -179,6 +186,7 @@ import {
   Video
 } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
+import SongListRow from './SongListRow.vue'
 import { getSearchBootData, getSearchResultData, getSearchSuggestData } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
 import { useThemeStore } from '../stores/theme'
@@ -409,11 +417,6 @@ function handleSuggestionSelect(item) {
 }
 
 function handleResultSelect(item) {
-  if (activeSearchType.value === 1) {
-    playSong(item, searchResults.value)
-    return
-  }
-
   if (item.to) {
     searchOpen.value = false
     router.push(item.to)
@@ -422,6 +425,10 @@ function handleResultSelect(item) {
 
   searchKeyword.value = item.title || item.name
   submitSearch(searchKeyword.value)
+}
+
+function handleSearchSongPlay(song) {
+  playSong(song, searchResults.value)
 }
 
 async function playSong(song, queue = []) {

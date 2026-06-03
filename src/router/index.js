@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import AlbumDetailView from '../views/AlbumDetailView.vue'
 import DiscoverView from '../views/DiscoverView.vue'
 import PlaylistDetailView from '../views/PlaylistDetailView.vue'
 import SettingsView from '../views/SettingsView.vue'
@@ -41,6 +42,12 @@ const routes = [
     name: 'playlist',
     component: PlaylistDetailView,
     meta: { title: '歌单', icon: 'ListMusic' }
+  },
+  {
+    path: '/album/:id',
+    name: 'album',
+    component: AlbumDetailView,
+    meta: { title: '专辑', icon: 'Disc3' }
   },
   {
     path: '/settings',

@@ -619,6 +619,15 @@ button {
   gap: 3px;
 }
 
+.search-song-result-list {
+  display: grid;
+  gap: 3px;
+}
+
+.search-song-result-list .song-list-row {
+  border-radius: 6px;
+}
+
 .search-result-row {
   height: 54px;
   gap: 10px;

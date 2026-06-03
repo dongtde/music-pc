@@ -1,5 +1,7 @@
 import {
   getBanners,
+  getAlbumDetail,
+  getAlbumNewest,
   getArtistList,
   getArtistToplist,
   getPersonalizedMvs,
@@ -10,6 +12,7 @@ import {
   getPlaylistDetail,
   getPlaylistCategories,
   getPlaylistHotCategories,
+  getPlaylistComments,
   getPlaylistTracks,
   getHighQualityPlaylists,
   getSearchDefault,
@@ -17,7 +20,8 @@ import {
   getSearchMultiMatch,
   getSearchSuggestPc,
   getToplist,
-  getTopPlaylists
+  getTopPlaylists,
+  getTopAlbums
 } from '../api/modules/netease'
 
 const COVER_TYPES = ['sunset', 'neon', 'lofi', 'stage', 'piano']
@@ -204,6 +208,46 @@ export async function getArtistsDiscoveryData({ area = -1, type = -1, initial = 
   }
 }
 
+export async function getAlbumsDiscoveryData({ area = 'ALL' } = {}) {
+  const [newestResponse, topResponse] = await Promise.all([
+    getAlbumNewest().catch(() => ({})),
+    getTopAlbums({ area, limit: 24, offset: 0 }).catch(() => ({}))
+  ])
+
+  return {
+    newestAlbum: mapAlbumNewest(newestResponse),
+    albums: (topResponse.albums ?? []).map(mapAlbumCard),
+    more: Boolean(topResponse.more)
+  }
+}
+
+export async function getAlbumDetailData(id) {
+  const response = await getAlbumDetail({ id })
+  const album = response.album
+
+  if (!album) {
+    throw new Error('Album detail is empty')
+  }
+
+  return {
+    album: mapAlbumDetail(album),
+    tracks: (album.songs ?? []).map(mapPlaylistTrack)
+  }
+}
+
+export async function getPlaylistCommentsData({ id, limit = 20, offset = 0 }) {
+  const response = await getPlaylistComments({ id, limit, offset })
+  const result = response ?? {}
+
+  return {
+    hotComments: (result.hotComments ?? []).map(mapComment),
+    comments: (result.comments ?? []).map(mapComment),
+    total: result.total ?? 0,
+    more: Boolean(result.more),
+    isFirstPage: offset <= 0
+  }
+}
+
 function mapBanner(banner, index) {
   return {
     id: `${banner.targetType}-${banner.targetId || index}`,
@@ -298,6 +342,68 @@ function mapRankedArtist(item, index) {
     score: item.score ?? artist.score ?? 0,
     trend: item.lastRank ? `${item.lastRank}` : index < 3 ? 'HOT' : ''
   }
+}
+
+function mapAlbumNewest(response = {}) {
+  const album = response.albums?.[0] ?? response.album ?? null
+
+  return album ? mapAlbumCard(album, 0) : null
+}
+
+function mapAlbumCard(album, index = 0) {
+  return {
+    id: album.id,
+    title: album.name,
+    artist: album.artist?.name || '',
+    desc: [album.artist?.name, album.publishTime ? formatDate(album.publishTime) : '', album.size ? `${album.size} tracks` : ''].filter(Boolean).join(' · '),
+    listeners: formatPlayCount(album.playCount ?? album.info?.count ?? 0),
+    type: coverType(index),
+    coverUrl: album.picUrl,
+    publishTime: formatDate(album.publishTime)
+  }
+}
+
+function mapAlbumDetail(album) {
+  return {
+    id: album.id,
+    title: album.name,
+    description: album.description || `${album.artist?.name || '未知歌手'} 的专辑`,
+    artist: album.artist?.name || '未知歌手',
+    artistId: album.artist?.id ?? '',
+    publishTime: formatDate(album.publishTime),
+    company: album.company || '',
+    size: album.size ?? album.songCount ?? 0,
+    coverUrl: album.picUrl
+  }
+}
+
+function mapComment(comment) {
+  const user = comment.user ?? {}
+
+  return {
+    id: comment.commentId ?? comment.time ?? `${user.userId}-${comment.time}`,
+    content: comment.content,
+    time: formatCommentTime(comment.time),
+    likedCount: comment.likedCount ?? 0,
+    user: {
+      name: user.nickname || '匿名用户',
+      avatarUrl: user.avatarUrl || user.avatar || ''
+    }
+  }
+}
+
+function formatCommentTime(value) {
+  if (!value) {
+    return ''
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
 function mapPlaylistDetail(playlist) {
