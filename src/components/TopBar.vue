@@ -1,15 +1,142 @@
 <template>
   <header class="topbar">
     <div class="history-actions">
-      <button type="button" aria-label="后退"><ChevronLeft :size="20" /></button>
-      <button type="button" aria-label="前进"><ChevronRight :size="20" /></button>
+      <button type="button" aria-label="后退" @click="router.back()"><ChevronLeft :size="20" /></button>
+      <button type="button" aria-label="前进" @click="router.forward()"><ChevronRight :size="20" /></button>
     </div>
 
-    <n-input round clearable placeholder="搜索音乐、歌手、歌词、用户" class="search-input">
-      <template #prefix>
-        <Search :size="18" />
-      </template>
-    </n-input>
+    <div ref="searchWrap" class="top-search" :class="{ 'top-search--open': searchOpen }">
+      <n-input
+        v-model:value="searchKeyword"
+        round
+        clearable
+        :placeholder="searchPlaceholder"
+        class="search-input"
+        @focus="openSearchPanel"
+        @clear="clearSearch"
+        @keydown.enter.prevent="submitSearch()"
+      >
+        <template #prefix>
+          <Search :size="18" />
+        </template>
+      </n-input>
+
+      <div v-if="searchOpen" class="search-panel">
+        <section v-if="!trimmedKeyword && !searchedKeyword" class="search-section">
+          <header class="search-section__head">
+            <strong>热门搜索</strong>
+            <small>{{ defaultKeyword ? `默认：${defaultKeyword}` : '发现今天大家都在听什么' }}</small>
+          </header>
+          <div class="hot-search-list">
+            <button
+              v-for="(item, index) in hotKeywords"
+              :key="item.id"
+              class="hot-search-item"
+              type="button"
+              @click="pickKeyword(item.keyword)"
+            >
+              <span :class="{ hot: index < 3 }">{{ index + 1 }}</span>
+              <div>
+                <strong>{{ item.keyword }}</strong>
+                <small>{{ item.content || formatScore(item.score) }}</small>
+              </div>
+            </button>
+          </div>
+        </section>
+
+        <section v-else-if="trimmedKeyword && !searchedKeyword" class="search-section">
+          <header class="search-section__head">
+            <strong>搜索建议</strong>
+            <small>按 Enter 搜索“{{ trimmedKeyword }}”</small>
+          </header>
+          <div v-if="suggestLoading" class="search-empty">
+            <Loader2 class="spin" :size="18" />
+            <span>正在获取联想</span>
+          </div>
+          <template v-else>
+            <button class="search-all-button" type="button" @click="submitSearch(trimmedKeyword)">
+              <Search :size="16" />
+              <span>搜索 “{{ trimmedKeyword }}”</span>
+            </button>
+            <div v-if="keywordSuggestions.length" class="keyword-suggest-list">
+              <button
+                v-for="item in keywordSuggestions"
+                :key="item.id"
+                type="button"
+                @click="pickKeyword(item.title)"
+              >
+                <img v-if="item.iconUrl" :src="item.iconUrl" alt="" />
+                <Search v-else :size="15" />
+                <span>{{ item.title }}</span>
+                <small>{{ item.subtitle }}</small>
+              </button>
+            </div>
+            <div v-if="suggestMatches.length" class="suggest-chip-row">
+              <button
+                v-for="item in suggestMatches"
+                :key="item.id"
+                type="button"
+                @click="pickKeyword(item.title)"
+              >
+                {{ item.title }}
+              </button>
+            </div>
+            <SearchGroup title="单曲" :items="suggestions.songs" @select="handleSuggestionSelect" />
+            <SearchGroup title="歌手" :items="suggestions.artists" @select="handleSuggestionSelect" />
+            <SearchGroup title="专辑" :items="suggestions.albums" @select="handleSuggestionSelect" />
+            <SearchGroup title="歌单" :items="suggestions.playlists" @select="handleSuggestionSelect" />
+            <div v-if="!hasSuggestions" class="search-empty">
+              <span>暂时没有联想结果</span>
+            </div>
+          </template>
+        </section>
+
+        <section v-else class="search-section search-section--results">
+          <header class="search-section__head">
+            <strong>搜索结果</strong>
+            <small>{{ resultTotal ? `${resultTotal} 个结果` : `“${searchedKeyword}”` }}</small>
+          </header>
+          <nav class="search-tabs" aria-label="搜索分类">
+            <button
+              v-for="tab in searchTabs"
+              :key="tab.type"
+              type="button"
+              :class="{ active: activeSearchType === tab.type }"
+              @click="switchSearchType(tab.type)"
+            >
+              <component :is="tab.icon" :size="15" />
+              <span>{{ tab.label }}</span>
+            </button>
+          </nav>
+          <div v-if="resultLoading" class="search-empty">
+            <Loader2 class="spin" :size="18" />
+            <span>正在搜索</span>
+          </div>
+          <div v-else-if="!searchResults.length" class="search-empty">
+            <span>没有找到相关内容</span>
+          </div>
+          <div v-else class="search-result-list">
+            <button
+              v-for="item in searchResults"
+              :key="`${activeSearchType}-${item.id}`"
+              class="search-result-row"
+              type="button"
+              @click="handleResultSelect(item)"
+            >
+              <span class="search-cover">
+                <img v-if="item.coverUrl" :src="item.coverUrl" alt="" />
+                <component v-else :is="activeTabIcon" :size="18" />
+              </span>
+              <div>
+                <strong>{{ item.title || item.name }}</strong>
+                <small>{{ getResultSubtitle(item) }}</small>
+              </div>
+              <PlayCircle v-if="activeSearchType === 1" :size="18" />
+            </button>
+          </div>
+        </section>
+      </div>
+    </div>
 
     <div class="topbar__spacer" />
     <button class="icon-button" type="button" aria-label="消息"><Mail :size="18" /></button>
@@ -32,8 +159,316 @@
 </template>
 
 <script setup>
-import { ChevronLeft, ChevronRight, Mail, Moon, Search, Settings, Sun } from 'lucide-vue-next'
+import { computed, defineComponent, h, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import {
+  ChevronLeft,
+  ChevronRight,
+  Disc3,
+  Flame,
+  ListMusic,
+  Loader2,
+  Mail,
+  Moon,
+  Music,
+  PlayCircle,
+  Search,
+  Settings,
+  Sun,
+  User,
+  Video
+} from 'lucide-vue-next'
+import { useMessage } from 'naive-ui'
+import { getSearchBootData, getSearchResultData, getSearchSuggestData } from '../services/netease'
+import { usePlayerStore } from '../stores/player'
 import { useThemeStore } from '../stores/theme'
 
+const SearchGroup = defineComponent({
+  name: 'SearchGroup',
+  props: {
+    title: { type: String, required: true },
+    items: { type: Array, default: () => [] }
+  },
+  emits: ['select'],
+  setup(props, { emit }) {
+    return () => props.items.length
+      ? h('div', { class: 'suggest-group' }, [
+          h('strong', { class: 'suggest-group__title' }, props.title),
+          ...props.items.map((item) =>
+            h('button', {
+              key: `${item.type}-${item.id}`,
+              class: 'suggest-row',
+              type: 'button',
+              onClick: () => emit('select', item)
+            }, [
+              h('span', { class: 'suggest-row__dot' }),
+              h('span', { class: 'suggest-row__main' }, item.title || item.name),
+              h('small', item.artist || item.subtitle || item.album || '')
+            ])
+          )
+        ])
+      : null
+  }
+})
+
+const searchTabs = [
+  { label: '单曲', type: 1, icon: Music },
+  { label: '歌手', type: 100, icon: User },
+  { label: '专辑', type: 10, icon: Disc3 },
+  { label: '歌单', type: 1000, icon: ListMusic },
+  { label: '用户', type: 1002, icon: User },
+  { label: 'MV', type: 1004, icon: Video }
+]
+
 const theme = useThemeStore()
+const player = usePlayerStore()
+const router = useRouter()
+const message = useMessage()
+const searchWrap = ref(null)
+const searchOpen = ref(false)
+const searchKeyword = ref('')
+const defaultKeyword = ref('')
+const hotKeywords = ref([])
+const emptySuggestions = () => ({
+  keywordSuggestions: [],
+  matches: [],
+  songs: [],
+  artists: [],
+  albums: [],
+  playlists: []
+})
+const suggestions = ref(emptySuggestions())
+const suggestLoading = ref(false)
+const searchedKeyword = ref('')
+const activeSearchType = ref(1)
+const searchResults = ref([])
+const resultTotal = ref(0)
+const resultLoading = ref(false)
+let suggestTimer = 0
+let suggestRequestId = 0
+let resultRequestId = 0
+
+const trimmedKeyword = computed(() => searchKeyword.value.trim())
+const keywordSuggestions = computed(() => suggestions.value.keywordSuggestions.slice(0, 10))
+const suggestMatches = computed(() => suggestions.value.matches.slice(0, 6))
+const hasSuggestions = computed(() =>
+  Boolean(
+    keywordSuggestions.value.length ||
+    suggestMatches.value.length ||
+    suggestions.value.songs.length ||
+    suggestions.value.artists.length ||
+    suggestions.value.albums.length ||
+    suggestions.value.playlists.length
+  )
+)
+const searchPlaceholder = computed(() =>
+  defaultKeyword.value ? `搜索 ${defaultKeyword.value}` : '搜索音乐、歌手、歌词、用户'
+)
+const activeTabIcon = computed(() =>
+  searchTabs.find((tab) => tab.type === activeSearchType.value)?.icon ?? Search
+)
+
+watch(trimmedKeyword, (keyword) => {
+  window.clearTimeout(suggestTimer)
+  searchedKeyword.value = ''
+
+  if (!keyword) {
+    suggestions.value = emptySuggestions()
+    suggestLoading.value = false
+    return
+  }
+
+  suggestLoading.value = true
+  suggestTimer = window.setTimeout(() => loadSuggestions(keyword), 260)
+})
+
+onMounted(() => {
+  loadSearchBoot()
+  document.addEventListener('pointerdown', handleOutsideClick)
+})
+
+onUnmounted(() => {
+  window.clearTimeout(suggestTimer)
+  document.removeEventListener('pointerdown', handleOutsideClick)
+})
+
+async function loadSearchBoot() {
+  try {
+    const data = await getSearchBootData()
+    defaultKeyword.value = data.defaultKeyword
+    hotKeywords.value = data.hotKeywords.slice(0, 10)
+  } catch (error) {
+    console.warn('Failed to load search boot data:', error)
+  }
+}
+
+async function loadSuggestions(keyword) {
+  const requestId = ++suggestRequestId
+
+  try {
+    const data = await getSearchSuggestData(keyword)
+
+    if (requestId !== suggestRequestId) {
+      return
+    }
+
+    suggestions.value = data
+  } catch (error) {
+    if (requestId === suggestRequestId) {
+      suggestions.value = emptySuggestions()
+    }
+  } finally {
+    if (requestId === suggestRequestId) {
+      suggestLoading.value = false
+    }
+  }
+}
+
+function openSearchPanel() {
+  searchOpen.value = true
+}
+
+function clearSearch() {
+  searchKeyword.value = ''
+  searchedKeyword.value = ''
+  searchResults.value = []
+  resultTotal.value = 0
+}
+
+function pickKeyword(keyword) {
+  searchKeyword.value = keyword
+  submitSearch(keyword)
+}
+
+function submitSearch(keyword = trimmedKeyword.value || defaultKeyword.value) {
+  const query = String(keyword ?? '').trim()
+
+  if (!query) {
+    return
+  }
+
+  searchOpen.value = true
+  searchKeyword.value = query
+  searchedKeyword.value = query
+  activeSearchType.value = 1
+  loadResults()
+}
+
+function switchSearchType(type) {
+  if (activeSearchType.value === type) {
+    return
+  }
+
+  activeSearchType.value = type
+  loadResults()
+}
+
+async function loadResults() {
+  const query = searchedKeyword.value
+
+  if (!query) {
+    return
+  }
+
+  const requestId = ++resultRequestId
+  resultLoading.value = true
+
+  try {
+    const data = await getSearchResultData({
+      keyword: query,
+      type: activeSearchType.value,
+      limit: activeSearchType.value === 1 ? 30 : 20
+    })
+
+    if (requestId !== resultRequestId) {
+      return
+    }
+
+    searchResults.value = data.items
+    resultTotal.value = data.total
+  } catch (error) {
+    if (requestId === resultRequestId) {
+      searchResults.value = []
+      resultTotal.value = 0
+      message.error('搜索失败，请稍后再试')
+    }
+  } finally {
+    if (requestId === resultRequestId) {
+      resultLoading.value = false
+    }
+  }
+}
+
+function handleSuggestionSelect(item) {
+  if (item.type === 'song') {
+    playSong(item, suggestions.value.songs)
+    return
+  }
+
+  pickKeyword(item.title || item.name)
+}
+
+function handleResultSelect(item) {
+  if (activeSearchType.value === 1) {
+    playSong(item, searchResults.value)
+    return
+  }
+
+  if (item.to) {
+    searchOpen.value = false
+    router.push(item.to)
+    return
+  }
+
+  searchKeyword.value = item.title || item.name
+  submitSearch(searchKeyword.value)
+}
+
+async function playSong(song, queue = []) {
+  const playableQueue = queue.filter((item) => item.type === 'song')
+
+  if (playableQueue.length) {
+    player.setQueue(playableQueue)
+  }
+
+  const played = await player.playTrack(song)
+
+  if (!played) {
+    message.error(player.state.error?.message || '当前歌曲暂无可播放链接')
+  }
+}
+
+function getResultSubtitle(item) {
+  if (activeSearchType.value === 1) {
+    return [item.artist, item.album, item.duration].filter(Boolean).join(' · ')
+  }
+
+  return item.subtitle || ''
+}
+
+function formatScore(score) {
+  if (!score) {
+    return '热门内容'
+  }
+
+  if (score >= 10000) {
+    return `${Math.round(score / 10000)} 万热度`
+  }
+
+  return `${score} 热度`
+}
+
+function handleOutsideClick(event) {
+  const target = event.target
+
+  if (!(target instanceof Element)) {
+    return
+  }
+
+  if (searchWrap.value?.contains(target)) {
+    return
+  }
+
+  searchOpen.value = false
+}
 </script>

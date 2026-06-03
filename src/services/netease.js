@@ -1,11 +1,23 @@
 import {
   getBanners,
+  getArtistList,
+  getArtistToplist,
   getPersonalizedMvs,
   getPersonalizedNewSongs,
   getPersonalizedPlaylists,
   getLyric,
+  getCloudSearch,
   getPlaylistDetail,
-  getPlaylistTracks
+  getPlaylistCategories,
+  getPlaylistHotCategories,
+  getPlaylistTracks,
+  getHighQualityPlaylists,
+  getSearchDefault,
+  getSearchHotDetail,
+  getSearchMultiMatch,
+  getSearchSuggestPc,
+  getToplist,
+  getTopPlaylists
 } from '../api/modules/netease'
 
 const COVER_TYPES = ['sunset', 'neon', 'lofi', 'stage', 'piano']
@@ -71,6 +83,127 @@ export async function getTrackLyricData(id) {
     : [{ time: '--:--', text: '暂无歌词', seconds: 0, placeholder: true }]
 }
 
+export async function getSearchBootData() {
+  const [defaultResponse, hotResponse] = await Promise.all([
+    getSearchDefault().catch(() => ({})),
+    getSearchHotDetail().catch(() => ({}))
+  ])
+
+  return {
+    defaultKeyword: defaultResponse.data?.realkeyword || defaultResponse.data?.showKeyword || '',
+    hotKeywords: (hotResponse.data ?? []).map(mapHotKeyword)
+  }
+}
+
+export async function getSearchSuggestData(keyword) {
+  const query = String(keyword ?? '').trim()
+
+  if (!query) {
+    return {
+      keywordSuggestions: [],
+      matches: [],
+      songs: [],
+      artists: [],
+      albums: [],
+      playlists: []
+    }
+  }
+
+  const [suggestResponse, matchResponse] = await Promise.all([
+    getSearchSuggestPc({ keyword: query }).catch(() => ({})),
+    getSearchMultiMatch({ keywords: query }).catch(() => ({}))
+  ])
+  const legacyResult = suggestResponse.result ?? {}
+  const enhancedResult = suggestResponse.data ?? {}
+
+  return {
+    keywordSuggestions: (enhancedResult.suggests ?? []).slice(0, 10).map(mapKeywordSuggestion),
+    matches: mapMultiMatches(matchResponse.result),
+    songs: (legacyResult.songs ?? []).slice(0, 6).map(mapSearchSong),
+    artists: (legacyResult.artists ?? []).slice(0, 4).map(mapSearchArtist),
+    albums: (legacyResult.albums ?? []).slice(0, 4).map(mapSearchAlbum),
+    playlists: (legacyResult.playlists ?? []).slice(0, 4).map(mapSearchPlaylist)
+  }
+}
+
+export async function getSearchResultData({ keyword, type = 1, limit = 20, offset = 0 }) {
+  const query = String(keyword ?? '').trim()
+
+  if (!query) {
+    return {
+      items: [],
+      total: 0,
+      hasMore: false
+    }
+  }
+
+  const response = await getCloudSearch({
+    keywords: query,
+    type,
+    limit,
+    offset
+  })
+  const result = response.result ?? {}
+
+  return {
+    items: mapSearchItemsByType(result, type),
+    total: getSearchTotalByType(result, type),
+    hasMore: Boolean(result.hasMore || result.more)
+  }
+}
+
+export async function getPlaylistDiscoveryData(category = '全部') {
+  const cat = category || '全部'
+  const [hotResponse, catResponse, highQualityResponse, playlistResponse] = await Promise.all([
+    getPlaylistHotCategories().catch(() => ({})),
+    getPlaylistCategories().catch(() => ({})),
+    getHighQualityPlaylists({ limit: 12, cat }).catch(() => ({})),
+    getTopPlaylists({ limit: 30, cat, order: 'hot' }).catch(() => ({}))
+  ])
+
+  return {
+    hotCategories: (hotResponse.tags ?? []).map((item) => item.name).filter(Boolean),
+    categoryGroups: mapPlaylistCategoryGroups(catResponse),
+    highQualityPlaylists: (highQualityResponse.playlists ?? []).map(mapPlaylist),
+    playlists: (playlistResponse.playlists ?? []).map(mapPlaylist),
+    total: playlistResponse.total ?? 0,
+    activeCategory: playlistResponse.cat || cat
+  }
+}
+
+export async function getChartsDiscoveryData() {
+  const toplistResponse = await getToplist()
+  const toplists = (toplistResponse.list ?? []).map(mapToplist)
+  const featured = toplists.slice(0, 6)
+  const detailTargets = featured.slice(0, 3)
+  const detailResponses = await Promise.all(
+    detailTargets.map((board) => getPlaylistDetail({ id: board.id }).catch(() => ({ playlist: null })))
+  )
+  const boards = detailTargets.map((board, index) => ({
+    ...board,
+    tracks: (detailResponses[index].playlist?.tracks ?? []).slice(0, 5).map(mapChartTrack)
+  }))
+
+  return {
+    boards,
+    officialCharts: featured,
+    globalCharts: toplists.slice(6, 18)
+  }
+}
+
+export async function getArtistsDiscoveryData({ area = -1, type = -1, initial = -1 } = {}) {
+  const [artistResponse, toplistResponse] = await Promise.all([
+    getArtistList({ area, type, initial, limit: 32, offset: 0 }).catch(() => ({})),
+    getArtistToplist({ type: 1 }).catch(() => ({}))
+  ])
+
+  return {
+    artists: (artistResponse.artists ?? []).map(mapArtist),
+    topArtists: (toplistResponse.list?.artists ?? toplistResponse.artists ?? []).slice(0, 10).map(mapRankedArtist),
+    more: Boolean(artistResponse.more)
+  }
+}
+
 function mapBanner(banner, index) {
   return {
     id: `${banner.targetType}-${banner.targetId || index}`,
@@ -88,10 +221,82 @@ function mapPlaylist(playlist, index) {
   return {
     id: playlist.id,
     title: playlist.name,
-    desc: playlist.copywriter,
+    desc: playlist.copywriter || playlist.description || '',
     listeners: formatPlayCount(playlist.playCount),
     type: coverType(index),
-    coverUrl: playlist.picUrl
+    coverUrl: playlist.picUrl ?? playlist.coverImgUrl,
+    trackCount: playlist.trackCount ?? 0,
+    creator: playlist.creator?.nickname || '',
+    subscribedCount: playlist.subscribedCount ?? 0
+  }
+}
+
+function mapPlaylistCategoryGroups(response = {}) {
+  const categories = response.categories ?? {}
+  const sub = response.sub ?? []
+
+  return Object.entries(categories).map(([key, name]) => ({
+    id: key,
+    name,
+    tags: sub.filter((item) => String(item.category) === String(key)).map((item) => item.name)
+  }))
+}
+
+function mapToplist(item, index) {
+  return {
+    id: item.id,
+    title: item.name,
+    desc: item.description || item.updateFrequency || '',
+    label: item.updateFrequency || '云音乐榜单',
+    coverUrl: item.coverImgUrl,
+    listeners: formatPlayCount(item.playCount),
+    trackCount: item.trackCount ?? item.tracks?.length ?? 0,
+    type: coverType(index),
+    tracks: (item.tracks ?? []).map((track, trackIndex) => ({
+      rank: String(trackIndex + 1).padStart(2, '0'),
+      name: track.first,
+      artist: track.second,
+      change: trackIndex === 0 ? 'HOT' : ''
+    }))
+  }
+}
+
+function mapChartTrack(song, index) {
+  const artists = song.ar ?? song.artists ?? []
+
+  return {
+    id: song.id,
+    rank: String(index + 1).padStart(2, '0'),
+    name: song.name,
+    artist: artists.map((artist) => artist.name).filter(Boolean).join(' / ') || '未知歌手',
+    change: index === 0 ? 'HOT' : index < 3 ? 'UP' : ''
+  }
+}
+
+function mapArtist(artist, index) {
+  return {
+    id: artist.id,
+    name: artist.name,
+    tag: [
+      artist.alias?.length ? artist.alias.join(' / ') : '',
+      artist.musicSize ? `${artist.musicSize} 首歌` : '',
+      artist.albumSize ? `${artist.albumSize} 张专辑` : ''
+    ].filter(Boolean).join(' · '),
+    coverUrl: artist.picUrl ?? artist.img1v1Url,
+    followers: formatPlayCount(artist.fansCount ?? artist.followeds ?? artist.accountId ?? 0),
+    score: artist.score ?? 0,
+    type: coverType(index)
+  }
+}
+
+function mapRankedArtist(item, index) {
+  const artist = item.artist ?? item
+
+  return {
+    ...mapArtist(artist, index),
+    rank: String(index + 1).padStart(2, '0'),
+    score: item.score ?? artist.score ?? 0,
+    trend: item.lastRank ? `${item.lastRank}` : index < 3 ? 'HOT' : ''
   }
 }
 
@@ -129,6 +334,172 @@ function mapPlaylistTrack(song, index) {
     to: `/playlist/song-${song.id}`,
     vip: Boolean(song.fee && song.fee !== 0),
     hasVideo: Boolean(song.mv)
+  }
+}
+
+function mapHotKeyword(item, index) {
+  return {
+    id: item.searchWord || `hot-${index}`,
+    keyword: item.searchWord || item.keyword || '',
+    score: item.score ?? 0,
+    content: item.content || item.iconDesc || '',
+    iconUrl: item.iconUrl,
+    type: item.iconType
+  }
+}
+
+function mapKeywordSuggestion(item, index) {
+  return {
+    id: item.keyword || `suggest-${index}`,
+    type: 'keyword',
+    title: item.keyword || item.showText || '',
+    subtitle: item.resourceName || item.tag || '相关搜索',
+    iconUrl: item.iconUrl,
+    highLightInfo: item.highLightInfo
+  }
+}
+
+function mapMultiMatches(result = {}) {
+  return [
+    ...(result.orders ?? []).map((item) => ({
+      id: `order-${item.keyword}`,
+      type: 'keyword',
+      title: item.keyword,
+      subtitle: '相关搜索'
+    })),
+    ...(result.artist ?? []).map((item) => ({
+      id: `artist-${item.id}`,
+      type: 'artist',
+      title: item.name,
+      subtitle: item.alias?.join(' / ') || '歌手',
+      coverUrl: item.picUrl ?? item.img1v1Url
+    })),
+    ...(result.album ?? []).map((item) => ({
+      id: `album-${item.id}`,
+      type: 'album',
+      title: item.name,
+      subtitle: item.artist?.name || '专辑',
+      coverUrl: item.picUrl
+    }))
+  ].filter((item) => item.title)
+}
+
+function mapSearchItemsByType(result, type) {
+  const maps = {
+    1: () => (result.songs ?? []).map(mapSearchSong),
+    10: () => (result.albums ?? []).map(mapSearchAlbum),
+    100: () => (result.artists ?? []).map(mapSearchArtist),
+    1000: () => (result.playlists ?? []).map(mapSearchPlaylist),
+    1002: () => (result.userprofiles ?? []).map(mapSearchUser),
+    1004: () => (result.mvs ?? []).map(mapSearchMv)
+  }
+
+  return (maps[type] ?? maps[1])()
+}
+
+function getSearchTotalByType(result, type) {
+  const totalKeys = {
+    1: 'songCount',
+    10: 'albumCount',
+    100: 'artistCount',
+    1000: 'playlistCount',
+    1002: 'userprofileCount',
+    1004: 'mvCount'
+  }
+
+  return result[totalKeys[type]] ?? 0
+}
+
+function mapSearchSong(song, index = 0) {
+  const album = song.al ?? song.album ?? {}
+  const artists = song.ar ?? song.artists ?? []
+
+  return {
+    id: song.id,
+    type: 'song',
+    name: song.name,
+    title: song.name,
+    artist: artists.map((artist) => artist.name).filter(Boolean).join(' / ') || '未知歌手',
+    album: album.name || '未知专辑',
+    rank: String(index + 1).padStart(2, '0'),
+    time: formatDuration(song.dt ?? song.duration),
+    duration: formatDuration(song.dt ?? song.duration),
+    coverUrl: album.picUrl,
+    to: `/playlist/song-${song.id}`,
+    vip: Boolean(song.fee && song.fee !== 0),
+    hasVideo: Boolean(song.mv)
+  }
+}
+
+function mapSearchArtist(artist) {
+  return {
+    id: artist.id,
+    type: 'artist',
+    title: artist.name,
+    name: artist.name,
+    subtitle: [
+      artist.alias?.length ? artist.alias.join(' / ') : '',
+      artist.musicSize ? `${artist.musicSize} 首歌` : '',
+      artist.albumSize ? `${artist.albumSize} 张专辑` : ''
+    ].filter(Boolean).join(' · '),
+    coverUrl: artist.picUrl ?? artist.img1v1Url
+  }
+}
+
+function mapSearchAlbum(album) {
+  return {
+    id: album.id,
+    type: 'album',
+    title: album.name,
+    name: album.name,
+    subtitle: [
+      album.artist?.name,
+      album.size ? `${album.size} 首歌` : '',
+      formatDate(album.publishTime)
+    ].filter(Boolean).join(' · '),
+    coverUrl: album.picUrl
+  }
+}
+
+function mapSearchPlaylist(playlist) {
+  return {
+    id: playlist.id,
+    type: 'playlist',
+    title: playlist.name,
+    name: playlist.name,
+    subtitle: [
+      playlist.creator?.nickname,
+      playlist.trackCount ? `${playlist.trackCount} 首歌` : '',
+      playlist.playCount ? `${formatPlayCount(playlist.playCount)}播放` : ''
+    ].filter(Boolean).join(' · '),
+    coverUrl: playlist.coverImgUrl,
+    to: `/playlist/${playlist.id}`
+  }
+}
+
+function mapSearchUser(user) {
+  return {
+    id: user.userId,
+    type: 'user',
+    title: user.nickname,
+    name: user.nickname,
+    subtitle: user.signature || `${formatPlayCount(user.followeds)} 粉丝`,
+    coverUrl: user.avatarUrl
+  }
+}
+
+function mapSearchMv(mv) {
+  return {
+    id: mv.id,
+    type: 'mv',
+    title: mv.name,
+    name: mv.name,
+    subtitle: [
+      mv.artistName ?? mv.artists?.map((artist) => artist.name).join(' / '),
+      mv.playCount ? `${formatPlayCount(mv.playCount)}播放` : '',
+      formatDuration(mv.duration)
+    ].filter(Boolean).join(' · '),
+    coverUrl: mv.cover ?? mv.imgurl ?? mv.picUrl
   }
 }
 
