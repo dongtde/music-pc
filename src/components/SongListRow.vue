@@ -1,11 +1,13 @@
 <template>
-  <router-link
+  <button
     class="song-list-row"
-    :to="trackTo(track)"
     :class="{ 'is-playing': isPlaying(track), 'is-compact': compact }"
+    type="button"
+    @click="handlePlayClick"
   >
     <span class="song-list-row__main">
       <span class="song-list-row__cover" :class="`song-list-row__cover--${track.type}`">
+        <img v-if="track.coverUrl" class="song-list-row__cover-image" :src="track.coverUrl" :alt="track.name" />
         <span
           class="song-list-row__play"
           :class="{ 'song-list-row__play--playing': isPlaying(track) }"
@@ -30,16 +32,18 @@
 
     <span class="song-list-row__album">{{ track.album }}</span>
     <span class="song-list-row__time">{{ track.time }}</span>
-  </router-link>
+  </button>
 </template>
 
 <script setup>
+import { useMessage } from 'naive-ui'
 import { AudioLines, Play, Video } from 'lucide-vue-next'
 import { usePlayerStore } from '../stores/player'
 
 const player = usePlayerStore()
+const message = useMessage()
 
-defineProps({
+const props = defineProps({
   track: {
     type: Object,
     required: true
@@ -50,12 +54,18 @@ defineProps({
   }
 })
 
+const emit = defineEmits(['play'])
+
 function isPlaying(track) {
   return track.isPlaying || (player.state.currentTrack.id === track.id && player.state.isPlaying)
 }
 
-function trackTo(track) {
-  return track.to ?? `/playlist/new-${track.rank ?? track.id ?? track.name}`
+function handlePlayClick() {
+  if (props.track.vip) {
+    message.warning('当前歌曲为 VIP 歌曲，将尝试播放试听')
+  }
+
+  emit('play', props.track)
 }
 </script>
 
@@ -63,14 +73,19 @@ function trackTo(track) {
 .song-list-row {
   position: relative;
   display: grid;
+  width: 100%;
   min-height: 58px;
   grid-template-columns: minmax(360px, 1fr) minmax(180px, 320px) 64px;
   gap: 24px;
   align-items: center;
   padding: 6px 16px;
+  border: 0;
   color: var(--text-main);
   background: transparent;
+  cursor: pointer;
+  font: inherit;
   overflow: hidden;
+  text-align: left;
   transition:
     background-color 220ms ease,
     color 220ms ease;
@@ -132,6 +147,14 @@ function trackTo(track) {
   border-radius: 7px;
   color: #ffffff;
   background: #222222;
+}
+
+.song-list-row__cover-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .song-list-row__play {

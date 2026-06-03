@@ -30,6 +30,12 @@ export function getPlaylistDetail(params = {}) {
   })
 }
 
+export function getPlaylistTracks(params = {}) {
+  return http.get('/playlist/track/all', {
+    params
+  })
+}
+
 export function getSongUrl(params = {}) {
   return http.get('/song/url/v1', {
     params

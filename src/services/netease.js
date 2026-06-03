@@ -2,7 +2,9 @@ import {
   getBanners,
   getPersonalizedMvs,
   getPersonalizedNewSongs,
-  getPersonalizedPlaylists
+  getPersonalizedPlaylists,
+  getPlaylistDetail,
+  getPlaylistTracks
 } from '../api/modules/netease'
 
 const COVER_TYPES = ['sunset', 'neon', 'lofi', 'stage', 'piano']
@@ -29,6 +31,36 @@ export async function getHomeDiscoverData() {
   }
 }
 
+export async function getPlaylistDetailData(id) {
+  const detailResponse = await getPlaylistDetail({ id })
+  const rawPlaylist = detailResponse.playlist
+
+  if (!rawPlaylist) {
+    throw new Error('Playlist detail is empty')
+  }
+
+  let tracks = rawPlaylist.tracks ?? []
+
+  try {
+    const trackResponse = await getPlaylistTracks({
+      id,
+      limit: rawPlaylist.trackCount || 1000,
+      offset: 0
+    })
+
+    if (Array.isArray(trackResponse.songs) && trackResponse.songs.length) {
+      tracks = trackResponse.songs
+    }
+  } catch (error) {
+    console.warn('Failed to load full playlist tracks:', error)
+  }
+
+  return {
+    playlist: mapPlaylistDetail(rawPlaylist),
+    tracks: tracks.map(mapPlaylistTrack)
+  }
+}
+
 function mapBanner(banner, index) {
   return {
     id: `${banner.targetType}-${banner.targetId || index}`,
@@ -50,6 +82,43 @@ function mapPlaylist(playlist, index) {
     listeners: formatPlayCount(playlist.playCount),
     type: coverType(index),
     coverUrl: playlist.picUrl
+  }
+}
+
+function mapPlaylistDetail(playlist) {
+  const creator = playlist.creator ?? {}
+
+  return {
+    id: playlist.id,
+    title: playlist.name,
+    description: playlist.description || playlist.copywriter || '这个歌单暂时没有简介',
+    creator: creator.nickname || '网易云音乐用户',
+    creatorAvatarUrl: creator.avatarUrl,
+    updated: formatDate(playlist.updateTime),
+    trackCount: playlist.trackCount ?? playlist.tracks?.length ?? 0,
+    listeners: formatPlayCount(playlist.playCount),
+    tags: playlist.tags ?? [],
+    type: coverType(Number(playlist.id) || 0),
+    coverUrl: playlist.coverImgUrl
+  }
+}
+
+function mapPlaylistTrack(song, index) {
+  const album = song.al ?? song.album ?? {}
+  const artists = song.ar ?? song.artists ?? []
+
+  return {
+    id: song.id,
+    name: song.name,
+    artist: artists.map((artist) => artist.name).filter(Boolean).join(' / ') || '未知歌手',
+    album: album.name || '未知专辑',
+    rank: String(index + 1).padStart(2, '0'),
+    type: coverType(index),
+    time: formatDuration(song.dt ?? song.duration),
+    coverUrl: album.picUrl,
+    to: `/playlist/song-${song.id}`,
+    vip: Boolean(song.fee && song.fee !== 0),
+    hasVideo: Boolean(song.mv)
   }
 }
 
@@ -108,4 +177,21 @@ function formatPlayCount(count = 0) {
 
 function trimNumber(number) {
   return Number(number.toFixed(1)).toString()
+}
+
+function formatDate(value) {
+  if (!value) {
+    return '最近更新'
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return '最近更新'
+  }
+
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${date.getFullYear()}-${month}-${day} 更新`
 }

@@ -51,7 +51,7 @@ audio.addEventListener('ended', () => {
 export function usePlayerStore() {
   async function playTrack(track) {
     if (!track?.id) {
-      return
+      return false
     }
 
     state.isLoading = true
@@ -71,10 +71,12 @@ export function usePlayerStore() {
       audio.src = songUrl
       audio.currentTime = 0
       await audio.play()
+      return true
     } catch (error) {
       state.error = error
       state.isPlaying = false
       console.warn('Failed to play track:', error)
+      return false
     } finally {
       state.isLoading = false
     }
@@ -82,16 +84,23 @@ export function usePlayerStore() {
 
   async function togglePlay() {
     if (!audio.src) {
-      await playTrack(state.currentTrack)
-      return
+      return playTrack(state.currentTrack)
     }
 
     if (audio.paused) {
-      await audio.play()
-      return
+      try {
+        await audio.play()
+        return true
+      } catch (error) {
+        state.error = error
+        state.isPlaying = false
+        console.warn('Failed to resume track:', error)
+        return false
+      }
     }
 
     audio.pause()
+    return true
   }
 
   function setQueue(tracks) {

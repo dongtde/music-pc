@@ -126,7 +126,7 @@
                 :key="track.id"
                 :track="track"
                 compact
-                @click.prevent="playQueueTrack(track)"
+                @play="playQueueTrack"
               />
             </div>
           </div>
@@ -139,6 +139,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Heart, ListMusic, Maximize2, Mic2, Minimize2, Pause, Play, Repeat, Repeat1, Repeat2, Shuffle, SkipBack, SkipForward, Volume2 } from 'lucide-vue-next'
+import { useMessage } from 'naive-ui'
 import FullScreenPlayer from './FullScreenPlayer.vue'
 import SongListRow from './SongListRow.vue'
 import { useThemeStore } from '../stores/theme'
@@ -146,6 +147,7 @@ import { usePlayerStore } from '../stores/player'
 
 const theme = useThemeStore()
 const player = usePlayerStore()
+const message = useMessage()
 const modeMenuOpen = ref(false)
 const volumeMenuOpen = ref(false)
 const queueMenuOpen = ref(false)
@@ -194,8 +196,8 @@ const queueTracks = computed(() => player.state.queue.slice(0, 8).map((song, ind
   id: song.id ?? `queue-${song.rank}`,
   rank: String(index + 1).padStart(2, '0'),
   to: `/playlist/new-${String(index + 1).padStart(2, '0')}`,
-  vip: index % 2 === 0,
-  hasVideo: index % 3 !== 1
+  vip: Boolean(song.vip),
+  hasVideo: song.hasVideo ?? index % 3 !== 1
 })))
 
 watch(volume, (value) => {
@@ -277,13 +279,23 @@ function closePlayerPopovers() {
   queueMenuOpen.value = false
 }
 
-function playQueueTrack(track) {
+async function playQueueTrack(track) {
   if (player.state.currentTrack.id === track.id) {
-    player.togglePlay()
+    const toggled = await player.togglePlay()
+    showPlaybackError(toggled)
     return
   }
 
-  player.playTrack(track)
+  const played = await player.playTrack(track)
+  showPlaybackError(played)
+}
+
+function showPlaybackError(success) {
+  if (success) {
+    return
+  }
+
+  message.error(player.state.error?.message || '当前歌曲暂无可播放链接')
 }
 
 function handleOutsideClick(event) {
