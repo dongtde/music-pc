@@ -1,0 +1,32 @@
+﻿.simple-view {
+  display: grid;
+  place-items: center;
+}
+
+.empty-panel {
+  transition:
+    background-color 360ms ease,
+    border-color 360ms ease,
+    color 360ms ease,
+    box-shadow 360ms ease;
+  display: flex;
+  width: min(520px, 90%);
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 46px;
+  border-radius: 10px;
+  background: var(--panel-bg);
+  text-align: center;
+}
+
+.empty-panel h1 {
+  margin: 0;
+}
+
+.empty-panel p {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+}
+
+
