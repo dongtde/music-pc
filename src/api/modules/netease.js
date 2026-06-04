@@ -90,6 +90,48 @@ export function getArtistHotSongs(params = {}) {
   })
 }
 
+export function getArtistTopSongs(params = {}) {
+  return http.get('/artist/top/song', {
+    params
+  })
+}
+
+export function getArtistSongs(params = {}) {
+  return http.get('/artist/songs', {
+    params
+  })
+}
+
+export function getArtistAlbums(params = {}) {
+  return http.get('/artist/album', {
+    params
+  })
+}
+
+export function getArtistMvs(params = {}) {
+  return http.get('/artist/mv', {
+    params
+  })
+}
+
+export function getArtistVideos(params = {}) {
+  return http.get('/artist/video', {
+    params
+  })
+}
+
+export function getArtistDesc(params = {}) {
+  return http.get('/artist/desc', {
+    params
+  })
+}
+
+export function getArtistDynamic(params = {}) {
+  return http.get('/artist/detail/dynamic', {
+    params
+  })
+}
+
 export function getAlbumNewest(params = {}) {
   return http.get('/album/newest', {
     params

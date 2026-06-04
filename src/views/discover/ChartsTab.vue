@@ -135,6 +135,8 @@ import SectionTitle from '../../components/SectionTitle.vue'
 import { getChartsDiscoveryData, getPlaylistDetailData } from '../../services/netease'
 import { usePlayerStore } from '../../stores/player'
 
+const CHART_SKELETON_MIN_MS = 360
+
 const loading = ref(false)
 const error = ref(null)
 const boards = ref([])
@@ -149,6 +151,8 @@ onMounted(() => {
 })
 
 async function loadData() {
+  const startedAt = Date.now()
+
   loading.value = true
   error.value = null
 
@@ -160,8 +164,21 @@ async function loadData() {
     console.warn('Failed to load charts:', loadError)
     error.value = loadError
   } finally {
+    await waitForSkeleton(startedAt)
     loading.value = false
   }
+}
+
+function waitForSkeleton(startedAt) {
+  const remaining = CHART_SKELETON_MIN_MS - (Date.now() - startedAt)
+
+  if (remaining <= 0) {
+    return Promise.resolve()
+  }
+
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, remaining)
+  })
 }
 
 async function playChart(chart) {

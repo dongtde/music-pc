@@ -139,7 +139,10 @@
           </router-link>
         </div>
         <div ref="loadMoreTrigger" class="artist-load-more" aria-live="polite">
-          <div v-if="loadingMore" class="artist-grid artist-grid--real artist-grid--loading">
+          <div
+            v-if="loadingMore"
+            class="artist-grid artist-grid--real artist-grid--loading"
+          >
             <article
               v-for="item in ARTIST_LOAD_MORE_SKELETON_COUNT"
               :key="`artist-load-more-skeleton-${item}`"
@@ -150,7 +153,11 @@
               <span class="skeleton-line skeleton-line--artist-meta" />
             </article>
           </div>
-          <button v-else-if="error && artists.length" type="button" @click="loadMore({ force: true })">
+          <button
+            v-else-if="error && artists.length"
+            type="button"
+            @click="loadMore({ force: true })"
+          >
             加载失败，重试
           </button>
           <span v-else-if="!hasMore && artists.length">没有更多歌手了</span>
@@ -161,15 +168,22 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { Mic2 } from 'lucide-vue-next'
-import { getArtistsDiscoveryData } from '../../services/netease'
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+} from 'vue';
+import { Mic2 } from 'lucide-vue-next';
+import { getArtistsDiscoveryData } from '../../services/netease';
 
-const ARTIST_LIMIT = 32
-const ARTIST_SKELETON_COUNT = 20
-const ARTIST_RANK_SKELETON_COUNT = 10
-const ARTIST_LOAD_MORE_SKELETON_COUNT = 8
-const ARTIST_SKELETON_MIN_MS = 360
+const ARTIST_LIMIT = 32;
+const ARTIST_SKELETON_COUNT = 20;
+const ARTIST_RANK_SKELETON_COUNT = 10;
+const ARTIST_LOAD_MORE_SKELETON_COUNT = 8;
+const ARTIST_SKELETON_MIN_MS = 360;
 
 const areaFilters = [
   { label: '全部', value: -1 },
@@ -177,64 +191,74 @@ const areaFilters = [
   { label: '欧美', value: 96 },
   { label: '日本', value: 8 },
   { label: '韩国', value: 16 },
-  { label: '其他', value: 0 }
-]
+  { label: '其他', value: 0 },
+];
 const typeFilters = [
   { label: '全部', value: -1 },
   { label: '男歌手', value: 1 },
   { label: '女歌手', value: 2 },
-  { label: '乐队组合', value: 3 }
-]
+  { label: '乐队组合', value: 3 },
+];
 const initialFilters = [
   { label: '热门', value: -1 },
-  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').slice(0, 10).map((letter) => ({ label: letter, value: letter.toLowerCase() }))
-]
+  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    .split('')
+    .slice(0, 10)
+    .map((letter) => ({ label: letter, value: letter.toLowerCase() })),
+];
 
 const filters = reactive({
   area: -1,
   type: -1,
-  initial: -1
-})
-const loading = ref(false)
-const loadingMore = ref(false)
-const skeletonVisible = ref(false)
-const error = ref(null)
-const artists = ref([])
-const topArtists = ref([])
-const artistsOffset = ref(0)
-const hasMore = ref(true)
-const loadMoreTrigger = ref(null)
-const hasArtistContent = computed(() => Boolean(artists.value.length || topArtists.value.length))
-let artistRequestId = 0
-let loadMoreObserver = null
+  initial: -1,
+});
+const loading = ref(false);
+const loadingMore = ref(false);
+const skeletonVisible = ref(false);
+const error = ref(null);
+const artists = ref([]);
+const topArtists = ref([]);
+const artistsOffset = ref(0);
+const hasMore = ref(true);
+const loadMoreTrigger = ref(null);
+const hasArtistContent = computed(() =>
+  Boolean(artists.value.length || topArtists.value.length),
+);
+let artistRequestId = 0;
+let loadMoreObserver = null;
 
 onMounted(() => {
-  loadData({ reset: true })
-})
+  loadData({ reset: true });
+});
 
 onBeforeUnmount(() => {
-  disconnectLoadMoreObserver()
-})
+  disconnectLoadMoreObserver();
+});
 
 function setFilter(key, value) {
   if (filters[key] === value) {
-    return
+    return;
   }
 
-  filters[key] = value
-  loadData({ reset: true })
+  filters[key] = value;
+  loadData({ reset: true });
 }
 
 function reload() {
-  loadData({ reset: true })
+  loadData({ reset: true });
 }
 
 function loadMore({ force = false } = {}) {
-  if (loading.value || loadingMore.value || !hasMore.value || (error.value && !force)) {
-    return
+  if (
+    loading.value ||
+    loadingMore.value ||
+    !hasMore.value ||
+    (error.value && !force)
+  ) {
+    return;
   }
 
-  loadData({ reset: false })
+  loadData({ reset: false });
 }
 
 function getArtistDetails(artist) {
@@ -242,131 +266,135 @@ function getArtistDetails(artist) {
     ? [...artist.details]
     : artist.tag
       ? artist.tag.split(' · ').filter(Boolean)
-      : []
+      : [];
 
   if (artist.score) {
-    details.push(`热度 ${artist.score}`)
+    details.push(`热度 ${artist.score}`);
   }
 
-  return details.length ? details.slice(0, 3) : ['暂无更多资料']
+  return details.length ? details.slice(0, 3) : ['暂无更多资料'];
 }
 
 async function loadData({ reset = false } = {}) {
-  const startedAt = Date.now()
-  const requestId = ++artistRequestId
+  const startedAt = Date.now();
+  const requestId = ++artistRequestId;
 
   if (reset) {
-    disconnectLoadMoreObserver()
-    loading.value = true
-    loadingMore.value = false
-    skeletonVisible.value = true
-    artists.value = []
-    artistsOffset.value = 0
-    hasMore.value = true
+    disconnectLoadMoreObserver();
+    loading.value = true;
+    loadingMore.value = false;
+    skeletonVisible.value = true;
+    artists.value = [];
+    artistsOffset.value = 0;
+    hasMore.value = true;
   } else {
-    loadingMore.value = true
+    loadingMore.value = true;
   }
 
-  error.value = null
-  const offset = reset ? 0 : artistsOffset.value
+  error.value = null;
+  const offset = reset ? 0 : artistsOffset.value;
 
   try {
     const data = await getArtistsDiscoveryData({
       ...filters,
       limit: ARTIST_LIMIT,
-      offset
-    })
+      offset,
+    });
 
     if (requestId !== artistRequestId) {
-      return
+      return;
     }
 
-    artists.value = reset ? data.artists : mergeArtists(artists.value, data.artists)
-    artistsOffset.value = offset + data.artists.length
-    hasMore.value = Boolean(data.artists.length && data.more)
-    topArtists.value = data.topArtists.length ? data.topArtists : topArtists.value
+    artists.value = reset
+      ? data.artists
+      : mergeArtists(artists.value, data.artists);
+    artistsOffset.value = offset + data.artists.length;
+    hasMore.value = Boolean(data.artists.length && data.more);
+    topArtists.value = data.topArtists.length
+      ? data.topArtists
+      : topArtists.value;
   } catch (loadError) {
     if (requestId !== artistRequestId) {
-      return
+      return;
     }
 
-    console.warn('Failed to load artists:', loadError)
-    error.value = loadError
+    console.warn('Failed to load artists:', loadError);
+    error.value = loadError;
   } finally {
     if (requestId === artistRequestId) {
       if (reset) {
-        await waitForSkeleton(startedAt)
+        await waitForSkeleton(startedAt);
 
         if (requestId !== artistRequestId) {
-          return
+          return;
         }
 
-        skeletonVisible.value = false
+        skeletonVisible.value = false;
       }
 
-      loading.value = false
-      loadingMore.value = false
-      nextTick(setupLoadMoreObserver)
+      loading.value = false;
+      loadingMore.value = false;
+      nextTick(setupLoadMoreObserver);
     }
   }
 }
 
 function waitForSkeleton(startedAt) {
-  const remaining = ARTIST_SKELETON_MIN_MS - (Date.now() - startedAt)
+  const remaining = ARTIST_SKELETON_MIN_MS - (Date.now() - startedAt);
 
   if (remaining <= 0) {
-    return Promise.resolve()
+    return Promise.resolve();
   }
 
   return new Promise((resolve) => {
-    window.setTimeout(resolve, remaining)
-  })
+    window.setTimeout(resolve, remaining);
+  });
 }
 
 function mergeArtists(currentArtists, nextArtists) {
-  const seenIds = new Set(currentArtists.map((artist) => artist.id))
+  const seenIds = new Set(currentArtists.map((artist) => artist.id));
 
   return [
     ...currentArtists,
     ...nextArtists.filter((artist) => {
       if (seenIds.has(artist.id)) {
-        return false
+        return false;
       }
 
-      seenIds.add(artist.id)
-      return true
-    })
-  ]
+      seenIds.add(artist.id);
+      return true;
+    }),
+  ];
 }
 
 function setupLoadMoreObserver() {
-  disconnectLoadMoreObserver()
+  disconnectLoadMoreObserver();
 
   if (!loadMoreTrigger.value || typeof IntersectionObserver === 'undefined') {
-    return
+    return;
   }
 
-  const scrollRoot = loadMoreTrigger.value.closest('.view')
+  const scrollRoot = loadMoreTrigger.value.closest('.view');
   loadMoreObserver = new IntersectionObserver(handleLoadMoreIntersect, {
     root: scrollRoot,
     rootMargin: '360px 0px 360px',
-    threshold: 0
-  })
-  loadMoreObserver.observe(loadMoreTrigger.value)
+    threshold: 0,
+  });
+  loadMoreObserver.observe(loadMoreTrigger.value);
 }
 
 function handleLoadMoreIntersect(entries) {
   if (entries.some((entry) => entry.isIntersecting)) {
-    loadMore()
+    loadMore();
   }
 }
 
 function disconnectLoadMoreObserver() {
   if (!loadMoreObserver) {
-    return
+    return;
   }
 
-  loadMoreObserver.disconnect()
-  loadMoreObserver = null
+  loadMoreObserver.disconnect();
+  loadMoreObserver = null;
 }
 </script>

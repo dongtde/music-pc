@@ -161,6 +161,7 @@ function normalizeRouteId(value) {
   align-items: center;
   padding: 6px 16px;
   border: 0;
+  border-radius: 8px;
   color: var(--text-main);
   background: transparent;
   cursor: pointer;
@@ -176,6 +177,7 @@ function normalizeRouteId(value) {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  border-radius: inherit;
   background: rgba(var(--accent-rgb), 0.14);
   content: "";
   opacity: 0;

@@ -4,10 +4,15 @@ import {
   getAlbumDetail,
   getAlbumDynamic,
   getAlbumNewest,
+  getArtistAlbums,
+  getArtistDesc,
   getArtistDetail,
+  getArtistDynamic,
   getArtistHotSongs,
   getArtistList,
+  getArtistSongs,
   getArtistToplist,
+  getArtistVideos,
   getPersonalizedMvs,
   getPersonalizedNewSongs,
   getPersonalizedPlaylists,
@@ -275,9 +280,10 @@ export async function getArtistsDiscoveryData({
 }
 
 export async function getArtistDetailData(id) {
-  const [detailResponse, songsResponse] = await Promise.all([
+  const [detailResponse, songsResponse, dynamicResponse] = await Promise.all([
     getArtistDetail({ id }),
-    getArtistHotSongs({ id }).catch(() => ({}))
+    getArtistHotSongs({ id }).catch(() => ({})),
+    getArtistDynamic({ id }).catch(() => ({}))
   ])
   const detail = detailResponse.data ?? {}
   const artist = detail.artist ?? songsResponse.artist
@@ -293,8 +299,71 @@ export async function getArtistDetailData(id) {
       : []
 
   return {
-    artist: mapArtistDetail(artist, detail, songsResponse.artist),
+    artist: mapArtistDetail(artist, { ...detail, dynamic: dynamicResponse }, songsResponse.artist),
     tracks: hotSongs.map(mapPlaylistTrack)
+  }
+}
+
+export async function getArtistSongsData({ id, limit = 30, offset = 0, order = 'hot' } = {}) {
+  const response = await getArtistSongs({
+    id,
+    limit,
+    offset,
+    order
+  })
+  const songs = response.songs ?? []
+  const total = response.total ?? songs.length
+
+  return {
+    tracks: songs.map((song, index) => mapPlaylistTrack(song, offset + index)),
+    total,
+    more: Boolean(response.more || (total && offset + songs.length < total))
+  }
+}
+
+export async function getArtistAlbumsData({ id, limit = 30, offset = 0 } = {}) {
+  const response = await getArtistAlbums({
+    id,
+    limit,
+    offset
+  })
+  const albums = response.hotAlbums ?? []
+
+  return {
+    albums: albums.map((album, index) => mapAlbumCard(album, offset + index)),
+    artist: response.artist ? mapArtist(response.artist, 0) : null,
+    more: Boolean(response.more),
+    total: response.artist?.albumSize ?? 0
+  }
+}
+
+export async function getArtistVideosData({ id, size = 24, cursor = 0, order = 0 } = {}) {
+  const response = await getArtistVideos({
+    id,
+    size,
+    cursor,
+    order
+  })
+  const page = response.data?.page ?? {}
+  const records = response.data?.records ?? []
+
+  return {
+    videos: records.map(mapArtistVideo),
+    cursor: page.cursor ?? '',
+    more: Boolean(page.more)
+  }
+}
+
+export async function getArtistIntroData(id) {
+  const response = await getArtistDesc({ id })
+
+  return {
+    briefDesc: response.briefDesc || '',
+    sections: (response.introduction ?? []).map((section, index) => ({
+      id: `${section.ti || 'intro'}-${index}`,
+      title: section.ti || '详情',
+      text: section.txt || ''
+    })).filter((section) => section.text)
   }
 }
 
@@ -482,6 +551,8 @@ function mapRankedArtist(item, index) {
 }
 
 function mapArtistDetail(artist, detail = {}, fallbackArtist = {}) {
+  const dynamic = detail.dynamic ?? {}
+  const dynamicVideoCount = getArtistDynamicVideoCount(dynamic.videoNum)
   const aliases = artist.alias ?? fallbackArtist.alias ?? []
   const identities = [
     ...(artist.identities ?? []),
@@ -503,12 +574,20 @@ function mapArtistDetail(artist, detail = {}, fallbackArtist = {}) {
     avatarUrl: resizeNeteaseImage(artist.avatar ?? artist.img1v1Url ?? fallbackArtist.img1v1Url, 300),
     albumSize: artist.albumSize ?? fallbackArtist.albumSize ?? 0,
     musicSize: artist.musicSize ?? fallbackArtist.musicSize ?? 0,
-    mvSize: artist.mvSize ?? fallbackArtist.mvSize ?? detail.videoCount ?? 0,
-    videoCount: detail.videoCount ?? artist.mvSize ?? fallbackArtist.mvSize ?? 0,
+    mvSize: artist.mvSize ?? fallbackArtist.mvSize ?? dynamicVideoCount ?? detail.videoCount ?? 0,
+    videoCount: dynamicVideoCount ?? detail.videoCount ?? artist.mvSize ?? fallbackArtist.mvSize ?? 0,
     rank,
-    followed: Boolean(artist.followed ?? fallbackArtist.followed),
+    followed: Boolean(dynamic.followed ?? artist.followed ?? fallbackArtist.followed),
     type: coverType(Number(artist.id ?? fallbackArtist.id) || 0)
   }
+}
+
+function getArtistDynamicVideoCount(videoNum = []) {
+  const totalItem = videoNum.find((item) => Number(item.cat) === 0)
+  const mvItem = videoNum.find((item) => Number(item.cat) === 1)
+  const value = totalItem?.num ?? mvItem?.num
+
+  return Number.isFinite(Number(value)) ? Number(value) : undefined
 }
 
 function mapAlbumNewest(response = {}) {
@@ -709,13 +788,17 @@ function getSearchTotalByType(result, type) {
 function mapSearchSong(song, index = 0) {
   const album = song.al ?? song.album ?? {}
   const artists = song.ar ?? song.artists ?? []
+  const artistIds = getArtistIds(artists)
 
   return {
     id: song.id,
     type: 'song',
     name: song.name,
     title: song.name,
+    artistId: artistIds[0] ?? '',
+    artistIds,
     artist: artists.map((artist) => artist.name).filter(Boolean).join(' / ') || '未知歌手',
+    albumId: album.id ?? '',
     album: album.name || '未知专辑',
     rank: String(index + 1).padStart(2, '0'),
     time: formatDuration(song.dt ?? song.duration),
@@ -723,7 +806,8 @@ function mapSearchSong(song, index = 0) {
     coverUrl: album.picUrl,
     to: `/playlist/song-${song.id}`,
     vip: Boolean(song.fee && song.fee !== 0),
-    hasVideo: Boolean(song.mv)
+    hasVideo: Boolean(song.mv),
+    mvId: song.mv || ''
   }
 }
 
@@ -804,16 +888,23 @@ function mapNewsong(item, index) {
   const song = item.song ?? item
   const album = song.album ?? song.al ?? {}
   const artists = song.artists ?? song.ar ?? []
+  const artistIds = getArtistIds(artists)
 
   return {
     id: song.id ?? item.id,
     name: song.name ?? item.name,
+    artistId: artistIds[0] ?? '',
+    artistIds,
     artist: artists.map((artist) => artist.name).filter(Boolean).join(' / ') || '未知歌手',
+    albumId: album.id ?? '',
     album: album.name ?? '未知专辑',
     rank: String(index + 1).padStart(2, '0'),
     type: coverType(index),
     time: formatDuration(song.duration ?? song.dt),
-    coverUrl: item.picUrl ?? album.picUrl
+    coverUrl: item.picUrl ?? album.picUrl,
+    vip: Boolean(song.fee && song.fee !== 0),
+    hasVideo: Boolean(song.mv),
+    mvId: song.mv || ''
   }
 }
 
@@ -826,6 +917,30 @@ function mapMv(mv, index) {
     duration: formatDuration(mv.duration),
     type: coverType(index),
     coverUrl: mv.picUrl
+  }
+}
+
+function mapArtistVideo(record, index) {
+  const resource = record.resource ?? {}
+  const base = resource.mlogBaseData ?? record.mlogBaseData ?? {}
+  const ext = resource.mlogExtVO ?? record.mlogExtVO ?? {}
+  const id = base.id ?? record.id
+  const artists = Array.isArray(ext.artists) ? ext.artists : []
+
+  return {
+    id,
+    title: base.text || base.originalTitle || ext.song?.name || '视频',
+    description: base.desc || '',
+    artist: ext.artistName || getArtistNames(artists),
+    coverUrl: resizeNeteaseImage(base.coverUrl, 480),
+    duration: formatDuration(base.duration),
+    playCount: formatPlayCount(ext.playCount ?? 0),
+    likedCount: formatPlayCount(ext.likedCount ?? 0),
+    publishTime: formatDate(base.pubTime),
+    songName: ext.song?.name || '',
+    shareUrl: resource.shareUrl || '',
+    type: coverType(index),
+    to: id ? { name: 'video', query: { mvId: id } } : { name: 'video' }
   }
 }
 

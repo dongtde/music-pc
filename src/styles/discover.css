@@ -728,8 +728,8 @@
   box-shadow: none;
 }
 
-.artist-rank-title {
-  margin-bottom: 34px;
+.artist-rank-panel .section-title.artist-rank-title {
+  margin: 0 0 34px;
 }
 
 .artist-rank-panel header,

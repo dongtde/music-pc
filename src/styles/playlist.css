@@ -275,6 +275,197 @@
   background: rgba(255, 122, 122, 0.1);
 }
 
+.playlist-detail-skeleton {
+  --playlist-skeleton-base: color-mix(
+    in srgb,
+    var(--control-bg) 78%,
+    var(--accent)
+  );
+  --playlist-skeleton-glint: rgba(255, 255, 255, 0.14);
+  --playlist-skeleton-outline: rgba(var(--accent-rgb), 0.14);
+  display: grid;
+  gap: 22px;
+}
+
+:root[data-theme='light'] .playlist-detail-skeleton {
+  --playlist-skeleton-base: color-mix(
+    in srgb,
+    var(--control-bg) 90%,
+    var(--accent)
+  );
+  --playlist-skeleton-glint: rgba(255, 255, 255, 0.72);
+  --playlist-skeleton-outline: rgba(var(--accent-rgb), 0.1);
+}
+
+.playlist-detail-skeleton__hero {
+  display: grid;
+  grid-template-columns: 172px minmax(0, 1fr);
+  gap: 22px;
+  align-items: end;
+  margin-top: 12px;
+}
+
+.playlist-detail-skeleton__content {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  padding-bottom: 4px;
+}
+
+.playlist-detail-skeleton__cover,
+.playlist-detail-skeleton__line,
+.playlist-detail-skeleton__avatar,
+.playlist-detail-skeleton__pill,
+.playlist-detail-skeleton__button,
+.playlist-detail-skeleton__thumb {
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--playlist-skeleton-outline);
+  background:
+    linear-gradient(
+      100deg,
+      transparent 0%,
+      var(--playlist-skeleton-glint) 42%,
+      transparent 72%
+    ),
+    var(--playlist-skeleton-base);
+  background-size: 220% 100%;
+  animation: playlist-detail-skeleton-shimmer 1500ms ease-in-out infinite;
+}
+
+.playlist-detail-skeleton__cover {
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+  box-shadow: 0 22px 44px var(--shadow-color);
+}
+
+.playlist-detail-skeleton__line {
+  height: 12px;
+  border-radius: 8px;
+}
+
+.playlist-detail-skeleton__line--title {
+  width: min(520px, 68%);
+  height: 32px;
+}
+
+.playlist-detail-skeleton__line--description {
+  width: min(760px, 82%);
+  height: 14px;
+}
+
+.playlist-detail-skeleton__line--description-short {
+  width: min(520px, 56%);
+}
+
+.playlist-detail-skeleton__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.playlist-detail-skeleton__avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+
+.playlist-detail-skeleton__pill {
+  width: 92px;
+  height: 18px;
+  border-radius: 999px;
+}
+
+.playlist-detail-skeleton__pill:nth-child(3) {
+  width: 116px;
+}
+
+.playlist-detail-skeleton__pill:nth-child(5) {
+  width: 74px;
+}
+
+.playlist-detail-skeleton__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.playlist-detail-skeleton__button {
+  width: 108px;
+  height: 36px;
+  border-radius: 999px;
+}
+
+.playlist-detail-skeleton__button--primary {
+  width: 126px;
+}
+
+.playlist-detail-skeleton__table {
+  margin-top: 0;
+}
+
+.playlist-detail-skeleton__rows {
+  display: grid;
+  gap: 0;
+}
+
+.playlist-detail-skeleton__row {
+  display: grid;
+  min-height: 58px;
+  grid-template-columns: minmax(360px, 1fr) minmax(180px, 320px) 64px;
+  gap: 24px;
+  align-items: center;
+  padding: 6px 16px;
+  border-radius: 8px;
+}
+
+.playlist-detail-skeleton__row:nth-child(odd) {
+  background: rgba(127, 137, 154, 0.08);
+}
+
+.playlist-detail-skeleton__song-main {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.playlist-detail-skeleton__thumb {
+  width: 42px;
+  height: 42px;
+  border-radius: 7px;
+}
+
+.playlist-detail-skeleton__song-lines {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.playlist-detail-skeleton__line--song {
+  width: min(340px, 82%);
+  height: 13px;
+}
+
+.playlist-detail-skeleton__line--artist {
+  width: min(210px, 52%);
+  height: 10px;
+}
+
+.playlist-detail-skeleton__line--album {
+  width: min(230px, 78%);
+}
+
+.playlist-detail-skeleton__line--duration {
+  width: 42px;
+  height: 10px;
+  justify-self: end;
+}
+
 .playlist-table__head {
   display: grid;
   height: 34px;
@@ -290,8 +481,30 @@
   text-align: right;
 }
 
+@keyframes playlist-detail-skeleton-shimmer {
+  0% {
+    background-position: 180% 0;
+  }
+
+  100% {
+    background-position: -80% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .playlist-detail-skeleton__cover,
+  .playlist-detail-skeleton__line,
+  .playlist-detail-skeleton__avatar,
+  .playlist-detail-skeleton__pill,
+  .playlist-detail-skeleton__button,
+  .playlist-detail-skeleton__thumb {
+    animation: none;
+  }
+}
+
 @media (max-width: 1400px) {
-  .playlist-hero {
+  .playlist-hero,
+  .playlist-detail-skeleton__hero {
     grid-template-columns: 156px minmax(0, 1fr);
     gap: 20px;
   }

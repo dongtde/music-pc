@@ -309,6 +309,8 @@ import {
 import { getHomeDiscoverData } from '../../services/netease';
 import { usePlayerStore } from '../../stores/player';
 
+const HOME_SKELETON_MIN_MS = 360;
+
 const player = usePlayerStore();
 const fallbackRecommendPlaylists = [
   ...playlists,
@@ -393,6 +395,8 @@ function stopHeroAutoplay() {
 }
 
 async function loadHomeData() {
+  const startedAt = Date.now();
+
   isHomeLoading.value = true;
 
   try {
@@ -417,8 +421,21 @@ async function loadHomeData() {
     console.warn('Failed to load home data from Netease API:', error);
   } finally {
     player.setQueue(homeRecommendedSingles.value);
+    await waitForSkeleton(startedAt);
     isHomeLoading.value = false;
   }
+}
+
+function waitForSkeleton(startedAt) {
+  const remaining = HOME_SKELETON_MIN_MS - (Date.now() - startedAt);
+
+  if (remaining <= 0) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, remaining);
+  });
 }
 
 function playRecommendedSong(song) {
