@@ -114,6 +114,79 @@ export function getPlaylistComments(params = {}) {
   })
 }
 
+export function getLoginStatus(params = {}) {
+  return http.get('/login/status', {
+    params
+  })
+}
+
+export function loginByCellphone(params = {}) {
+  return http.get('/login/cellphone', {
+    params
+  })
+}
+
+export function loginByEmail(params = {}) {
+  return http.get('/login', {
+    params
+  })
+}
+
+export function registerAnonymous(params = {}) {
+  return http.get('/register/anonimous', {
+    params
+  })
+}
+
+export function refreshLogin(params = {}) {
+  return http.get('/login/refresh', {
+    params
+  })
+}
+
+export function sendCaptcha(params = {}) {
+  return http.get('/captcha/sent', {
+    params
+  })
+}
+
+export function verifyCaptcha(params = {}) {
+  return http.get('/captcha/verify', {
+    params
+  })
+}
+
+export function getLoginQrKey(params = {}) {
+  return http.get('/login/qr/key', {
+    params
+  })
+}
+
+export function getLoginQrCreate(params = {}) {
+  return http.get('/login/qr/create', {
+    params
+  })
+}
+
+export function getLoginQrCheck(params = {}) {
+  return http.get('/login/qr/check', {
+    acceptCodes: [800, 801, 802, 803],
+    params
+  })
+}
+
+export function getUserAccount(params = {}) {
+  return http.get('/user/account', {
+    params
+  })
+}
+
+export function logout(params = {}) {
+  return http.get('/logout', {
+    params
+  })
+}
+
 export function getSongComments(params = {}) {
   return http.get('/comment/music', {
     params

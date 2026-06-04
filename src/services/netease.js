@@ -182,7 +182,7 @@ export async function getChartsDiscoveryData() {
   const toplistResponse = await getToplist()
   const toplists = (toplistResponse.list ?? []).map(mapToplist)
   const featured = toplists.slice(0, 6)
-  const detailTargets = featured.slice(0, 3)
+  const detailTargets = featured
   const detailResponses = await Promise.all(
     detailTargets.map((board) => getPlaylistDetail({ id: board.id }).catch(() => ({ playlist: null })))
   )
@@ -194,8 +194,49 @@ export async function getChartsDiscoveryData() {
   return {
     boards,
     officialCharts: featured,
-    globalCharts: toplists.slice(6, 18)
+    globalCharts: toplists.slice(6),
+    chartSections: groupToplists(toplists.slice(6))
   }
+}
+
+function groupToplists(charts) {
+  const sectionMap = new Map()
+
+  charts.forEach((chart) => {
+    const title = getToplistSectionTitle(chart.title)
+
+    if (!sectionMap.has(title)) {
+      sectionMap.set(title, [])
+    }
+
+    sectionMap.get(title).push(chart)
+  })
+
+  return [...sectionMap.entries()].map(([title, items]) => ({ title, items }))
+}
+
+function getToplistSectionTitle(name = '') {
+  if (/合伙人/.test(name)) {
+    return '音乐合伙人榜'
+  }
+
+  if (/黑胶|VIP/.test(name)) {
+    return '会员榜'
+  }
+
+  if (/韩语|UK|美国|Billboard|Beatport|日本|Oricon|欧美|法国|日语|俄语|越南|俄罗斯|泰语/.test(name)) {
+    return '地区/语种榜'
+  }
+
+  if (/说唱|古典|电音|ACG|动画|游戏|VOCALOID|摇滚|国风|民谣|DJ|R&B/.test(name)) {
+    return '曲风榜'
+  }
+
+  if (/KTV|听歌识曲|网络热歌|LOOK|直播|车友|蛋仔|AI|乐夏|喜力|特斯拉|理想|比亚迪|蔚来|极氪|昊铂|埃安|吉利/.test(name)) {
+    return '场景/活动榜'
+  }
+
+  return '特色榜'
 }
 
 export async function getArtistsDiscoveryData({ area = -1, type = -1, initial = -1 } = {}) {

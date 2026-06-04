@@ -9,6 +9,7 @@
         </section>
         <PlayerBar />
         <ThemeTransitionOverlay />
+        <LoginModal v-model:show="auth.state.loginModalVisible" />
       </main>
     </n-message-provider>
   </n-config-provider>
@@ -20,11 +21,15 @@ import { darkTheme } from 'naive-ui'
 import SidebarNav from './components/SidebarNav.vue'
 import TopBar from './components/TopBar.vue'
 import PlayerBar from './components/PlayerBar.vue'
+import LoginModal from './components/LoginModal.vue'
 import ThemeTransitionOverlay from './components/ThemeTransitionOverlay.vue'
+import { useAuthStore } from './stores/auth'
 import { useThemeStore } from './stores/theme'
 
+const auth = useAuthStore()
 const theme = useThemeStore()
 theme.initTheme()
+auth.initAuth()
 
 const naiveTheme = computed(() => (theme.state.mode === 'dark' ? darkTheme : null))
 

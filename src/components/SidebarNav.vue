@@ -1,15 +1,16 @@
 <template>
   <aside class="sidebar">
-    <router-link class="profile" to="/discover/recommend">
+    <button class="profile" type="button" @click="auth.openLoginModal">
       <span class="profile-avatar" aria-hidden="true">
-        <span />
+        <img v-if="avatarUrl" :src="avatarUrl" :alt="displayName" />
+        <span v-else />
       </span>
       <span class="profile__text">
-        <strong>MusicLover_99</strong>
-        <small>Lv.8</small>
+        <strong>{{ displayName }}</strong>
+        <small>{{ auth.state.isLoggedIn ? '网易云音乐' : '扫码登录同步账号' }}</small>
       </span>
       <ChevronRight :size="18" />
-    </router-link>
+    </button>
 
     <nav class="nav-groups" aria-label="音乐导航">
       <section v-for="group in sidebarGroups" :key="group.title" class="nav-group">
@@ -47,8 +48,12 @@ import {
   Video
 } from 'lucide-vue-next'
 import { sidebarGroups } from '../data/music'
+import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()
+const auth = useAuthStore()
+const displayName = auth.displayName
+const avatarUrl = auth.avatarUrl
 const icons = { CloudDownload, Compass, Heart, History, Music2, Radio, Users, Video }
 
 function isActive(item) {

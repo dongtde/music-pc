@@ -1,95 +1,100 @@
 <template>
   <section class="discover-page">
-    <section class="discover-banner discover-banner--charts">
-      <div>
-        <span class="tag">实时更新</span>
-        <h1>排行榜</h1>
-        <p>接入云音乐榜单列表与榜单详情，展示热歌、新歌、原创等核心榜单的实时曲目。</p>
-      </div>
-      <Crown :size="52" />
-    </section>
-
     <div v-if="loading" class="discover-loading">正在同步榜单...</div>
     <div v-else-if="error" class="discover-error">
       <strong>排行榜加载失败</strong>
       <button type="button" @click="loadData">重试</button>
     </div>
     <template v-else>
-      <div class="chart-grid">
-        <article v-for="board in boards" :key="board.id" class="chart-card">
-          <header>
-            <div>
-              <strong>{{ board.title }}</strong>
-              <small>{{ board.label }}</small>
-            </div>
-            <router-link :to="`/playlist/${board.id}`">查看</router-link>
-          </header>
-
-          <router-link
-            v-for="track in board.tracks"
-            :key="`${board.id}-${track.id || track.rank}`"
-            :to="`/playlist/${board.id}`"
-            class="rank-row"
-          >
-            <em>{{ track.rank }}</em>
-            <span>
-              <strong>{{ track.name }}</strong>
-              <small>{{ track.artist }}</small>
+      <div class="chart-summary-grid">
+        <article
+          v-for="board in boards"
+          :key="board.id"
+          class="chart-summary-card"
+          :class="{ 'is-playing': playingChartId === board.id }"
+        >
+          <router-link :to="`/playlist/${board.id}`" class="chart-summary-card__link">
+            <span class="chart-summary-card__cover">
+              <img v-if="board.coverUrl" :src="board.coverUrl" :alt="board.title" />
+              <span v-else class="song-thumb" :class="`cover--${board.type}`" />
+              <em><Headphones :size="14" /> {{ board.listeners }}</em>
             </span>
-            <i>{{ track.change }}</i>
+            <span class="chart-summary-card__body">
+              <strong>{{ board.title }}</strong>
+              <span
+                v-for="track in board.tracks.slice(0, 3)"
+                :key="`${board.id}-${track.id || track.rank}`"
+                class="chart-summary-track"
+              >
+                <i>{{ Number(track.rank) || track.rank }}</i>
+                <span>{{ track.name }}<template v-if="track.artist">- {{ track.artist }}</template></span>
+              </span>
+            </span>
           </router-link>
+
+          <button
+            class="chart-card__play chart-summary-card__play"
+            type="button"
+            :disabled="playingChartId === board.id"
+            :aria-label="`播放 ${board.title}`"
+            @click.stop.prevent="playChart(board)"
+          >
+            <Play :size="20" fill="currentColor" />
+          </button>
         </article>
       </div>
 
-      <SectionTitle title="官方榜单" />
-      <div class="official-chart-grid">
-        <router-link
-          v-for="chart in officialCharts"
-          :key="chart.id"
-          :to="`/playlist/${chart.id}`"
-          class="official-chart-card"
-        >
-          <img :src="chart.coverUrl" :alt="chart.title" />
-          <span>
-            <strong>{{ chart.title }}</strong>
-            <small>{{ chart.desc || chart.label }}</small>
-          </span>
-          <em>{{ chart.listeners }}</em>
-        </router-link>
-      </div>
+      <section v-for="section in chartSections" :key="section.title" class="chart-section">
+        <SectionTitle :title="section.title" />
+        <div class="region-chart-grid">
+          <article
+            v-for="chart in section.items"
+            :key="chart.id"
+            class="region-chart-card"
+            :class="{ 'is-playing': playingChartId === chart.id }"
+          >
+            <router-link
+              :to="`/playlist/${chart.id}`"
+              class="region-chart-card__link"
+              :aria-label="chart.title"
+            >
+              <img v-if="chart.coverUrl" :src="chart.coverUrl" :alt="chart.title" />
+              <span v-else class="song-thumb" :class="`cover--${chart.type}`" />
+              <em><Headphones :size="14" /> {{ chart.listeners }}</em>
+            </router-link>
 
-      <SectionTitle title="全球媒体榜" />
-      <div class="global-chart-grid">
-        <router-link
-          v-for="chart in globalCharts"
-          :key="chart.id"
-          :to="`/playlist/${chart.id}`"
-          class="global-chart-card"
-        >
-          <img v-if="chart.coverUrl" class="song-thumb__image" :src="chart.coverUrl" :alt="chart.title" />
-          <div v-else class="song-thumb" :class="`cover--${chart.type}`" />
-          <span>
-            <strong>{{ chart.title }}</strong>
-            <small>{{ chart.desc || chart.label }}</small>
-          </span>
-          <em>{{ chart.listeners }}</em>
-        </router-link>
-      </div>
+            <button
+              class="chart-card__play region-chart-card__play"
+              type="button"
+              :disabled="playingChartId === chart.id"
+              :aria-label="`播放 ${chart.title}`"
+              @click.stop.prevent="playChart(chart)"
+            >
+              <Play :size="22" fill="currentColor" />
+            </button>
+          </article>
+        </div>
+      </section>
     </template>
   </section>
 </template>
 
 <script setup>
 import { onMounted, ref } from 'vue'
-import { Crown } from 'lucide-vue-next'
+import { Headphones, Play } from 'lucide-vue-next'
+import { useMessage } from 'naive-ui'
 import SectionTitle from '../../components/SectionTitle.vue'
-import { getChartsDiscoveryData } from '../../services/netease'
+import { getChartsDiscoveryData, getPlaylistDetailData } from '../../services/netease'
+import { usePlayerStore } from '../../stores/player'
 
 const loading = ref(false)
 const error = ref(null)
 const boards = ref([])
-const officialCharts = ref([])
-const globalCharts = ref([])
+const chartSections = ref([])
+const playingChartId = ref('')
+const message = useMessage()
+const player = usePlayerStore()
+const chartTrackCache = new Map()
 
 onMounted(() => {
   loadData()
@@ -102,13 +107,66 @@ async function loadData() {
   try {
     const data = await getChartsDiscoveryData()
     boards.value = data.boards
-    officialCharts.value = data.officialCharts
-    globalCharts.value = data.globalCharts
+    chartSections.value = data.chartSections
   } catch (loadError) {
     console.warn('Failed to load charts:', loadError)
     error.value = loadError
   } finally {
     loading.value = false
   }
+}
+
+async function playChart(chart) {
+  const chartId = String(chart?.id ?? '')
+
+  if (!chartId) {
+    return
+  }
+
+  playingChartId.value = chartId
+
+  try {
+    const tracks = await resolveChartTracks(chart)
+
+    if (!tracks.length) {
+      message.error('这张排行榜暂无可播放歌曲')
+      return
+    }
+
+    player.setQueue(tracks)
+
+    const played = await player.playTrack(tracks[0])
+
+    if (!played) {
+      message.error(player.state.error?.message || '当前排行榜暂无可播放链接')
+    }
+  } catch (playError) {
+    console.warn('Failed to play chart:', playError)
+    message.error('播放排行榜失败，请稍后再试')
+  } finally {
+    playingChartId.value = ''
+  }
+}
+
+async function resolveChartTracks(chart) {
+  const chartId = String(chart?.id ?? '')
+
+  if (!chartId) {
+    return []
+  }
+
+  if (Array.isArray(chart.tracks) && chart.tracks.length) {
+    return chart.tracks.filter((track) => track?.id)
+  }
+
+  if (chartTrackCache.has(chartId)) {
+    return chartTrackCache.get(chartId)
+  }
+
+  const detail = await getPlaylistDetailData(chartId)
+  const tracks = (detail.tracks ?? []).filter((track) => track?.id)
+
+  chartTrackCache.set(chartId, tracks)
+  return tracks
 }
 </script>

@@ -167,10 +167,16 @@ button {
 
 .profile {
   display: grid;
+  width: 100%;
   grid-template-columns: 46px 1fr 18px;
   gap: 12px;
   align-items: center;
   padding: 0 12px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
 }
 
 .profile-avatar {
@@ -205,6 +211,12 @@ button {
   margin-top: 16px;
   border-radius: 999px 999px 6px 6px;
   background: #f0b28d;
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .profile__text {
@@ -693,6 +705,15 @@ button {
   color: var(--text-strong);
   font-size: 13px;
   font-weight: 700;
+}
+
+.topbar-user {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 }
 
 .view {
