@@ -65,7 +65,13 @@
                 type="button"
                 @click="pickKeyword(item.title)"
               >
-                <img v-if="item.iconUrl" :src="item.iconUrl" alt="" />
+                <img
+                  v-if="item.iconUrl"
+                  :src="item.iconUrl"
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                />
                 <Search v-else :size="15" />
                 <span>{{ item.title }}</span>
                 <small>{{ item.subtitle }}</small>
@@ -133,7 +139,13 @@
               @click="handleResultSelect(item)"
             >
               <span class="search-cover">
-                <img v-if="item.coverUrl" :src="item.coverUrl" alt="" />
+                <img
+                  v-if="item.coverUrl"
+                  :src="item.coverUrl"
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                />
                 <component v-else :is="activeTabIcon" :size="18" />
               </span>
               <div>
@@ -163,7 +175,14 @@
     <span class="divider" />
     <button class="vip-button" type="button">开通VIP</button>
     <button class="topbar-user" type="button" @click="auth.openLoginModal">
-      <n-avatar round :size="28" :src="avatarUrl || undefined" color="#ffa51f">
+      <n-avatar
+        round
+        lazy
+        :size="28"
+        :src="avatarUrl || undefined"
+        :img-props="{ decoding: 'async' }"
+        color="#ffa51f"
+      >
         {{ avatarUrl ? '' : displayName.slice(0, 1) }}
       </n-avatar>
     </button>

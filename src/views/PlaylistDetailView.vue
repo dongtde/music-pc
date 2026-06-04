@@ -7,6 +7,8 @@
           class="playlist-cover__image"
           :src="playlist.coverUrl"
           :alt="playlist.title"
+          loading="lazy"
+          decoding="async"
         />
       </div>
 
@@ -21,6 +23,8 @@
               v-if="playlist.creatorAvatarUrl"
               :src="playlist.creatorAvatarUrl"
               :alt="playlist.creator"
+              loading="lazy"
+              decoding="async"
             />
             <template v-else>{{ creatorInitial }}</template>
           </span>

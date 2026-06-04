@@ -7,6 +7,8 @@
           class="album-cover__image"
           :src="album.coverUrl"
           :alt="album.title"
+          loading="lazy"
+          decoding="async"
         />
       </div>
 

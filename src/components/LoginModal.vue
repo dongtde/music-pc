@@ -16,7 +16,13 @@
 
     <section v-if="auth.state.isLoggedIn" class="login-profile">
       <span class="login-profile__avatar">
-        <img v-if="auth.avatarUrl.value" :src="auth.avatarUrl.value" :alt="auth.displayName.value" />
+        <img
+          v-if="auth.avatarUrl.value"
+          :src="auth.avatarUrl.value"
+          :alt="auth.displayName.value"
+          loading="lazy"
+          decoding="async"
+        />
         <template v-else>{{ auth.displayName.value.slice(0, 1) }}</template>
       </span>
       <div class="login-profile__body">
@@ -61,6 +67,8 @@
             v-else-if="auth.state.qr.image"
             class="login-qr__image"
             :src="auth.state.qr.image"
+            loading="lazy"
+            decoding="async"
             alt="网易云音乐登录二维码"
           />
           <div v-else class="login-qr__loading">二维码暂不可用</div>

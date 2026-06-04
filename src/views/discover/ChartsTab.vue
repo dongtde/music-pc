@@ -15,7 +15,13 @@
         >
           <router-link :to="`/playlist/${board.id}`" class="chart-summary-card__link">
             <span class="chart-summary-card__cover">
-              <img v-if="board.coverUrl" :src="board.coverUrl" :alt="board.title" />
+              <img
+                v-if="board.coverUrl"
+                :src="board.coverUrl"
+                :alt="board.title"
+                loading="lazy"
+                decoding="async"
+              />
               <span v-else class="song-thumb" :class="`cover--${board.type}`" />
               <em><Headphones :size="14" /> {{ board.listeners }}</em>
             </span>
@@ -58,7 +64,13 @@
               class="region-chart-card__link"
               :aria-label="chart.title"
             >
-              <img v-if="chart.coverUrl" :src="chart.coverUrl" :alt="chart.title" />
+              <img
+                v-if="chart.coverUrl"
+                :src="chart.coverUrl"
+                :alt="chart.title"
+                loading="lazy"
+                decoding="async"
+              />
               <span v-else class="song-thumb" :class="`cover--${chart.type}`" />
               <em><Headphones :size="14" /> {{ chart.listeners }}</em>
             </router-link>

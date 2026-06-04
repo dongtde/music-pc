@@ -286,7 +286,7 @@ async function loadTrackLyrics(trackId) {
   clearLyricsWheelTimer();
 
   if (!isNeteaseTrackId(trackId)) {
-    lyricLines.value = createLyricPlaceholder('暂无歌词');
+    lyricLines.value = createLyricPlaceholder(trackId ? '暂无歌词' : '无播放歌曲');
     await nextTick();
     centerCurrentLyric('auto');
     return;

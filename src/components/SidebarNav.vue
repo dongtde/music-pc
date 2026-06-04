@@ -2,7 +2,13 @@
   <aside class="sidebar">
     <button class="profile" type="button" @click="auth.openLoginModal">
       <span class="profile-avatar" aria-hidden="true">
-        <img v-if="avatarUrl" :src="avatarUrl" :alt="displayName" />
+        <img
+          v-if="avatarUrl"
+          :src="avatarUrl"
+          :alt="displayName"
+          loading="lazy"
+          decoding="async"
+        />
         <span v-else />
       </span>
       <span class="profile__text">

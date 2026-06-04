@@ -38,6 +38,8 @@
                 v-if="comment.user.avatarUrl"
                 :src="comment.user.avatarUrl"
                 :alt="comment.user.name"
+                loading="lazy"
+                decoding="async"
               />
               <template v-else>{{ getCommentAvatarText(comment) }}</template>
             </span>
@@ -67,6 +69,8 @@
                 v-if="comment.user.avatarUrl"
                 :src="comment.user.avatarUrl"
                 :alt="comment.user.name"
+                loading="lazy"
+                decoding="async"
               />
               <template v-else>{{ getCommentAvatarText(comment) }}</template>
             </span>

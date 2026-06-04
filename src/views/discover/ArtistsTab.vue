@@ -70,7 +70,12 @@
             class="artist-rank-row"
           >
             <em>{{ artist.rank }}</em>
-            <img :src="artist.coverUrl" :alt="artist.name" />
+            <img
+              :src="artist.coverUrl"
+              :alt="artist.name"
+              loading="lazy"
+              decoding="async"
+            />
             <span>
               <strong>{{ artist.name }}</strong>
               <small>{{ artist.tag || `${artist.followers} 关注` }}</small>
@@ -89,7 +94,13 @@
           class="artist-card"
         >
           <span class="artist-avatar artist-avatar--image">
-            <img v-if="artist.coverUrl" :src="artist.coverUrl" :alt="artist.name" />
+            <img
+              v-if="artist.coverUrl"
+              :src="artist.coverUrl"
+              :alt="artist.name"
+              loading="lazy"
+              decoding="async"
+            />
             <Mic2 v-else :size="28" />
           </span>
           <strong>{{ artist.name }}</strong>

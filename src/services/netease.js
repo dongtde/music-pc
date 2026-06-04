@@ -16,7 +16,6 @@ import {
   getPlaylistHotCategories,
   getPlaylistComments,
   getPlaylistTracks,
-  getHighQualityPlaylists,
   getSearchDefault,
   getSearchHotDetail,
   getSearchMultiMatch,
@@ -28,6 +27,7 @@ import {
 } from '../api/modules/netease'
 
 const COVER_TYPES = ['sunset', 'neon', 'lofi', 'stage', 'piano']
+let playlistCategoryMetaPromise = null
 
 export async function getHomeDiscoverData() {
   const [bannerResponse, playlistResponse, newsongResponse, mvResponse] = await Promise.all([
@@ -161,21 +161,31 @@ export async function getSearchResultData({ keyword, type = 1, limit = 20, offse
 
 export async function getPlaylistDiscoveryData(category = '全部') {
   const cat = category || '全部'
-  const [hotResponse, catResponse, highQualityResponse, playlistResponse] = await Promise.all([
-    getPlaylistHotCategories().catch(() => ({})),
-    getPlaylistCategories().catch(() => ({})),
-    getHighQualityPlaylists({ limit: 12, cat }).catch(() => ({})),
-    getTopPlaylists({ limit: 30, cat, order: 'hot' }).catch(() => ({}))
+  const [categoryMeta, playlistResponse] = await Promise.all([
+    getPlaylistCategoryMeta(),
+    getTopPlaylists({ cat, order: 'hot' }).catch(() => ({}))
   ])
 
   return {
-    hotCategories: (hotResponse.tags ?? []).map((item) => item.name).filter(Boolean),
-    categoryGroups: mapPlaylistCategoryGroups(catResponse),
-    highQualityPlaylists: (highQualityResponse.playlists ?? []).map(mapPlaylist),
+    ...categoryMeta,
     playlists: (playlistResponse.playlists ?? []).map(mapPlaylist),
     total: playlistResponse.total ?? 0,
     activeCategory: playlistResponse.cat || cat
   }
+}
+
+function getPlaylistCategoryMeta() {
+  if (!playlistCategoryMetaPromise) {
+    playlistCategoryMetaPromise = Promise.all([
+      getPlaylistHotCategories().catch(() => ({})),
+      getPlaylistCategories().catch(() => ({}))
+    ]).then(([hotResponse, catResponse]) => ({
+      hotCategories: (hotResponse.tags ?? []).map((item) => item.name).filter(Boolean),
+      categoryGroups: mapPlaylistCategoryGroups(catResponse)
+    }))
+  }
+
+  return playlistCategoryMetaPromise
 }
 
 export async function getChartsDiscoveryData() {

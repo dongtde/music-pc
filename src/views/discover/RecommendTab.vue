@@ -21,6 +21,7 @@
             :src="slide.imageUrl"
             :alt="slide.title"
             loading="lazy"
+            decoding="async"
           />
           <div v-if="!slide.imageUrl" class="hero__visual" aria-hidden="true">
             <span class="hero__disc" />
@@ -104,6 +105,7 @@
               :src="mv.coverUrl"
               :alt="mv.title"
               loading="lazy"
+              decoding="async"
             />
             <span class="mv-hover-bg" aria-hidden="true" />
             <span class="mv-play">
@@ -143,6 +145,7 @@
               :src="song.coverUrl"
               :alt="song.name"
               loading="lazy"
+              decoding="async"
             />
             <span
               class="song-thumb-play"

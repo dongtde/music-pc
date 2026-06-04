@@ -7,7 +7,14 @@
   >
     <span class="song-list-row__main">
       <span class="song-list-row__cover" :class="`song-list-row__cover--${track.type}`">
-        <img v-if="track.coverUrl" class="song-list-row__cover-image" :src="track.coverUrl" :alt="track.name" />
+        <img
+          v-if="track.coverUrl"
+          class="song-list-row__cover-image"
+          :src="track.coverUrl"
+          :alt="track.name"
+          loading="lazy"
+          decoding="async"
+        />
         <span
           class="song-list-row__play"
           :class="{ 'song-list-row__play--playing': isPlaying(track) }"

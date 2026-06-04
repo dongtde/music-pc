@@ -17,7 +17,12 @@
     <template v-else>
       <section v-if="newestAlbum" class="album-spotlight">
         <router-link class="album-spotlight__cover" :to="`/album/${newestAlbum.id}`">
-          <img :src="newestAlbum.coverUrl" :alt="newestAlbum.title" />
+          <img
+            :src="newestAlbum.coverUrl"
+            :alt="newestAlbum.title"
+            loading="lazy"
+            decoding="async"
+          />
           <span><Play :size="22" fill="currentColor" /></span>
         </router-link>
         <div class="album-spotlight__body">
@@ -41,7 +46,12 @@
           class="album-card"
         >
           <div class="album-card__cover">
-            <img :src="album.coverUrl" :alt="album.title" />
+            <img
+              :src="album.coverUrl"
+              :alt="album.title"
+              loading="lazy"
+              decoding="async"
+            />
             <span><Play :size="20" fill="currentColor" /></span>
           </div>
           <strong>{{ album.title }}</strong>
