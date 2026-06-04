@@ -1,6 +1,105 @@
 <template>
   <section class="discover-page">
     <section
+      v-if="isHomeLoading"
+      class="home-skeleton"
+      aria-busy="true"
+      aria-label="Loading home content"
+    >
+      <div class="skeleton-hero">
+        <span class="skeleton-pill skeleton-line--tag" />
+        <span class="skeleton-line skeleton-line--hero-title" />
+        <span class="skeleton-line skeleton-line--hero-copy" />
+        <span class="skeleton-line skeleton-line--hero-copy skeleton-line--hero-copy-short" />
+        <span class="skeleton-button" />
+      </div>
+
+      <section class="skeleton-section">
+        <span class="skeleton-title" />
+        <div class="playlist-grid playlist-grid--recommend">
+          <article
+            v-for="item in 12"
+            :key="`recommend-skeleton-${item}`"
+            class="skeleton-playlist-card"
+          >
+            <span class="skeleton-cover" />
+            <span class="skeleton-line skeleton-line--playlist" />
+            <span class="skeleton-line skeleton-line--playlist-short" />
+          </article>
+        </div>
+      </section>
+
+      <section class="skeleton-section">
+        <span class="skeleton-title skeleton-title--small" />
+        <div class="playlist-grid playlist-grid--latest">
+          <article
+            v-for="item in 6"
+            :key="`latest-skeleton-${item}`"
+            class="skeleton-playlist-card"
+          >
+            <span class="skeleton-cover" />
+            <span class="skeleton-line skeleton-line--playlist" />
+          </article>
+        </div>
+      </section>
+
+      <section class="skeleton-section">
+        <span class="skeleton-title skeleton-title--small" />
+        <div class="media-grid">
+          <article
+            v-for="item in 5"
+            :key="`mv-skeleton-${item}`"
+            class="skeleton-mv-card"
+          >
+            <span class="skeleton-mv-cover" />
+            <span class="skeleton-line skeleton-line--playlist" />
+            <span class="skeleton-line skeleton-line--meta" />
+          </article>
+        </div>
+      </section>
+
+      <section class="skeleton-section">
+        <div class="section-head">
+          <span class="skeleton-title skeleton-title--small" />
+          <span class="skeleton-tabs" />
+        </div>
+        <div class="song-list song-list--recommend">
+          <article
+            v-for="item in 9"
+            :key="`song-skeleton-${item}`"
+            class="skeleton-song-row"
+          >
+            <span class="skeleton-song-thumb" />
+            <span class="skeleton-song-lines">
+              <span class="skeleton-line skeleton-line--song" />
+              <span class="skeleton-line skeleton-line--meta" />
+            </span>
+            <span class="skeleton-line skeleton-line--duration" />
+          </article>
+        </div>
+      </section>
+
+      <section class="skeleton-section">
+        <span class="skeleton-title skeleton-title--small" />
+        <div class="radio-grid">
+          <article
+            v-for="item in 4"
+            :key="`radio-skeleton-${item}`"
+            class="skeleton-radio-card"
+          >
+            <span class="skeleton-radio-icon" />
+            <span class="skeleton-radio-lines">
+              <span class="skeleton-line skeleton-line--song" />
+              <span class="skeleton-line skeleton-line--meta" />
+              <span class="skeleton-line skeleton-line--meta skeleton-line--radio-count" />
+            </span>
+          </article>
+        </div>
+      </section>
+    </section>
+
+    <template v-else>
+    <section
       class="hero"
       @mouseenter="stopHeroAutoplay"
       @mouseleave="startHeroAutoplay"
@@ -185,6 +284,7 @@
         </router-link>
       </div>
     </section>
+    </template>
   </section>
 </template>
 
@@ -219,6 +319,7 @@ const recommendPlaylists = ref(fallbackRecommendPlaylists);
 const latestPlaylistCards = ref(fallbackLatestPlaylistCards);
 const homeRecommendedSingles = ref(recommendedSingles);
 const homeRecommendedMvs = ref(recommendedMvs);
+const isHomeLoading = ref(true);
 const fallbackHeroSlides = [
   {
     id: 'exclusive',
@@ -292,6 +393,8 @@ function stopHeroAutoplay() {
 }
 
 async function loadHomeData() {
+  isHomeLoading.value = true;
+
   try {
     const data = await getHomeDiscoverData();
     heroSlides.value = data.heroSlides.length
@@ -309,10 +412,12 @@ async function loadHomeData() {
     homeRecommendedMvs.value = data.recommendedMvs.length
       ? data.recommendedMvs
       : recommendedMvs;
-    player.setQueue(homeRecommendedSingles.value);
     activeHeroIndex.value = 0;
   } catch (error) {
     console.warn('Failed to load home data from Netease API:', error);
+  } finally {
+    player.setQueue(homeRecommendedSingles.value);
+    isHomeLoading.value = false;
   }
 }
 

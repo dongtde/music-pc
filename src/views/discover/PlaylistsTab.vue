@@ -20,8 +20,26 @@
       </button>
     </div>
 
-    <div v-if="loading" class="discover-loading">正在加载歌单内容...</div>
-    <div v-else-if="error" class="discover-error">
+    <section
+      v-if="skeletonVisible"
+      class="playlists-skeleton"
+      aria-busy="true"
+      aria-label="正在加载歌单"
+    >
+      <span class="skeleton-title skeleton-title--small" />
+      <div class="playlist-grid playlist-grid--dense">
+        <article
+          v-for="item in PLAYLIST_SKELETON_COUNT"
+          :key="`playlist-skeleton-${item}`"
+          class="skeleton-playlist-card"
+        >
+          <span class="skeleton-cover" />
+          <span class="skeleton-line skeleton-line--playlist" />
+          <span class="skeleton-line skeleton-line--playlist-short" />
+        </article>
+      </div>
+    </section>
+    <div v-else-if="error && !playlists.length" class="discover-error">
       <strong>歌单加载失败</strong>
       <button type="button" @click="reload">重试</button>
     </div>
@@ -60,28 +78,48 @@
       <div class="playlist-grid playlist-grid--dense">
         <PlaylistCard v-for="playlist in playlists" :key="playlist.id" :playlist="playlist" />
       </div>
+      <div ref="loadMoreTrigger" class="playlist-load-more" aria-live="polite">
+        <span v-if="loadingMore">正在加载更多歌单...</span>
+        <button v-else-if="error && playlists.length" type="button" @click="loadMore({ force: true })">加载失败，重试</button>
+        <span v-else-if="!hasMore && playlists.length">没有更多歌单了</span>
+      </div>
     </template>
   </section>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import PlaylistCard from '../../components/PlaylistCard.vue'
 import SectionTitle from '../../components/SectionTitle.vue'
 import { getPlaylistDiscoveryData } from '../../services/netease'
 
+const PLAYLIST_LIMIT = 50
+const PLAYLIST_SKELETON_COUNT = 24
+const PLAYLIST_SKELETON_MIN_MS = 420
+
 const activeCategory = ref('全部')
 const loading = ref(false)
+const loadingMore = ref(false)
+const skeletonVisible = ref(false)
 const error = ref(null)
 const hotCategories = ref(['全部'])
 const categoryGroups = ref([])
 const playlists = ref([])
 const categoryPanelOpen = ref(false)
+const playlistsOffset = ref(0)
+const hasMore = ref(true)
+const loadMoreTrigger = ref(null)
+let playlistRequestId = 0
+let loadMoreObserver = null
 
 const visibleCategories = computed(() => ['全部', ...hotCategories.value.filter((item) => item !== '全部')])
 
 onMounted(() => {
-  loadData()
+  loadData({ reset: true })
+})
+
+onBeforeUnmount(() => {
+  disconnectLoadMoreObserver()
 })
 
 function selectCategory(category) {
@@ -92,28 +130,137 @@ function selectCategory(category) {
   }
 
   activeCategory.value = category
-  loadData()
+  loadData({ reset: true })
 }
 
 function reload() {
-  loadData()
+  loadData({ reset: true })
 }
 
-async function loadData() {
-  loading.value = true
+function loadMore({ force = false } = {}) {
+  if (loading.value || loadingMore.value || !hasMore.value || (error.value && !force)) {
+    return
+  }
+
+  loadData({ reset: false })
+}
+
+async function loadData({ reset = false } = {}) {
+  const startedAt = Date.now()
+
+  if (reset) {
+    disconnectLoadMoreObserver()
+    loading.value = true
+    skeletonVisible.value = true
+    playlists.value = []
+    playlistsOffset.value = 0
+    hasMore.value = true
+  } else {
+    loadingMore.value = true
+  }
+
   error.value = null
+  const requestId = ++playlistRequestId
+  const offset = reset ? 0 : playlistsOffset.value
 
   try {
-    const data = await getPlaylistDiscoveryData(activeCategory.value)
+    const data = await getPlaylistDiscoveryData(activeCategory.value, {
+      limit: PLAYLIST_LIMIT,
+      offset
+    })
+
+    if (requestId !== playlistRequestId) {
+      return
+    }
+
     hotCategories.value = data.hotCategories.length ? data.hotCategories : hotCategories.value
     categoryGroups.value = data.categoryGroups
-    playlists.value = data.playlists
+    playlists.value = reset ? data.playlists : mergePlaylists(playlists.value, data.playlists)
+    playlistsOffset.value = offset + data.playlists.length
+    hasMore.value = Boolean(data.playlists.length && (data.more || playlistsOffset.value < data.total))
     activeCategory.value = data.activeCategory || activeCategory.value
   } catch (loadError) {
+    if (requestId !== playlistRequestId) {
+      return
+    }
+
     console.warn('Failed to load playlist discovery:', loadError)
     error.value = loadError
   } finally {
-    loading.value = false
+    if (requestId === playlistRequestId) {
+      if (reset) {
+        await waitForSkeleton(startedAt)
+
+        if (requestId !== playlistRequestId) {
+          return
+        }
+
+        skeletonVisible.value = false
+      }
+
+      loading.value = false
+      loadingMore.value = false
+      nextTick(setupLoadMoreObserver)
+    }
   }
+}
+
+function waitForSkeleton(startedAt) {
+  const remaining = PLAYLIST_SKELETON_MIN_MS - (Date.now() - startedAt)
+
+  if (remaining <= 0) {
+    return Promise.resolve()
+  }
+
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, remaining)
+  })
+}
+
+function mergePlaylists(currentPlaylists, nextPlaylists) {
+  const seenIds = new Set(currentPlaylists.map((playlist) => playlist.id))
+
+  return [
+    ...currentPlaylists,
+    ...nextPlaylists.filter((playlist) => {
+      if (seenIds.has(playlist.id)) {
+        return false
+      }
+
+      seenIds.add(playlist.id)
+      return true
+    })
+  ]
+}
+
+function setupLoadMoreObserver() {
+  disconnectLoadMoreObserver()
+
+  if (!loadMoreTrigger.value || typeof IntersectionObserver === 'undefined') {
+    return
+  }
+
+  const scrollRoot = loadMoreTrigger.value.closest('.view')
+  loadMoreObserver = new IntersectionObserver(handleLoadMoreIntersect, {
+    root: scrollRoot,
+    rootMargin: '360px 0px 360px',
+    threshold: 0
+  })
+  loadMoreObserver.observe(loadMoreTrigger.value)
+}
+
+function handleLoadMoreIntersect(entries) {
+  if (entries.some((entry) => entry.isIntersecting)) {
+    loadMore()
+  }
+}
+
+function disconnectLoadMoreObserver() {
+  if (!loadMoreObserver) {
+    return
+  }
+
+  loadMoreObserver.disconnect()
+  loadMoreObserver = null
 }
 </script>

@@ -1,6 +1,42 @@
 <template>
   <section class="discover-page">
-    <div v-if="loading" class="discover-loading">正在同步榜单...</div>
+    <section
+      v-if="loading"
+      class="charts-skeleton"
+      aria-busy="true"
+      aria-label="正在加载排行榜"
+    >
+      <div class="chart-summary-grid">
+        <article
+          v-for="item in 3"
+          :key="`chart-summary-skeleton-${item}`"
+          class="skeleton-chart-summary-card"
+        >
+          <span class="skeleton-chart-summary-cover" />
+          <span class="skeleton-chart-summary-body">
+            <span class="skeleton-line skeleton-line--chart-title" />
+            <span class="skeleton-line skeleton-line--chart-track" />
+            <span class="skeleton-line skeleton-line--chart-track skeleton-line--chart-track-medium" />
+            <span class="skeleton-line skeleton-line--chart-track skeleton-line--chart-track-short" />
+          </span>
+        </article>
+      </div>
+
+      <section
+        v-for="section in 3"
+        :key="`chart-section-skeleton-${section}`"
+        class="chart-section skeleton-section"
+      >
+        <span class="skeleton-title skeleton-title--small" />
+        <div class="region-chart-grid">
+          <span
+            v-for="item in 14"
+            :key="`region-chart-skeleton-${section}-${item}`"
+            class="skeleton-region-chart-card"
+          />
+        </div>
+      </section>
+    </section>
     <div v-else-if="error" class="discover-error">
       <strong>排行榜加载失败</strong>
       <button type="button" @click="loadData">重试</button>

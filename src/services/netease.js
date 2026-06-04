@@ -159,17 +159,20 @@ export async function getSearchResultData({ keyword, type = 1, limit = 20, offse
   }
 }
 
-export async function getPlaylistDiscoveryData(category = '全部') {
+export async function getPlaylistDiscoveryData(category = '全部', { limit = 50, offset = 0 } = {}) {
   const cat = category || '全部'
   const [categoryMeta, playlistResponse] = await Promise.all([
     getPlaylistCategoryMeta(),
-    getTopPlaylists({ cat, order: 'hot' }).catch(() => ({}))
+    getTopPlaylists({ cat, order: 'hot', limit, offset }).catch(() => ({}))
   ])
+  const playlists = playlistResponse.playlists ?? []
+  const total = playlistResponse.total ?? 0
 
   return {
     ...categoryMeta,
-    playlists: (playlistResponse.playlists ?? []).map(mapPlaylist),
-    total: playlistResponse.total ?? 0,
+    playlists: playlists.map((playlist, index) => mapPlaylist(playlist, offset + index)),
+    total,
+    more: Boolean(playlistResponse.more || (total && offset + playlists.length < total)),
     activeCategory: playlistResponse.cat || cat
   }
 }
