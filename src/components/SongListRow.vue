@@ -96,7 +96,11 @@ function isPlaying(track) {
   return track.isPlaying || (player.state.currentTrack.id === track.id && player.state.isPlaying)
 }
 
-function handlePlayClick() {
+function handlePlayClick(event) {
+  if (isInteractiveTarget(event?.target)) {
+    return
+  }
+
   if (props.track.vip) {
     message.warning('当前歌曲为 VIP 歌曲，将尝试播放试听')
   }
@@ -246,6 +250,12 @@ function normalizeRouteId(value) {
 .song-list-row__artist:hover,
 .song-list-row__video:hover {
   color: var(--accent);
+}
+
+.song-list-row__artist,
+.song-list-row__title small {
+  align-self: flex-start;
+  max-width: 100%;
 }
 
 .song-list-row__main {

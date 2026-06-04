@@ -719,6 +719,8 @@
 
 .play-controls > .play-button,
 .player.player--full-screen > .player-center .play-controls > .play-button {
+  position: relative;
+  overflow: hidden;
   width: 44px;
   height: 44px;
   color: #ffffff;
@@ -733,6 +735,36 @@
   background: var(--accent);
   box-shadow: none;
   transform: none;
+}
+
+.play-controls > .play-button:disabled {
+  cursor: progress;
+  opacity: 1;
+}
+
+.play-controls > .play-button.play-button--loading::before {
+  position: absolute;
+  inset: 4px;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  border-top-color: rgba(255, 255, 255, 0.92);
+  border-radius: 50%;
+  content: '';
+  animation: play-button-loading-ring 900ms linear infinite;
+}
+
+.play-controls > .play-button.play-button--loading::after {
+  position: absolute;
+  inset: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  content: '';
+  animation: play-button-loading-pulse 1200ms ease-in-out infinite;
+}
+
+.play-button__loading-icon {
+  position: relative;
+  z-index: 1;
+  animation: play-button-loading-icon 900ms linear infinite;
 }
 
 .mode-button.active,
@@ -897,6 +929,39 @@
 .with-dot::after {
   background: var(--accent);
   box-shadow: 0 0 0 2px var(--player-bg);
+}
+
+@keyframes play-button-loading-ring {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes play-button-loading-icon {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes play-button-loading-pulse {
+  0%,
+  100% {
+    opacity: 0.22;
+    transform: scale(0.74);
+  }
+
+  50% {
+    opacity: 0.46;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .play-controls > .play-button.play-button--loading::before,
+  .play-controls > .play-button.play-button--loading::after,
+  .play-button__loading-icon {
+    animation: none;
+  }
 }
 
 @media (max-width: 1400px) {

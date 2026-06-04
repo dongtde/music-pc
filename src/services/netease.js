@@ -18,6 +18,7 @@ import {
   getPersonalizedPlaylists,
   getLyric,
   getCloudSearch,
+  getNewAlbums,
   getPlaylistDetail,
   getPlaylistCategories,
   getPlaylistHotCategories,
@@ -378,16 +379,28 @@ function getArtistToplistCached() {
   return artistToplistPromise
 }
 
-export async function getAlbumsDiscoveryData({ area = 'ALL' } = {}) {
-  const [newestResponse, topResponse] = await Promise.all([
-    getAlbumNewest().catch(() => ({})),
-    getTopAlbums({ area, limit: 24, offset: 0 }).catch(() => ({}))
+export async function getAlbumsDiscoveryData({ area = 'ALL', limit = 36, offset = 0 } = {}) {
+  const shouldLoadFeatured = offset <= 0
+  const [newestResponse, newAlbumResponse, topResponse] = await Promise.all([
+    shouldLoadFeatured ? getAlbumNewest().catch(() => ({})) : Promise.resolve({}),
+    getNewAlbums({ area, limit, offset }).catch(() => ({})),
+    shouldLoadFeatured
+      ? getTopAlbums({ area, type: 'hot', limit: 16, offset: 0 }).catch(() => ({}))
+      : Promise.resolve({})
   ])
+  const albums = newAlbumResponse.albums ?? []
+  const total = newAlbumResponse.total ?? albums.length
 
   return {
-    newestAlbum: mapAlbumNewest(newestResponse),
-    albums: (topResponse.albums ?? []).map(mapAlbumCard),
-    more: Boolean(topResponse.more)
+    newestAlbum: mapAlbumNewest(newestResponse) || (albums[0] ? mapAlbumCard(albums[0], 0) : null),
+    albums: albums.map((album, index) => mapAlbumCard(album, offset + index)),
+    topAlbums: getTopAlbumList(topResponse).map(mapAlbumCard).slice(0, 10),
+    total,
+    more: Boolean(
+      newAlbumResponse.more ||
+      newAlbumResponse.hasMore ||
+      (total && offset + albums.length < total)
+    )
   }
 }
 
@@ -596,17 +609,48 @@ function mapAlbumNewest(response = {}) {
   return album ? mapAlbumCard(album, 0) : null
 }
 
+function getTopAlbumList(response = {}) {
+  const candidates = [
+    ...(response.albums ?? []),
+    ...(response.weekData ?? []),
+    ...(response.monthData ?? [])
+  ]
+  const seenIds = new Set()
+
+  return candidates.filter((album) => {
+    if (!album?.id || seenIds.has(album.id)) {
+      return false
+    }
+
+    seenIds.add(album.id)
+    return true
+  })
+}
+
 function mapAlbumCard(album, index = 0) {
+  const artist = getAlbumArtist(album)
+  const songCount = album.size ?? album.songCount ?? 0
+  const typeName = album.type || album.subType || '专辑'
+  const publishTime = formatAlbumDate(album.publishTime)
+
   return {
     id: album.id,
     title: album.name,
-    artist: album.artist?.name || '',
-    desc: [album.artist?.name, album.publishTime ? formatDate(album.publishTime) : '', album.size ? `${album.size} 首歌` : ''].filter(Boolean).join(' · '),
-    listeners: formatPlayCount(album.playCount ?? album.info?.count ?? 0),
+    artist,
+    artistId: album.artist?.id ?? album.artists?.[0]?.id ?? '',
+    desc: [artist, publishTime, songCount ? `${songCount} 首歌` : '', typeName].filter(Boolean).join(' · '),
+    listeners: album.playCount ? `${formatPlayCount(album.playCount)} 播放` : songCount ? `${songCount} 首歌` : typeName,
     type: coverType(index),
-    coverUrl: album.picUrl,
-    publishTime: formatDate(album.publishTime)
+    typeName,
+    coverUrl: resizeNeteaseImage(album.picUrl ?? album.blurPicUrl, 360),
+    publishTime,
+    company: album.company || '',
+    songCount
   }
+}
+
+function getAlbumArtist(album = {}) {
+  return getArtistNames(album.artists) || album.artist?.name || '未知歌手'
 }
 
 function getArtistNames(artists = []) {
@@ -1001,6 +1045,23 @@ function formatDate(value) {
   const day = String(date.getDate()).padStart(2, '0')
 
   return `${date.getFullYear()}-${month}-${day} 更新`
+}
+
+function formatAlbumDate(value) {
+  if (!value) {
+    return ''
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${date.getFullYear()}-${month}-${day}`
 }
 
 function parseLyricLines(lyric = '', translatedLyric = '') {

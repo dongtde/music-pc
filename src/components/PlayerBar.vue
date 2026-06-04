@@ -76,8 +76,21 @@
           </div>
         </div>
         <button type="button" aria-label="上一首" @click="playPreviousTrack"><SkipBack :size="19" /></button>
-        <button class="play-button" type="button" :aria-label="player.state.isPlaying ? '暂停' : '播放'" @click="player.togglePlay">
-          <Pause v-if="player.state.isPlaying" :size="22" fill="currentColor" />
+        <button
+          class="play-button"
+          type="button"
+          :class="{ 'play-button--loading': player.state.isLoading }"
+          :aria-label="player.state.isLoading ? '音乐加载中' : player.state.isPlaying ? '暂停' : '播放'"
+          :aria-busy="player.state.isLoading"
+          :disabled="player.state.isLoading"
+          @click="player.togglePlay"
+        >
+          <Loader2
+            v-if="player.state.isLoading"
+            class="play-button__loading-icon"
+            :size="22"
+          />
+          <Pause v-else-if="player.state.isPlaying" :size="22" fill="currentColor" />
           <Play v-else :size="22" fill="currentColor" />
         </button>
         <button type="button" aria-label="下一首" @click="playNextTrack"><SkipForward :size="19" /></button>
@@ -204,7 +217,7 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { Ellipsis, Heart, ListMusic, Maximize2, MessageCircleMore, Mic2, Minimize2, Pause, Play, Plus, Repeat, Repeat1, Repeat2, Shuffle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-vue-next'
+import { Ellipsis, Heart, ListMusic, Loader2, Maximize2, MessageCircleMore, Mic2, Minimize2, Pause, Play, Plus, Repeat, Repeat1, Repeat2, Shuffle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import CommentModal from './CommentModal.vue'
 import FullScreenPlayer from './FullScreenPlayer.vue'

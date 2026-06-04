@@ -138,6 +138,12 @@ export function getAlbumNewest(params = {}) {
   })
 }
 
+export function getNewAlbums(params = {}) {
+  return http.get('/album/new', {
+    params
+  })
+}
+
 export function getTopAlbums(params = {}) {
   return http.get('/top/album', {
     params
