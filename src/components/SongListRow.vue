@@ -1,9 +1,11 @@
 <template>
-  <button
+  <div
     class="song-list-row"
     :class="{ 'is-playing': isPlaying(track), 'is-compact': compact }"
-    type="button"
+    role="button"
+    tabindex="0"
     @click="handlePlayClick"
+    @keydown="handleRowKeydown"
   >
     <span class="song-list-row__main">
       <span class="song-list-row__cover" :class="`song-list-row__cover--${track.type}`">
@@ -29,20 +31,43 @@
         <span class="song-list-row__name">
           <strong>{{ track.name }}</strong>
           <span v-if="track.vip" class="song-list-row__badge">VIP</span>
-          <span v-if="track.hasVideo" class="song-list-row__video" aria-label="有视频">
+          <RouterLink
+            v-if="videoTarget"
+            class="song-list-row__video"
+            :to="videoTarget"
+            aria-label="有视频"
+            @click.stop
+          >
             <Video :size="11" />
-          </span>
+          </RouterLink>
         </span>
-        <small>{{ track.artist }}</small>
+        <RouterLink
+          v-if="artistTarget"
+          class="song-list-row__artist"
+          :to="artistTarget"
+          @click.stop
+        >
+          {{ track.artist }}
+        </RouterLink>
+        <small v-else>{{ track.artist }}</small>
       </span>
     </span>
 
-    <span class="song-list-row__album">{{ track.album }}</span>
+    <RouterLink
+      v-if="albumTarget"
+      class="song-list-row__album"
+      :to="albumTarget"
+      @click.stop
+    >
+      {{ track.album }}
+    </RouterLink>
+    <span v-else class="song-list-row__album">{{ track.album }}</span>
     <span class="song-list-row__time">{{ track.time }}</span>
-  </button>
+  </div>
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { useMessage } from 'naive-ui'
 import { AudioLines, Play, Video } from 'lucide-vue-next'
 import { usePlayerStore } from '../stores/player'
@@ -63,6 +88,10 @@ const props = defineProps({
 
 const emit = defineEmits(['play'])
 
+const artistTarget = computed(() => getArtistTarget(props.track))
+const albumTarget = computed(() => getAlbumTarget(props.track))
+const videoTarget = computed(() => getVideoTarget(props.track))
+
 function isPlaying(track) {
   return track.isPlaying || (player.state.currentTrack.id === track.id && player.state.isPlaying)
 }
@@ -73,6 +102,51 @@ function handlePlayClick() {
   }
 
   emit('play', props.track)
+}
+
+function handleRowKeydown(event) {
+  if (event.key !== 'Enter' && event.key !== ' ') {
+    return
+  }
+
+  if (isInteractiveTarget(event.target)) {
+    return
+  }
+
+  event.preventDefault()
+  handlePlayClick()
+}
+
+function isInteractiveTarget(target) {
+  return Boolean(target?.closest?.('a, button'))
+}
+
+function getArtistTarget(track) {
+  const id = normalizeRouteId(
+    track.artistId ?? track.artistIds?.[0] ?? track.artists?.[0]?.id ?? track.ar?.[0]?.id
+  )
+
+  return id ? `/artist/${id}` : ''
+}
+
+function getAlbumTarget(track) {
+  const id = normalizeRouteId(track.albumId ?? track.album?.id ?? track.al?.id)
+
+  return id ? `/album/${id}` : ''
+}
+
+function getVideoTarget(track) {
+  if (!track.hasVideo) {
+    return ''
+  }
+
+  const mvId = normalizeRouteId(track.mvId ?? track.videoId ?? track.mv)
+
+  return mvId ? { name: 'video', query: { mvId } } : { name: 'video' }
+}
+
+function normalizeRouteId(value) {
+  return value === undefined || value === null || value === '' ? '' : String(value)
 }
 </script>
 
@@ -108,6 +182,11 @@ function handlePlayClick() {
   transition: opacity 220ms ease;
 }
 
+.song-list-row:focus-visible {
+  outline: 1px solid rgba(var(--accent-rgb), 0.58);
+  outline-offset: -1px;
+}
+
 .song-list-row > * {
   position: relative;
   z-index: 1;
@@ -117,23 +196,54 @@ function handlePlayClick() {
   background: rgba(127, 137, 154, 0.08);
 }
 
-.song-list-row:hover {
+.song-list-row:hover,
+.song-list-row.is-playing {
   background: rgba(var(--accent-rgb), 0.08);
 }
 
-.song-list-row:hover::before {
+.song-list-row:hover::before,
+.song-list-row.is-playing::before {
   opacity: 1;
 }
 
-.song-list-row:hover .song-list-row__title strong {
+.song-list-row:hover .song-list-row__title strong,
+.song-list-row.is-playing .song-list-row__title strong,
+.song-list-row.is-playing .song-list-row__title small,
+.song-list-row.is-playing .song-list-row__artist,
+.song-list-row.is-playing .song-list-row__album,
+.song-list-row.is-playing .song-list-row__time,
+.song-list-row.is-playing .song-list-row__badge,
+.song-list-row.is-playing .song-list-row__video {
   color: var(--accent);
 }
 
+.song-list-row.is-playing .song-list-row__badge,
+.song-list-row.is-playing .song-list-row__video {
+  border-color: rgba(var(--accent-rgb), 0.58);
+}
+
 .song-list-row__album,
+.song-list-row__artist,
 .song-list-row__time,
 .song-list-row__title small {
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.song-list-row__album,
+.song-list-row__artist,
+.song-list-row__video {
+  text-decoration: none;
+  transition:
+    border-color 220ms ease,
+    color 220ms ease,
+    background-color 220ms ease;
+}
+
+.song-list-row__album:hover,
+.song-list-row__artist:hover,
+.song-list-row__video:hover {
+  color: var(--accent);
 }
 
 .song-list-row__main {
@@ -185,7 +295,7 @@ function handlePlayClick() {
 }
 
 .song-list-row__play--playing {
-  color: var(--accent);
+  color: #ffffff;
   background: transparent;
   box-shadow: none;
   animation: song-row-playing-beat 960ms ease-in-out infinite;
@@ -234,6 +344,7 @@ function handlePlayClick() {
 
 .song-list-row__title strong,
 .song-list-row__title small,
+.song-list-row__artist,
 .song-list-row__album {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -270,6 +381,11 @@ function handlePlayClick() {
   width: 19px;
   border: 1px solid var(--border-strong);
   color: var(--text-muted);
+}
+
+.song-list-row__video:hover {
+  border-color: rgba(var(--accent-rgb), 0.58);
+  background: rgba(var(--accent-rgb), 0.1);
 }
 
 .song-list-row__time {

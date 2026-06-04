@@ -78,6 +78,18 @@ export function getArtistToplist(params = {}) {
   })
 }
 
+export function getArtistDetail(params = {}) {
+  return http.get('/artist/detail', {
+    params
+  })
+}
+
+export function getArtistHotSongs(params = {}) {
+  return http.get('/artists', {
+    params
+  })
+}
+
 export function getAlbumNewest(params = {}) {
   return http.get('/album/newest', {
     params

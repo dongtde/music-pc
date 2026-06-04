@@ -4,6 +4,8 @@ import {
   getAlbumDetail,
   getAlbumDynamic,
   getAlbumNewest,
+  getArtistDetail,
+  getArtistHotSongs,
   getArtistList,
   getArtistToplist,
   getPersonalizedMvs,
@@ -28,6 +30,7 @@ import {
 
 const COVER_TYPES = ['sunset', 'neon', 'lofi', 'stage', 'piano']
 let playlistCategoryMetaPromise = null
+let artistToplistPromise = null
 
 export async function getHomeDiscoverData() {
   const [bannerResponse, playlistResponse, newsongResponse, mvResponse] = await Promise.all([
@@ -252,17 +255,58 @@ function getToplistSectionTitle(name = '') {
   return '特色榜'
 }
 
-export async function getArtistsDiscoveryData({ area = -1, type = -1, initial = -1 } = {}) {
+export async function getArtistsDiscoveryData({
+  area = -1,
+  type = -1,
+  initial = -1,
+  limit = 32,
+  offset = 0
+} = {}) {
   const [artistResponse, toplistResponse] = await Promise.all([
-    getArtistList({ area, type, initial, limit: 32, offset: 0 }).catch(() => ({})),
-    getArtistToplist({ type: 1 }).catch(() => ({}))
+    getArtistList({ area, type, initial, limit, offset }).catch(() => ({})),
+    getArtistToplistCached().catch(() => ({}))
   ])
 
   return {
-    artists: (artistResponse.artists ?? []).map(mapArtist),
+    artists: (artistResponse.artists ?? []).map((artist, index) => mapArtist(artist, offset + index)),
     topArtists: (toplistResponse.list?.artists ?? toplistResponse.artists ?? []).slice(0, 10).map(mapRankedArtist),
     more: Boolean(artistResponse.more)
   }
+}
+
+export async function getArtistDetailData(id) {
+  const [detailResponse, songsResponse] = await Promise.all([
+    getArtistDetail({ id }),
+    getArtistHotSongs({ id }).catch(() => ({}))
+  ])
+  const detail = detailResponse.data ?? {}
+  const artist = detail.artist ?? songsResponse.artist
+
+  if (!artist) {
+    throw new Error('Artist detail is empty')
+  }
+
+  const hotSongs = Array.isArray(songsResponse.hotSongs)
+    ? songsResponse.hotSongs
+    : Array.isArray(songsResponse.songs)
+      ? songsResponse.songs
+      : []
+
+  return {
+    artist: mapArtistDetail(artist, detail, songsResponse.artist),
+    tracks: hotSongs.map(mapPlaylistTrack)
+  }
+}
+
+function getArtistToplistCached() {
+  if (!artistToplistPromise) {
+    artistToplistPromise = getArtistToplist({ type: 1 }).catch((error) => {
+      artistToplistPromise = null
+      throw error
+    })
+  }
+
+  return artistToplistPromise
 }
 
 export async function getAlbumsDiscoveryData({ area = 'ALL' } = {}) {
@@ -408,15 +452,18 @@ function mapChartTrack(song, index) {
 }
 
 function mapArtist(artist, index) {
+  const details = [
+    artist.alias?.length ? artist.alias.join(' / ') : '',
+    artist.musicSize ? `${artist.musicSize} 首歌` : '',
+    artist.albumSize ? `${artist.albumSize} 张专辑` : ''
+  ].filter(Boolean)
+
   return {
     id: artist.id,
     name: artist.name,
-    tag: [
-      artist.alias?.length ? artist.alias.join(' / ') : '',
-      artist.musicSize ? `${artist.musicSize} 首歌` : '',
-      artist.albumSize ? `${artist.albumSize} 张专辑` : ''
-    ].filter(Boolean).join(' · '),
-    coverUrl: artist.picUrl ?? artist.img1v1Url,
+    tag: details.join(' · '),
+    details,
+    coverUrl: resizeNeteaseImage(artist.img1v1Url ?? artist.picUrl, 240),
     followers: formatPlayCount(artist.fansCount ?? artist.followeds ?? artist.accountId ?? 0),
     score: artist.score ?? 0,
     type: coverType(index)
@@ -431,6 +478,36 @@ function mapRankedArtist(item, index) {
     rank: String(index + 1).padStart(2, '0'),
     score: item.score ?? artist.score ?? 0,
     trend: item.lastRank ? `${item.lastRank}` : index < 3 ? 'HOT' : ''
+  }
+}
+
+function mapArtistDetail(artist, detail = {}, fallbackArtist = {}) {
+  const aliases = artist.alias ?? fallbackArtist.alias ?? []
+  const identities = [
+    ...(artist.identities ?? []),
+    ...(detail.secondaryExpertIdentiy ?? [])
+      .slice(0, 4)
+      .map((item) => item.expertIdentiyName)
+  ].filter(Boolean)
+  const description = artist.briefDesc || fallbackArtist.briefDesc || '这位歌手暂时没有简介。'
+  const rank = artist.rank?.rank ?? detail.rank?.rank ?? 0
+
+  return {
+    id: artist.id ?? fallbackArtist.id,
+    name: artist.name ?? fallbackArtist.name ?? '歌手详情',
+    aliases,
+    identity: artist.identifyTag || detail.identify?.imageDesc || identities.join(' / '),
+    identities: [...new Set(identities)].slice(0, 6),
+    description,
+    coverUrl: resizeNeteaseImage(artist.cover ?? artist.picUrl ?? fallbackArtist.picUrl, 520),
+    avatarUrl: resizeNeteaseImage(artist.avatar ?? artist.img1v1Url ?? fallbackArtist.img1v1Url, 300),
+    albumSize: artist.albumSize ?? fallbackArtist.albumSize ?? 0,
+    musicSize: artist.musicSize ?? fallbackArtist.musicSize ?? 0,
+    mvSize: artist.mvSize ?? fallbackArtist.mvSize ?? detail.videoCount ?? 0,
+    videoCount: detail.videoCount ?? artist.mvSize ?? fallbackArtist.mvSize ?? 0,
+    rank,
+    followed: Boolean(artist.followed ?? fallbackArtist.followed),
+    type: coverType(Number(artist.id ?? fallbackArtist.id) || 0)
   }
 }
 
@@ -455,6 +532,12 @@ function mapAlbumCard(album, index = 0) {
 
 function getArtistNames(artists = []) {
   return artists.map((artist) => artist.name).filter(Boolean).join(' / ')
+}
+
+function getArtistIds(artists = []) {
+  return artists
+    .map((artist) => artist.id)
+    .filter((id) => id !== undefined && id !== null && id !== '')
 }
 
 function mapAlbumDetail(album, dynamic = {}) {
@@ -528,19 +611,24 @@ function mapPlaylistDetail(playlist) {
 function mapPlaylistTrack(song, index) {
   const album = song.al ?? song.album ?? {}
   const artists = song.ar ?? song.artists ?? []
+  const artistIds = getArtistIds(artists)
 
   return {
     id: song.id,
     name: song.name,
+    artistId: artistIds[0] ?? '',
+    artistIds,
     artist: artists.map((artist) => artist.name).filter(Boolean).join(' / ') || '未知歌手',
     album: album.name || '未知专辑',
     rank: String(index + 1).padStart(2, '0'),
+    albumId: album.id ?? '',
     type: coverType(index),
     time: formatDuration(song.dt ?? song.duration),
     coverUrl: album.picUrl,
     to: `/playlist/song-${song.id}`,
     vip: Boolean(song.fee && song.fee !== 0),
-    hasVideo: Boolean(song.mv)
+    hasVideo: Boolean(song.mv),
+    mvId: song.mv || ''
   }
 }
 
@@ -579,7 +667,8 @@ function mapMultiMatches(result = {}) {
       type: 'artist',
       title: item.name,
       subtitle: item.alias?.join(' / ') || '歌手',
-      coverUrl: item.picUrl ?? item.img1v1Url
+      coverUrl: item.picUrl ?? item.img1v1Url,
+      to: `/artist/${item.id}`
     })),
     ...(result.album ?? []).map((item) => ({
       id: `album-${item.id}`,
@@ -649,7 +738,8 @@ function mapSearchArtist(artist) {
       artist.musicSize ? `${artist.musicSize} 首歌` : '',
       artist.albumSize ? `${artist.albumSize} 张专辑` : ''
     ].filter(Boolean).join(' · '),
-    coverUrl: artist.picUrl ?? artist.img1v1Url
+    coverUrl: artist.picUrl ?? artist.img1v1Url,
+    to: `/artist/${artist.id}`
   }
 }
 
@@ -741,6 +831,20 @@ function mapMv(mv, index) {
 
 function coverType(index) {
   return COVER_TYPES[index % COVER_TYPES.length]
+}
+
+function resizeNeteaseImage(url, size) {
+  if (!url || !/music\.126\.net/.test(url)) {
+    return url
+  }
+
+  const param = `param=${size}y${size}`
+
+  if (/[?&]param=\d+y\d+/.test(url)) {
+    return url.replace(/([?&])param=\d+y\d+/, `$1${param}`)
+  }
+
+  return `${url}${url.includes('?') ? '&' : '?'}${param}`
 }
 
 function formatDuration(duration = 0) {

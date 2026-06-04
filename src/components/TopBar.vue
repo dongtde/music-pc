@@ -440,6 +440,12 @@ function handleSuggestionSelect(item) {
     return
   }
 
+  if (item.to) {
+    searchOpen.value = false
+    router.push(item.to)
+    return
+  }
+
   pickKeyword(item.title || item.name)
 }
 
