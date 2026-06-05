@@ -162,27 +162,12 @@
   font-size: 12px;
 }
 
-.comment-modal__more {
+.comment-modal__loading-more {
   display: flex;
   height: 36px;
   align-items: center;
   justify-content: center;
   margin: 20px auto 0;
-  padding: 0 18px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  color: var(--text-main);
-  background: var(--control-bg);
-  cursor: pointer;
-}
-
-.comment-modal__more:hover {
-  border-color: rgba(var(--accent-rgb), 0.48);
-  color: var(--accent);
-  background: var(--control-bg-hover);
-}
-
-.comment-modal__more:disabled {
-  cursor: not-allowed;
-  opacity: 0.58;
+  color: var(--text-muted);
+  font-size: 13px;
 }

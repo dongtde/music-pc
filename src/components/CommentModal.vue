@@ -17,7 +17,7 @@
       </div>
     </template>
 
-    <div class="comment-modal__scroll">
+    <div class="comment-modal__scroll" @scroll.passive="handleScroll">
       <div v-if="loading && !comments.length" class="comment-modal__state">
         {{ loadingText }}
       </div>
@@ -90,15 +90,9 @@
           <div v-if="!comments.length" class="comment-modal__state">
             {{ emptyText }}
           </div>
-          <button
-            v-if="hasMore"
-            class="comment-modal__more"
-            type="button"
-            :disabled="loading"
-            @click="$emit('load-more')"
-          >
-            {{ loading ? moreLoadingText : moreText }}
-          </button>
+          <div v-if="loading && comments.length" class="comment-modal__loading-more">
+            {{ moreLoadingText }}
+          </div>
         </section>
       </template>
     </div>
@@ -106,7 +100,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { ThumbsUp } from 'lucide-vue-next'
 import '../styles/comment-modal.css'
 
@@ -180,6 +174,32 @@ const modalVisible = computed({
   set: (value) => emit('update:show', value)
 })
 const displayTotal = computed(() => Number(props.total) || 0)
+let loadMoreQueued = false
+
+watch(
+  () => props.loading,
+  (loading) => {
+    if (!loading) {
+      loadMoreQueued = false
+    }
+  }
+)
+
+function handleScroll(event) {
+  if (!props.hasMore || props.loading || loadMoreQueued) {
+    return
+  }
+
+  const scroller = event.currentTarget
+  const distanceToBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
+
+  if (distanceToBottom > 96) {
+    return
+  }
+
+  loadMoreQueued = true
+  emit('load-more')
+}
 
 function getCommentAvatarText(comment) {
   return (comment.user?.name || '云').slice(0, 1)

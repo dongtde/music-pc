@@ -166,7 +166,7 @@
               type="button"
               :aria-label="`评论 ${getSongCommentLabel(song)}`"
               title="评论"
-              @click.stop="showCommentHint"
+              @click.stop="openSongCommentsModal(song)"
             >
               <MessageCircleMore :size="24" />
               <span class="soda-action-rail__label">评论</span>
@@ -222,6 +222,19 @@
 
     </section>
   </div>
+
+  <CommentModal
+    v-model:show="songCommentsModalVisible"
+    title="歌曲评论"
+    :subtitle="songCommentSubtitle"
+    :total="displaySongCommentTotal"
+    :hot-comments="songHotComments"
+    :comments="songComments"
+    :loading="songCommentsLoading"
+    :error="songCommentsError"
+    :has-more="songCommentsHasMore"
+    @load-more="loadMoreSongComments"
+  />
 </template>
 
 <script setup>
@@ -238,10 +251,18 @@ import {
   Play,
   SkipForward
 } from 'lucide-vue-next'
+import CommentModal from '../components/CommentModal.vue'
 import { recommendedSingles } from '../data/music'
-import { getMusicFeedData, getSongInteractionStatsData, getTrackLyricData } from '../services/netease'
+import {
+  getMusicFeedData,
+  getSongCommentsData,
+  getSongInteractionStatsData,
+  getTrackLyricData
+} from '../services/netease'
 import { usePlayerStore } from '../stores/player'
 import '../styles/home.css'
+
+const COMMENT_LIMIT = 30
 
 const player = usePlayerStore()
 const message = useMessage()
@@ -262,6 +283,16 @@ const lyricsDragging = ref(false)
 const lyricsWheeling = ref(false)
 const previewLyricIndex = ref(null)
 const lyricsPreviewing = ref(false)
+const songCommentsModalVisible = ref(false)
+const songCommentSong = ref(null)
+const songHotComments = ref([])
+const songComments = ref([])
+const songCommentTotal = ref(0)
+const songCommentsOffset = ref(0)
+const songCommentsHasMore = ref(false)
+const songCommentsLoading = ref(false)
+const songCommentsError = ref('')
+const songCommentTrackId = ref(null)
 const feedDragState = {
   pointerId: null,
   startIndex: 0,
@@ -292,6 +323,7 @@ let feedSnapRequestId = 0
 let lyricsPreviewFrame = 0
 let lyricsPreviewTimer = null
 let lyricsWheelTimer = null
+let songCommentsRequestId = 0
 let suppressNextLyricClick = false
 
 const moods = [
@@ -338,6 +370,18 @@ const previewLyric = computed(() => {
 
   return lyricLines.value[index] ?? null
 })
+const songCommentSubtitle = computed(() => {
+  const song = songCommentSong.value
+
+  if (!song) {
+    return ''
+  }
+
+  return `${song.name} - ${song.artist}`
+})
+const displaySongCommentTotal = computed(() =>
+  songCommentTotal.value || getSongCommentCount(songCommentSong.value)
+)
 
 watch(
   () => player.state.currentTrack.id,
@@ -920,16 +964,121 @@ function toggleLike(song) {
 
   if (isNeteaseTrackId(id)) {
     const nextLikedCount = Math.max(0, getSongLikeCount(song) + (wasLiked ? -1 : 1))
+    const previousLabel = getSongStats(song).likedCountLabel
 
     updateSongStats(id, {
       likedCount: nextLikedCount,
-      likedCountLabel: formatActionCount(nextLikedCount)
+      likedCountLabel: previousLabel || formatActionCount(nextLikedCount)
     })
   }
 }
 
-function showCommentHint() {
-  message.info('评论入口已在底部播放器中接入，播放后可从评论按钮打开')
+async function openSongCommentsModal(song = activeSong.value) {
+  if (!song) {
+    return
+  }
+
+  const trackId = String(song.id ?? '')
+
+  songCommentSong.value = song
+  songCommentsModalVisible.value = true
+
+  if (!isNeteaseTrackId(trackId)) {
+    resetSongComments()
+    songCommentsError.value = '当前歌曲暂无评论数据'
+    return
+  }
+
+  if (
+    String(songCommentTrackId.value) === trackId &&
+    (songComments.value.length || songCommentsLoading.value)
+  ) {
+    return
+  }
+
+  resetSongComments()
+  await loadSongComments(trackId, true)
+}
+
+function resetSongComments() {
+  songCommentsRequestId += 1
+  songCommentTrackId.value = null
+  songHotComments.value = []
+  songComments.value = []
+  songCommentTotal.value = 0
+  songCommentsOffset.value = 0
+  songCommentsHasMore.value = false
+  songCommentsLoading.value = false
+  songCommentsError.value = ''
+}
+
+async function loadSongComments(trackId = songCommentSong.value?.id, reset = false) {
+  if (songCommentsLoading.value) {
+    return
+  }
+
+  const id = String(trackId ?? '')
+
+  if (!isNeteaseTrackId(id)) {
+    songCommentsError.value = '当前歌曲暂无评论数据'
+    return
+  }
+
+  const requestId = ++songCommentsRequestId
+  const offset = reset ? 0 : songCommentsOffset.value
+
+  songCommentsLoading.value = true
+  songCommentsError.value = ''
+
+  try {
+    const data = await getSongCommentsData({
+      id,
+      limit: COMMENT_LIMIT,
+      offset
+    })
+
+    if (
+      requestId !== songCommentsRequestId ||
+      String(songCommentSong.value?.id ?? '') !== id
+    ) {
+      return
+    }
+
+    if (reset) {
+      songHotComments.value = data.hotComments
+      songComments.value = data.comments
+    } else {
+      songComments.value = [...songComments.value, ...data.comments]
+    }
+
+    songCommentTrackId.value = id
+    songCommentTotal.value = data.total
+    songCommentsHasMore.value = data.more || songComments.value.length < data.total
+    songCommentsOffset.value = songComments.value.length
+    updateSongStats(id, {
+      commentCount: data.total,
+      commentCountLabel: formatActionCount(data.total)
+    })
+  } catch (error) {
+    if (requestId !== songCommentsRequestId) {
+      return
+    }
+
+    console.warn('Failed to load feed song comments:', error)
+    songCommentsError.value = '评论加载失败'
+  } finally {
+    if (requestId === songCommentsRequestId) {
+      songCommentsLoading.value = false
+    }
+  }
+}
+
+function loadMoreSongComments() {
+  if (!songCommentsHasMore.value || songCommentsLoading.value) {
+    return
+  }
+
+  loadSongComments(songCommentSong.value?.id)
 }
 
 function isLiked(song) {
@@ -967,12 +1116,12 @@ function formatActionCount(value = 0) {
     return ''
   }
 
-  if (count >= 100000) {
-    return '10w+'
+  if (count >= 100000000) {
+    return `${Math.floor(count / 100000000)}亿+`
   }
 
   if (count >= 10000) {
-    return '1w+'
+    return `${Math.floor(count / 10000)}w+`
   }
 
   if (count >= 1000) {
