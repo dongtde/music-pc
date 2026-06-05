@@ -24,85 +24,113 @@
           v-for="(song, index) in recommendationQueue"
           :key="song.id"
           class="soda-slide"
-          :class="{ active: index === activeIndex }"
-          :style="getSlideStyle(song)"
+          :class="{
+            active: index === activeIndex,
+            'soda-slide--light': !isSlideHydrated(index)
+          }"
+          :style="getSlideStyle(song, index)"
           :aria-label="`${song.name} - ${song.artist}`"
         >
+          <template v-if="isSlideHydrated(index)">
           <div class="soda-slide__backdrop" aria-hidden="true">
             <img
               v-if="song.coverUrl"
               :src="song.coverUrl"
-              :alt="song.name"
-              loading="lazy"
+              alt=""
+              :loading="index === activeIndex ? 'eager' : 'lazy'"
+              :fetchpriority="index === activeIndex ? 'high' : 'low'"
               decoding="async"
             />
             <span v-else class="soda-slide__fallback" :class="`cover--${song.type}`" />
           </div>
 
-          <div class="soda-slide__visual" aria-hidden="true">
-            <span class="soda-slide__disc" :class="{ 'soda-slide__disc--playing': isSongPlaying(song) }" />
-            <span class="soda-slide__cover" :class="`cover--${song.type}`">
-              <img
-                v-if="song.coverUrl"
-                :src="song.coverUrl"
-                :alt="song.name"
-                loading="lazy"
-                decoding="async"
-              />
-            </span>
-          </div>
-
-          <section class="soda-slide__caption">
-            <span class="soda-slide__kicker">
-              <AudioLines :size="16" />
-              {{ getMoodSignal(index) }}
-            </span>
-            <h1>{{ song.name }}</h1>
-            <p>{{ song.artist }}<span v-if="song.album"> · {{ song.album }}</span></p>
-            <div class="soda-slide__tags">
-              <span>{{ song.time || song.duration || '推荐' }}</span>
-              <span>{{ song.vip ? 'VIP 试听' : '完整播放' }}</span>
-              <span>{{ song.hasVideo ? '有视频' : '纯音频' }}</span>
-            </div>
-            <div
-              class="soda-slide__progress"
-              role="slider"
-              :tabindex="isActiveSong(song) ? 0 : -1"
-              :aria-valuemin="0"
-              :aria-valuemax="Math.floor(player.state.duration || 0)"
-              :aria-valuenow="getSongProgressNow(song)"
-              :aria-label="`${song.name} 播放进度`"
-              @pointerdown="seekFromProgress($event, song)"
-              @keydown="handleProgressKeydown($event, song)"
-            >
-              <span class="soda-slide__progress-time">{{ getCurrentTimeLabel(song) }}</span>
-              <span class="soda-slide__progress-rail" aria-hidden="true">
-                <span :style="{ width: `${getSongProgress(song)}%` }" />
+          <div class="soda-slide__player">
+            <div class="soda-slide__visual" aria-hidden="true">
+              <span class="soda-slide__disc" :class="{ 'soda-slide__disc--playing': isSongPlaying(song) }" />
+              <span class="soda-slide__cover" :class="`cover--${song.type}`">
+                <img
+                  v-if="song.coverUrl"
+                  :src="song.coverUrl"
+                  :alt="song.name"
+                  :loading="index === activeIndex ? 'eager' : 'lazy'"
+                  :fetchpriority="index === activeIndex ? 'high' : 'low'"
+                  decoding="async"
+                />
               </span>
-              <span class="soda-slide__progress-time">{{ getDurationLabel(song) }}</span>
             </div>
-          </section>
+
+            <section class="soda-slide__caption">
+              <div class="soda-slide__tag-row">
+                <span class="soda-slide__kicker">
+                  <AudioLines :size="16" />
+                  {{ getMoodSignal(index) }}
+                </span>
+                <span class="soda-slide__meta-tag">{{ song.vip ? 'VIP 试听' : '完整播放' }}</span>
+                <span class="soda-slide__meta-tag">{{ song.hasVideo ? '有视频' : '纯音频' }}</span>
+              </div>
+              <h1>{{ song.name }}</h1>
+              <p>{{ song.artist }}<span v-if="song.album"> · {{ song.album }}</span></p>
+              <div class="soda-slide__position" aria-hidden="true">
+                <ChevronUp :size="14" />
+                <span>{{ song.rank }} / {{ recommendationQueue.length }}</span>
+                <ChevronDown :size="14" />
+              </div>
+            </section>
+          </div>
 
           <section
             v-if="index === activeIndex"
             class="soda-lyrics-panel"
+            :class="{
+              'soda-lyrics-panel--dragging': lyricsDragging,
+              'soda-lyrics-panel--wheeling': lyricsWheeling,
+              'soda-lyrics-panel--previewing': lyricsInteractionActive
+            }"
             aria-label="歌词"
+            :aria-busy="isLyricLoading"
           >
-            <header>
-              <span>歌词</span>
-              <strong>{{ isLyricLoading ? '加载中' : getActiveLyricTitle() }}</strong>
-            </header>
-            <div class="soda-lyrics-list">
+            <div
+              v-if="hasLyricContent && lyricsInteractionActive && previewLyric"
+              class="soda-lyric-guide"
+            >
+              <span class="soda-lyric-guide__time">{{ previewLyric.time }}</span>
+              <span class="soda-lyric-guide__line" />
               <button
-                v-for="line in visibleLyricLines"
+                class="soda-lyric-guide__play"
+                type="button"
+                :disabled="previewLyric.placeholder"
+                aria-label="跳转到选中歌词"
+                @click.stop="seekToPreviewLyric"
+              >
+                <Play :size="13" fill="currentColor" />
+              </button>
+            </div>
+
+            <div
+              ref="lyricsScroll"
+              class="soda-lyrics-list"
+              aria-label="滚动歌词"
+              @pointerdown="startLyricsDrag"
+              @pointermove="handleLyricsPointerMove"
+              @pointerup="stopLyricsDrag"
+              @pointerleave="stopLyricsDrag"
+              @pointercancel="stopLyricsDrag"
+              @wheel.prevent="handleLyricsWheel"
+            >
+              <button
+                v-for="line in displayLyricLines"
                 :key="`${line.index}-${line.time}`"
                 type="button"
                 :class="{
                   active: line.index === activeLyricIndex,
+                  preview: lyricsInteractionActive && previewLyricIndex === line.index,
+                  past: line.index < activeLyricIndex,
+                  future: line.index > activeLyricIndex,
                   placeholder: line.placeholder
                 }"
-                :disabled="line.placeholder"
-                @click="seekToLyric(line)"
+                :aria-disabled="line.placeholder || undefined"
+                :data-lyric-index="line.index"
+                @click="selectLyric(line.index)"
               >
                 <span>{{ line.text }}</span>
                 <small v-if="line.translation">{{ line.translation }}</small>
@@ -111,16 +139,6 @@
           </section>
 
           <aside class="soda-action-rail" aria-label="歌曲操作">
-            <button
-              type="button"
-              :aria-label="isLiked(song) ? '取消喜欢' : '喜欢'"
-              :title="isLiked(song) ? '取消喜欢' : '喜欢'"
-              :class="{ active: isLiked(song) }"
-              @click.stop="toggleLike(song)"
-            >
-              <Heart :size="24" :fill="isLiked(song) ? 'currentColor' : 'none'" />
-              <span>{{ isLiked(song) ? '已喜欢' : '喜欢' }}</span>
-            </button>
             <button
               class="soda-action-rail__play"
               type="button"
@@ -138,6 +156,16 @@
               <Play v-else :size="26" fill="currentColor" />
               <span>{{ isSongPlaying(song) ? '暂停' : '播放' }}</span>
             </button>
+            <button
+              type="button"
+              :aria-label="isLiked(song) ? '取消喜欢' : '喜欢'"
+              :title="isLiked(song) ? '取消喜欢' : '喜欢'"
+              :class="{ active: isLiked(song) }"
+              @click.stop="toggleLike(song)"
+            >
+              <Heart :size="24" :fill="isLiked(song) ? 'currentColor' : 'none'" />
+              <span>{{ isLiked(song) ? '已喜欢' : '喜欢' }}</span>
+            </button>
             <button type="button" aria-label="评论" title="评论" @click.stop="showCommentHint">
               <MessageCircleMore :size="24" />
               <span>评论</span>
@@ -147,20 +175,36 @@
               <span>下一首</span>
             </button>
           </aside>
+
+          <footer class="soda-slide__footer">
+            <div
+              class="soda-slide__progress"
+              role="slider"
+              :tabindex="isActiveSong(song) ? 0 : -1"
+              :aria-valuemin="0"
+              :aria-valuemax="Math.floor(player.state.duration || 0)"
+              :aria-valuenow="getSongProgressNow(song)"
+              :aria-label="`${song.name} 播放进度`"
+              @pointerdown="seekFromProgress($event, song)"
+              @keydown="handleProgressKeydown($event, song)"
+            >
+              <span class="soda-slide__progress-time">{{ getCurrentTimeLabel(song) }}</span>
+              <span class="soda-slide__progress-rail" aria-hidden="true">
+                <span :style="{ width: `${getSongProgress(song)}%` }" />
+              </span>
+              <span class="soda-slide__progress-time">{{ getDurationLabel(song) }}</span>
+            </div>
+          </footer>
+          </template>
         </article>
       </div>
 
-      <div class="soda-feed__position" aria-hidden="true">
-        <ChevronUp :size="16" />
-        <span>{{ displayIndex }} / {{ recommendationQueue.length }}</span>
-        <ChevronDown :size="16" />
-      </div>
     </section>
   </div>
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useMessage } from 'naive-ui'
 import {
   AudioLines,
@@ -184,15 +228,38 @@ const feedScroller = ref(null)
 const activeMood = ref('daily')
 const activeIndex = ref(0)
 const autoPlayAfterGesture = ref(false)
-const likedIds = ref(new Set())
-const allSongs = ref(prepareQueue(recommendedSingles))
-const recommendationQueue = ref(applyMoodQueue(allSongs.value, activeMood.value))
-const lyricLines = ref(createLyricPlaceholder('点击播放后显示歌词'))
+const likedIds = shallowRef(new Set())
+const emptySlideStyle = Object.freeze({ '--soda-cover-image': 'none' })
+const allSongs = shallowRef(prepareQueue(recommendedSingles))
+const recommendationQueue = shallowRef(applyMoodQueue(allSongs.value, activeMood.value))
+const lyricLines = shallowRef(createLyricPlaceholder('点击播放后显示歌词'))
 const isLyricLoading = ref(false)
+const lyricsScroll = ref(null)
+const lyricsDragging = ref(false)
+const lyricsWheeling = ref(false)
+const previewLyricIndex = ref(null)
+const lyricsPreviewing = ref(false)
+const lyricsDragState = {
+  startY: 0,
+  startScrollTop: 0,
+  moved: false
+}
+const lyricsDragScrollSpeed = 2.2
+const lyricsWheelScrollSpeed = 1.2
+const lyricsLoadTimeoutMs = 12000
+const recommendationLimit = 36
+const slideHydrateRadius = 2
+const lyricCache = new Map()
 let scrollFrame = 0
+let resizeFrame = 0
 let autoPlayTimer = 0
 let removeTrackEndedListener = null
 let lyricRequestId = 0
+let syncedQueue = null
+let lyricsPreviewFrame = 0
+let lyricsPreviewTimer = null
+let lyricsWheelTimer = null
+let suppressNextLyricClick = false
 
 const moods = [
   { label: '推荐', value: 'daily' },
@@ -209,29 +276,48 @@ const moodSignals = {
 }
 
 const activeSong = computed(() => recommendationQueue.value[activeIndex.value])
-const displayIndex = computed(() => String(activeIndex.value + 1).padStart(2, '0'))
+const activeSongId = computed(() => String(activeSong.value?.id ?? ''))
+const currentTrackId = computed(() => String(player.state.currentTrack.id ?? ''))
+const progressTick = computed(() => Math.floor(player.state.currentTime || 0))
+const hydratedSlideBounds = computed(() => ({
+  start: Math.max(0, activeIndex.value - slideHydrateRadius),
+  end: Math.min(recommendationQueue.value.length - 1, activeIndex.value + slideHydrateRadius)
+}))
 const activeLyricIndex = computed(() => findCurrentLyricIndex(lyricLines.value, player.state.currentTime))
-const visibleLyricLines = computed(() => {
+const displayLyricLines = computed(() => {
   const lines = lyricLines.value.length
     ? lyricLines.value
     : createLyricPlaceholder('暂无歌词')
-  const activeLineIndex = activeLyricIndex.value
-  const start = Math.max(0, Math.min(activeLineIndex - 2, Math.max(lines.length - 6, 0)))
 
-  return lines.slice(start, start + 6).map((line, index) => ({
+  return lines.map((line, index) => ({
     ...line,
-    index: start + index
+    index
   }))
+})
+const lyricsInteractionActive = computed(
+  () => lyricsDragging.value || lyricsWheeling.value || lyricsPreviewing.value
+)
+const hasLyricContent = computed(() => lyricLines.value.some((line) => !line.placeholder))
+const previewLyric = computed(() => {
+  const index = previewLyricIndex.value ?? activeLyricIndex.value
+
+  return lyricLines.value[index] ?? null
 })
 
 watch(
   () => player.state.currentTrack.id,
-  (trackId) => {
+  async (trackId) => {
     const nextIndex = recommendationQueue.value.findIndex((song) => String(song.id) === String(trackId))
 
     if (nextIndex >= 0 && nextIndex !== activeIndex.value) {
       activeIndex.value = nextIndex
       scrollToIndex(nextIndex, 'smooth')
+      return
+    }
+
+    if (trackId && String(trackId) === String(activeSong.value?.id)) {
+      await nextTick()
+      loadActiveLyrics(trackId)
     }
   }
 )
@@ -244,27 +330,42 @@ watch(
   { immediate: true }
 )
 
+watch(activeLyricIndex, async () => {
+  if (lyricsInteractionActive.value) {
+    return
+  }
+
+  await nextTick()
+  centerCurrentLyric()
+})
+
 onMounted(() => {
-  player.setQueue(recommendationQueue.value)
+  syncPlayerQueue()
   removeTrackEndedListener = player.onTrackEnded(handleTrackEnded)
+  window.addEventListener('resize', handleLyricsResize)
   loadRecommendations()
 })
 
 onUnmounted(() => {
   window.cancelAnimationFrame(scrollFrame)
+  window.cancelAnimationFrame(resizeFrame)
+  window.cancelAnimationFrame(lyricsPreviewFrame)
   window.clearTimeout(autoPlayTimer)
+  window.removeEventListener('resize', handleLyricsResize)
+  clearLyricsPreviewTimer()
+  clearLyricsWheelTimer()
   removeTrackEndedListener?.()
   removeTrackEndedListener = null
 })
 
 async function loadRecommendations() {
   try {
-    const data = await getMusicFeedData()
+    const data = await getMusicFeedData({ limit: recommendationLimit })
     const songs = data.songs.length ? data.songs : recommendedSingles
     allSongs.value = prepareQueue(songs)
     recommendationQueue.value = applyMoodQueue(allSongs.value, activeMood.value)
     activeIndex.value = 0
-    player.setQueue(recommendationQueue.value)
+    syncPlayerQueue()
     await nextTick()
     scrollToIndex(0, 'auto')
   } catch (error) {
@@ -272,13 +373,28 @@ async function loadRecommendations() {
   }
 }
 
+function syncPlayerQueue() {
+  if (syncedQueue === recommendationQueue.value) {
+    return
+  }
+
+  syncedQueue = recommendationQueue.value
+  player.setQueue(syncedQueue)
+}
+
 function prepareQueue(songs) {
-  return songs.map((song, index) => ({
-    ...song,
-    id: song.id ?? `home-${index + 1}`,
-    rank: String(index + 1).padStart(2, '0'),
-    type: song.type ?? getCoverType(index)
-  }))
+  return songs.map((song, index) => {
+    const coverUrl = resizeNeteaseCover(song.coverUrl, 640)
+
+    return {
+      ...song,
+      coverUrl,
+      id: song.id ?? `home-${index + 1}`,
+      rank: String(index + 1).padStart(2, '0'),
+      type: song.type ?? getCoverType(index),
+      slideStyle: createSlideStyle(coverUrl)
+    }
+  })
 }
 
 function applyMoodQueue(songs, mood) {
@@ -311,14 +427,10 @@ function getChillWeight(song) {
 
 function setMood(value) {
   activeMood.value = value
-  const ordered = applyMoodQueue(allSongs.value, value)
 
-  recommendationQueue.value = ordered.map((song, index) => ({
-    ...song,
-    rank: String(index + 1).padStart(2, '0')
-  }))
+  recommendationQueue.value = applyMoodQueue(allSongs.value, value)
   activeIndex.value = 0
-  player.setQueue(recommendationQueue.value)
+  syncPlayerQueue()
   nextTick(() => scrollToIndex(0, 'smooth'))
 
   if (autoPlayAfterGesture.value) {
@@ -349,7 +461,6 @@ function handleFeedScroll() {
     }
 
     activeIndex.value = nextIndex
-    player.setQueue(recommendationQueue.value)
 
     if (autoPlayAfterGesture.value) {
       scheduleAutoPlay()
@@ -369,7 +480,7 @@ function handleFeedKeydown(event) {
 function scrollToIndex(index, behavior = 'smooth') {
   const scroller = feedScroller.value
 
-  if (!scroller) {
+  if (!scroller || !recommendationQueue.value.length) {
     return
   }
 
@@ -400,6 +511,10 @@ async function playSongFromGesture(index) {
 }
 
 async function goNextFromGesture() {
+  if (!recommendationQueue.value.length) {
+    return
+  }
+
   autoPlayAfterGesture.value = true
   const nextIndex = (activeIndex.value + 1) % recommendationQueue.value.length
   activeIndex.value = nextIndex
@@ -421,18 +536,21 @@ async function handleTrackEnded() {
 async function loadActiveLyrics(trackId) {
   lyricRequestId += 1
   const requestId = lyricRequestId
+  resetLyricsInteraction()
   isLyricLoading.value = false
   lyricLines.value = createLyricPlaceholder(trackId ? '歌词加载中...' : '暂无歌词')
+  await refreshLyricsLayout('auto')
 
   if (!isNeteaseTrackId(trackId)) {
     lyricLines.value = createLyricPlaceholder('在线歌曲播放后显示歌词')
+    await refreshLyricsLayout('auto')
     return
   }
 
   isLyricLoading.value = true
 
   try {
-    const lines = await getTrackLyricData(trackId)
+    const lines = await getCachedTrackLyrics(trackId)
 
     if (requestId !== lyricRequestId) {
       return
@@ -451,6 +569,49 @@ async function loadActiveLyrics(trackId) {
       isLyricLoading.value = false
     }
   }
+
+  if (requestId === lyricRequestId) {
+    await refreshLyricsLayout('auto')
+  }
+}
+
+async function getCachedTrackLyrics(trackId) {
+  const cacheKey = String(trackId)
+  const cachedLyrics = lyricCache.get(cacheKey)
+
+  if (cachedLyrics) {
+    return cachedLyrics
+  }
+
+  const lyricsRequest = loadTrackLyricsWithTimeout(trackId)
+    .then((lines) => {
+      lyricCache.set(cacheKey, lines)
+      return lines
+    })
+    .catch((error) => {
+      lyricCache.delete(cacheKey)
+      throw error
+    })
+
+  lyricCache.set(cacheKey, lyricsRequest)
+  return lyricsRequest
+}
+
+function loadTrackLyricsWithTimeout(trackId) {
+  let timeoutId = 0
+
+  const timeout = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error('歌词加载超时'))
+    }, lyricsLoadTimeoutMs)
+  })
+
+  return Promise.race([
+    getTrackLyricData(trackId),
+    timeout
+  ]).finally(() => {
+    window.clearTimeout(timeoutId)
+  })
 }
 
 async function playActiveSong(options = {}) {
@@ -460,7 +621,7 @@ async function playActiveSong(options = {}) {
     return
   }
 
-  player.setQueue(recommendationQueue.value)
+  syncPlayerQueue()
 
   if (String(player.state.currentTrack.id) === String(song.id)) {
     if (options.auto && player.state.isPlaying) {
@@ -469,6 +630,11 @@ async function playActiveSong(options = {}) {
 
     const toggled = await player.togglePlay()
     showPlaybackError(toggled)
+
+    if (toggled) {
+      loadActiveLyrics(song.id)
+    }
+
     return
   }
 
@@ -498,13 +664,13 @@ function isLiked(song) {
 }
 
 function isActiveSong(song) {
-  return String(recommendationQueue.value[activeIndex.value]?.id) === String(song.id)
+  return Boolean(song?.id && activeSongId.value === String(song.id))
 }
 
 function isSongPlaying(song) {
   return Boolean(
     song?.id &&
-    String(player.state.currentTrack.id) === String(song.id) &&
+    currentTrackId.value === String(song.id) &&
     player.state.isPlaying
   )
 }
@@ -565,20 +731,266 @@ function handleProgressKeydown(event, song) {
   player.seekTo(player.state.currentTime + (event.key === 'ArrowRight' ? 5 : -5))
 }
 
-function seekToLyric(line) {
+function getLyricsScroller() {
+  const scroller = lyricsScroll.value
+
+  return Array.isArray(scroller)
+    ? scroller.find(Boolean) ?? null
+    : scroller
+}
+
+async function refreshLyricsLayout(behavior = 'smooth') {
+  await nextTick()
+  updateLyricsEdgePadding()
+  centerCurrentLyric(behavior)
+}
+
+function updateLyricsEdgePadding() {
+  const scroller = getLyricsScroller()
+
+  if (!scroller) {
+    return
+  }
+
+  const firstLine = scroller.querySelector('[data-lyric-index="0"]')
+  const lineHeight = firstLine?.offsetHeight || 62
+  const edgePadding = Math.max(0, scroller.clientHeight / 2 - lineHeight / 2)
+
+  scroller.style.setProperty('--lyrics-edge-padding', `${edgePadding}px`)
+}
+
+function startLyricsDrag(event) {
+  const scroller = getLyricsScroller()
+
+  if (!scroller || !hasLyricContent.value || event.button > 0) {
+    return
+  }
+
+  lyricsDragging.value = true
+  lyricsPreviewing.value = true
+  previewLyricIndex.value = activeLyricIndex.value
+  lyricsDragState.startY = event.clientY
+  lyricsDragState.startScrollTop = scroller.scrollTop
+  lyricsDragState.moved = false
+  clearLyricsPreviewTimer()
+  clearLyricsWheelTimer()
+  lyricsWheeling.value = false
+  scroller.setPointerCapture?.(event.pointerId)
+  updatePreviewLyricFromCenter()
+}
+
+function handleLyricsPointerMove(event) {
+  const scroller = getLyricsScroller()
+
+  if (!scroller || !lyricsDragging.value) {
+    return
+  }
+
+  const deltaY = event.clientY - lyricsDragState.startY
+
+  if (Math.abs(deltaY) > 3) {
+    lyricsDragState.moved = true
+  }
+
+  scroller.scrollTop = lyricsDragState.startScrollTop - deltaY * lyricsDragScrollSpeed
+  requestPreviewLyricUpdate()
+}
+
+function stopLyricsDrag(event) {
+  if (!lyricsDragging.value) {
+    return
+  }
+
+  flushPreviewLyricUpdate()
+  getLyricsScroller()?.releasePointerCapture?.(event.pointerId)
+  lyricsDragging.value = false
+
+  if (lyricsDragState.moved) {
+    suppressNextLyricClick = true
+    window.setTimeout(() => {
+      suppressNextLyricClick = false
+    }, 0)
+  }
+
+  schedulePlaybackLyricReturn()
+}
+
+function handleLyricsWheel(event) {
+  const scroller = getLyricsScroller()
+
+  if (!scroller || !hasLyricContent.value || lyricsDragging.value) {
+    return
+  }
+
+  lyricsPreviewing.value = true
+  lyricsWheeling.value = true
+  clearLyricsPreviewTimer()
+  clearLyricsWheelTimer()
+
+  const wheelDelta = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+    ? event.deltaY * 18
+    : event.deltaY
+
+  scroller.scrollTop += wheelDelta * lyricsWheelScrollSpeed
+  requestPreviewLyricUpdate()
+
+  lyricsWheelTimer = window.setTimeout(() => {
+    lyricsWheeling.value = false
+    schedulePlaybackLyricReturn()
+  }, 140)
+}
+
+function selectLyric(index) {
+  const line = lyricLines.value[index]
+
+  if (suppressNextLyricClick) {
+    suppressNextLyricClick = false
+    return
+  }
+
+  seekToLyricLine(line, index)
+}
+
+function seekToPreviewLyric() {
+  seekToLyricLine(previewLyric.value, previewLyricIndex.value)
+}
+
+function seekToLyricLine(line, index) {
   if (!line || line.placeholder) {
     return
   }
 
+  previewLyricIndex.value = null
+  lyricsPreviewing.value = false
+  lyricsWheeling.value = false
+  clearLyricsPreviewTimer()
+  clearLyricsWheelTimer()
   player.seekTo(line.seconds)
+  nextTick(() => centerLyricIndex(index))
 }
 
-function getActiveLyricTitle() {
-  if (!lyricLines.value.length || lyricLines.value[0]?.placeholder) {
-    return '暂无同步歌词'
+function requestPreviewLyricUpdate() {
+  if (lyricsPreviewFrame) {
+    return
   }
 
-  return '同步歌词'
+  lyricsPreviewFrame = window.requestAnimationFrame(() => {
+    lyricsPreviewFrame = 0
+    updatePreviewLyricFromCenter()
+  })
+}
+
+function flushPreviewLyricUpdate() {
+  if (lyricsPreviewFrame) {
+    window.cancelAnimationFrame(lyricsPreviewFrame)
+    lyricsPreviewFrame = 0
+  }
+
+  updatePreviewLyricFromCenter()
+}
+
+function updatePreviewLyricFromCenter() {
+  const scroller = getLyricsScroller()
+
+  if (!scroller) {
+    return
+  }
+
+  const centerOffset = scroller.scrollTop + scroller.clientHeight / 2
+  const lyricButtons = scroller.children
+  let nearestIndex = previewLyricIndex.value ?? activeLyricIndex.value
+  let nearestDistance = Number.POSITIVE_INFINITY
+
+  Array.from(lyricButtons).forEach((button) => {
+    const distance = Math.abs(button.offsetTop + button.offsetHeight / 2 - centerOffset)
+    const lyricIndex = Number(button.dataset.lyricIndex)
+
+    if (distance < nearestDistance && Number.isInteger(lyricIndex)) {
+      nearestDistance = distance
+      nearestIndex = lyricIndex
+    }
+  })
+
+  if (nearestIndex !== previewLyricIndex.value) {
+    previewLyricIndex.value = nearestIndex
+  }
+}
+
+function schedulePlaybackLyricReturn() {
+  clearLyricsPreviewTimer()
+  lyricsPreviewTimer = window.setTimeout(() => {
+    lyricsPreviewing.value = false
+    previewLyricIndex.value = null
+    centerCurrentLyric()
+  }, 4200)
+}
+
+function clearLyricsPreviewTimer() {
+  if (lyricsPreviewTimer) {
+    window.clearTimeout(lyricsPreviewTimer)
+    lyricsPreviewTimer = null
+  }
+}
+
+function clearLyricsWheelTimer() {
+  if (lyricsWheelTimer) {
+    window.clearTimeout(lyricsWheelTimer)
+    lyricsWheelTimer = null
+  }
+}
+
+function resetLyricsInteraction() {
+  lyricsDragging.value = false
+  lyricsWheeling.value = false
+  lyricsPreviewing.value = false
+  previewLyricIndex.value = null
+  suppressNextLyricClick = false
+  if (lyricsPreviewFrame) {
+    window.cancelAnimationFrame(lyricsPreviewFrame)
+    lyricsPreviewFrame = 0
+  }
+  clearLyricsPreviewTimer()
+  clearLyricsWheelTimer()
+}
+
+function centerCurrentLyric(behavior = 'smooth') {
+  centerLyricIndex(activeLyricIndex.value, behavior)
+}
+
+function centerLyricIndex(index, behavior = 'smooth') {
+  const scroller = getLyricsScroller()
+
+  if (!scroller || index < 0) {
+    return
+  }
+
+  const activeLine =
+    scroller.children[index] ??
+    scroller.querySelector(`[data-lyric-index="${index}"]`)
+
+  if (!activeLine) {
+    return
+  }
+
+  scroller.scrollTo({
+    top:
+      activeLine.offsetTop -
+      scroller.clientHeight / 2 +
+      activeLine.offsetHeight / 2,
+    behavior
+  })
+}
+
+function handleLyricsResize() {
+  if (resizeFrame) {
+    return
+  }
+
+  resizeFrame = window.requestAnimationFrame(() => {
+    resizeFrame = 0
+    updateLyricsEdgePadding()
+    centerCurrentLyric('auto')
+  })
 }
 
 function createLyricPlaceholder(text) {
@@ -590,15 +1002,20 @@ function findCurrentLyricIndex(lines, currentTime) {
     return 0
   }
 
+  const targetTime = currentTime + 0.16
+  let low = 0
+  let high = lines.length - 1
   let currentIndex = 0
 
-  for (let index = 0; index < lines.length; index += 1) {
-    if (lines[index].seconds <= currentTime + 0.16) {
-      currentIndex = index
-      continue
-    }
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2)
 
-    break
+    if (lines[middle].seconds <= targetTime) {
+      currentIndex = middle
+      low = middle + 1
+    } else {
+      high = middle - 1
+    }
   }
 
   return currentIndex
@@ -622,10 +1039,34 @@ function getMoodSignal(index) {
   return signals[index % signals.length]
 }
 
-function getSlideStyle(song) {
-  return {
-    '--soda-cover-image': song.coverUrl ? `url("${song.coverUrl}")` : 'none'
+function isSlideHydrated(index) {
+  const { start, end } = hydratedSlideBounds.value
+
+  return index >= start && index <= end
+}
+
+function getSlideStyle(song, index) {
+  return isSlideHydrated(index) ? song.slideStyle ?? emptySlideStyle : emptySlideStyle
+}
+
+function createSlideStyle(coverUrl) {
+  return coverUrl
+    ? Object.freeze({ '--soda-cover-image': `url("${coverUrl}")` })
+    : emptySlideStyle
+}
+
+function resizeNeteaseCover(url, size) {
+  if (!url || !/music\.126\.net/.test(url)) {
+    return url
   }
+
+  const param = `param=${size}y${size}`
+
+  if (/[?&]param=\d+y\d+/.test(url)) {
+    return url.replace(/([?&])param=\d+y\d+/, `$1${param}`)
+  }
+
+  return `${url}${url.includes('?') ? '&' : '?'}${param}`
 }
 
 function showPlaybackError(success) {

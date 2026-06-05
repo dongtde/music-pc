@@ -14,17 +14,17 @@
 
 .soda-feed__tabs {
   position: absolute;
-  top: 18px;
+  top: 20px;
   left: 50%;
   z-index: 5;
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
-  background: rgba(8, 8, 9, 0.48);
-  backdrop-filter: blur(18px);
+  background: rgba(8, 8, 9, 0.32);
+  backdrop-filter: blur(16px);
   transform: translateX(-50%);
 }
 
@@ -33,17 +33,21 @@
   padding: 0 15px;
   border: 0;
   border-radius: 999px;
-  color: rgba(255, 255, 255, 0.68);
+  color: rgba(255, 255, 255, 0.42);
   background: transparent;
   cursor: pointer;
   font-size: 13px;
-  font-weight: 900;
+  font-weight: 800;
   transition:
     background-color 180ms ease,
     color 180ms ease;
 }
 
-.soda-feed__tabs button:hover,
+.soda-feed__tabs button:hover {
+  color: rgba(255, 255, 255, 0.74);
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .soda-feed__tabs button.active {
   color: #ffffff;
   background: rgba(255, 255, 255, 0.14);
@@ -66,10 +70,14 @@
   display: grid;
   height: 100%;
   min-height: 560px;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(360px, 440px) minmax(360px, 480px);
+  grid-template-rows: minmax(0, 1fr) auto;
+  justify-content: center;
+  column-gap: clamp(72px, 8vw, 148px);
+  row-gap: 18px;
   align-items: center;
   overflow: hidden;
-  padding: 82px 116px 46px 66px;
+  padding: 88px 160px 26px 120px;
   scroll-snap-align: start;
   scroll-snap-stop: always;
   background:
@@ -78,6 +86,13 @@
     #111113;
   background-position: center;
   background-size: cover;
+  contain: layout paint style;
+  contain-intrinsic-size: 100vh;
+  content-visibility: auto;
+}
+
+.soda-slide--light {
+  background: #111113;
 }
 
 .soda-slide__backdrop {
@@ -111,13 +126,10 @@
 }
 
 .soda-slide__visual {
-  position: absolute;
-  top: 48%;
-  left: 46%;
+  position: relative;
   z-index: 1;
-  width: min(47vh, 430px);
+  width: min(100%, 430px);
   aspect-ratio: 1 / 1;
-  transform: translate(-50%, -50%);
 }
 
 .soda-slide__cover,
@@ -132,7 +144,7 @@
   z-index: 2;
   border-radius: 8px;
   box-shadow: 0 28px 62px rgba(0, 0, 0, 0.46);
-  transform: translateX(-18px) rotate(-1deg);
+  transform: translateX(-10px) rotate(-1deg);
 }
 
 .soda-slide__cover img {
@@ -160,28 +172,39 @@
   animation: soda-disc-spin 8s linear infinite;
 }
 
-.soda-slide__caption,
-.soda-action-rail,
-.soda-lyrics-panel,
-.soda-feed__position,
-.soda-feed__tabs {
-  position: absolute;
+.soda-slide__player {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-column: 1;
+  grid-row: 1;
+  width: min(100%, 440px);
+  gap: 18px;
+  align-self: center;
+  justify-self: center;
 }
 
 .soda-slide__caption {
-  right: 176px;
-  bottom: 52px;
-  left: 66px;
+  position: relative;
   z-index: 2;
-  max-width: min(560px, calc(100% - 260px));
+  display: grid;
+  gap: 10px;
+  max-width: 100%;
 }
 
-.soda-slide__kicker {
+.soda-slide__tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.soda-slide__kicker,
+.soda-slide__meta-tag {
   display: inline-flex;
   width: fit-content;
   height: 30px;
   align-items: center;
-  gap: 7px;
   padding: 0 11px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 999px;
@@ -192,11 +215,22 @@
   font-weight: 900;
 }
 
+.soda-slide__kicker {
+  gap: 7px;
+}
+
+.soda-slide__meta-tag {
+  color: rgba(255, 255, 255, 0.74);
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .soda-slide__caption h1 {
   overflow-wrap: anywhere;
-  margin: 16px 0 8px;
+  margin: 6px 0 0;
   color: #ffffff;
-  font-size: 42px;
+  font-size: 40px;
   letter-spacing: 0;
   line-height: 1.08;
   text-shadow: 0 8px 28px rgba(0, 0, 0, 0.48);
@@ -214,32 +248,238 @@
   white-space: nowrap;
 }
 
-.soda-slide__tags {
-  display: flex;
-  flex-wrap: wrap;
+.soda-slide__position {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
   gap: 8px;
-  margin-top: 18px;
-}
-
-.soda-slide__tags span {
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid rgba(255, 255, 255, 0.13);
-  border-radius: 999px;
-  color: rgba(255, 255, 255, 0.72);
-  background: rgba(255, 255, 255, 0.08);
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.42);
   font-size: 12px;
   font-weight: 800;
-  line-height: 26px;
+}
+
+.soda-slide__position svg {
+  opacity: 0.54;
+}
+
+.soda-lyrics-panel {
+  position: relative;
+  z-index: 2;
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: center;
+  align-self: center;
+  display: grid;
+  width: min(100%, 480px);
+  height: min(62vh, 560px);
+  min-height: 340px;
+  gap: 10px;
+  padding: 0;
+  border-left: 0;
+  overflow: hidden;
+}
+
+.soda-lyrics-list {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  gap: 6px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--lyrics-edge-padding, clamp(136px, calc(31vh - 31px), 249px)) 4px;
+  cursor: default;
+  mask-image: linear-gradient(180deg, transparent 0%, #000 10%, #000 80%, transparent 100%);
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  touch-action: none;
+  user-select: none;
+}
+
+.soda-lyrics-list::-webkit-scrollbar {
+  display: none;
+}
+
+.soda-lyrics-panel--dragging .soda-lyrics-list,
+.soda-lyrics-panel--wheeling .soda-lyrics-list {
+  cursor: grabbing;
+  scroll-behavior: auto;
+}
+
+.soda-lyric-guide {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 32px;
+  gap: 10px;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.78);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 180ms ease;
+}
+
+.soda-lyrics-panel--previewing .soda-lyric-guide {
+  opacity: 1;
+}
+
+.soda-lyric-guide__time {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
+  text-shadow: 0 4px 16px rgba(0, 0, 0, 0.62);
+}
+
+.soda-lyric-guide__line {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(var(--accent-rgb), 0),
+    rgba(var(--accent-rgb), 0.84) 18%,
+    rgba(var(--accent-rgb), 0.84) 82%,
+    rgba(var(--accent-rgb), 0)
+  );
+  box-shadow: 0 0 16px rgba(var(--accent-rgb), 0.44);
+}
+
+.soda-lyric-guide__play {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: #ffffff;
+  background: var(--accent);
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    background-color 180ms ease,
+    transform 180ms ease;
+}
+
+.soda-lyric-guide__play:hover {
+  background: var(--accent-hover);
+  transform: scale(1.06);
+}
+
+.soda-lyric-guide__play:disabled {
+  cursor: default;
+  opacity: 0.48;
+  transform: none;
+}
+
+.soda-lyrics-list button {
+  display: grid;
+  width: 100%;
+  min-height: 62px;
+  min-width: 0;
+  gap: 4px;
+  padding: 13px 16px;
+  border: 0;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.82);
+  background: transparent;
+  cursor: pointer;
+  text-align: center;
+  text-shadow: 0 6px 24px rgba(0, 0, 0, 0.72);
+  transform: scale(0.98);
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.soda-lyrics-list button:hover {
+  color: #ffffff;
+  background: transparent;
+  transform: scale(1);
+}
+
+.soda-lyrics-list button.active {
+  color: #ffffff;
+  background: transparent;
+  box-shadow: none;
+  opacity: 1;
+  transform: scale(1);
+}
+
+.soda-lyrics-list button.preview:not(.active) {
+  color: #ffffff;
+  background: transparent;
+  opacity: 1;
+  transform: scale(1);
+}
+
+.soda-lyrics-list button.past,
+.soda-lyrics-list button.future {
+  opacity: 0.78;
+}
+
+.soda-lyrics-panel--previewing .soda-lyrics-list button.active:not(.preview) {
+  color: rgba(255, 255, 255, 0.74);
+  background: transparent;
+  box-shadow: none;
+}
+
+.soda-lyrics-list button.placeholder {
+  cursor: default;
+}
+
+.soda-lyrics-list button.placeholder:hover {
+  color: rgba(255, 255, 255, 0.72);
+  background: transparent;
+  transform: none;
+}
+
+.soda-lyrics-list span,
+.soda-lyrics-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.soda-lyrics-list span {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.soda-lyrics-list button.active span {
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.soda-lyrics-list small {
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 13px;
+  text-shadow: 0 5px 18px rgba(0, 0, 0, 0.72);
+}
+
+.soda-lyrics-list button.active small {
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.soda-slide__footer {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  z-index: 2;
+  display: grid;
+  align-self: end;
 }
 
 .soda-slide__progress {
   display: grid;
-  width: min(500px, 100%);
+  width: 100%;
   grid-template-columns: 42px minmax(0, 1fr) 42px;
   gap: 10px;
   align-items: center;
-  margin-top: 20px;
   color: rgba(255, 255, 255, 0.62);
   cursor: pointer;
   font-size: 12px;
@@ -259,10 +499,10 @@
 .soda-slide__progress-rail {
   display: block;
   overflow: hidden;
-  width: min(420px, 100%);
-  height: 4px;
+  width: 100%;
+  height: 5px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .soda-slide__progress-rail span {
@@ -275,101 +515,13 @@
   transition: width 160ms linear;
 }
 
-.soda-lyrics-panel {
-  top: 142px;
-  right: 116px;
-  z-index: 2;
-  display: grid;
-  width: min(340px, 28vw);
-  gap: 16px;
-  padding: 18px 18px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  background: rgba(12, 12, 14, 0.38);
-  box-shadow: 0 22px 54px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(18px) saturate(1.12);
-}
-
-.soda-lyrics-panel header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 14px;
-}
-
-.soda-lyrics-panel header span {
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 15px;
-  font-weight: 900;
-}
-
-.soda-lyrics-panel header strong {
-  color: rgba(255, 255, 255, 0.52);
-  font-size: 12px;
-}
-
-.soda-lyrics-list {
-  display: grid;
-  gap: 3px;
-}
-
-.soda-lyrics-list button {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-  padding: 9px 10px;
-  border: 0;
-  border-radius: 7px;
-  color: rgba(255, 255, 255, 0.58);
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-  transition:
-    background-color 180ms ease,
-    color 180ms ease,
-    transform 180ms ease;
-}
-
-.soda-lyrics-list button:hover,
-.soda-lyrics-list button.active {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.1);
-  transform: translateX(2px);
-}
-
-.soda-lyrics-list button.placeholder {
-  cursor: default;
-}
-
-.soda-lyrics-list button.placeholder:hover {
-  color: rgba(255, 255, 255, 0.58);
-  background: transparent;
-  transform: none;
-}
-
-.soda-lyrics-list span,
-.soda-lyrics-list small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.soda-lyrics-list span {
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.soda-lyrics-list small {
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 12px;
-}
-
 .soda-action-rail {
-  right: 38px;
-  bottom: 58px;
+  position: absolute;
+  right: 64px;
+  bottom: 78px;
   z-index: 3;
   display: grid;
-  gap: 18px;
+  gap: 14px;
   justify-items: center;
 }
 
@@ -379,7 +531,7 @@
   justify-items: center;
   gap: 6px;
   border: 0;
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(255, 255, 255, 0.68);
   background: transparent;
   cursor: pointer;
   font-size: 12px;
@@ -387,21 +539,25 @@
   text-shadow: 0 4px 14px rgba(0, 0, 0, 0.44);
 }
 
-.soda-action-rail button > svg,
-.soda-action-rail__play > svg,
-.soda-spin {
+.soda-action-rail button > svg {
   display: grid;
-  width: 52px;
-  height: 52px;
-  padding: 13px;
+  width: 48px;
+  height: 48px;
+  padding: 12px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.11);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
   backdrop-filter: blur(16px);
   transition:
     background-color 180ms ease,
     color 180ms ease,
     transform 180ms ease;
+}
+
+.soda-action-rail__play > svg,
+.soda-spin {
+  color: #ffffff;
+  background: var(--accent);
 }
 
 .soda-action-rail button:hover > svg,
@@ -411,10 +567,9 @@
   transform: translateY(-2px);
 }
 
-.soda-action-rail__play > svg,
-.soda-spin {
-  color: #ffffff;
-  background: var(--accent);
+.soda-action-rail__play:hover > svg,
+.soda-action-rail__play.active > svg {
+  background: var(--accent-hover);
 }
 
 .soda-action-rail button:disabled {
@@ -423,19 +578,6 @@
 
 .soda-spin {
   animation: soda-spin 900ms linear infinite;
-}
-
-.soda-feed__position {
-  top: 50%;
-  left: 22px;
-  z-index: 4;
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  color: rgba(255, 255, 255, 0.58);
-  font-size: 12px;
-  font-weight: 900;
-  transform: translateY(-50%);
 }
 
 .soda-slide__cover.cover--sunset,
@@ -495,18 +637,17 @@
 
 @media (max-width: 1400px) {
   .soda-slide {
-    padding-right: 104px;
-    padding-left: 56px;
+    grid-template-columns: minmax(320px, 390px) minmax(320px, 420px);
+    column-gap: 68px;
+    padding: 84px 128px 22px 72px;
+  }
+
+  .soda-slide__player {
+    width: min(100%, 390px);
   }
 
   .soda-slide__visual {
-    left: 45%;
-    width: min(42vh, 350px);
-  }
-
-  .soda-slide__caption {
-    left: 56px;
-    max-width: min(500px, calc(100% - 240px));
+    width: min(100%, 380px);
   }
 
   .soda-slide__caption h1 {
@@ -514,7 +655,37 @@
   }
 
   .soda-lyrics-panel {
-    right: 98px;
-    width: min(300px, 30vw);
+    width: min(100%, 420px);
+  }
+
+  .soda-action-rail {
+    right: 48px;
+    bottom: 72px;
+  }
+}
+
+@media (max-width: 1160px) {
+  .soda-slide {
+    grid-template-columns: minmax(280px, 340px) minmax(280px, 360px);
+    column-gap: 38px;
+    padding: 78px 112px 20px 40px;
+  }
+
+  .soda-slide__player {
+    width: min(100%, 340px);
+  }
+
+  .soda-lyrics-panel {
+    width: min(100%, 360px);
+  }
+
+  .soda-lyrics-list span {
+    font-size: 16px;
+  }
+
+  .soda-action-rail {
+    right: 34px;
+    bottom: 68px;
+    gap: 12px;
   }
 }
