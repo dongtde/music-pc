@@ -191,14 +191,23 @@ button {
   background: #080809;
 }
 
+.profile-card {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 18px;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  row-gap: 2px;
+  align-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: 46px;
+  padding: 0 12px;
+  transition: padding 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .profile {
   position: relative;
-  display: grid;
-  width: 100%;
-  grid-template-columns: 46px 1fr 18px;
-  gap: 12px;
-  align-items: center;
-  padding: 0 12px;
+  display: contents;
   border: 0;
   color: inherit;
   background: transparent;
@@ -210,14 +219,17 @@ button {
     grid-template-columns 360ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.sidebar--compact .profile {
-  display: grid;
+.sidebar--compact .profile-card {
+  grid-template-columns: 44px;
+  grid-template-rows: 44px;
   width: 44px;
-  height: 44px;
-  grid-template-columns: 1fr;
-  justify-items: center;
+  min-height: 44px;
   margin: 0 auto;
   padding: 0;
+}
+
+.sidebar--compact .profile {
+  display: contents;
 }
 
 .sidebar--compact .profile__text,
@@ -232,6 +244,8 @@ button {
 .profile-avatar {
   position: relative;
   display: grid;
+  grid-column: 1;
+  grid-row: 1 / 3;
   width: 46px;
   height: 46px;
   place-items: center;
@@ -256,6 +270,8 @@ button {
 }
 
 .sidebar--compact .profile-avatar {
+  grid-column: 1;
+  grid-row: 1;
   width: 44px;
   height: 44px;
   box-shadow: none;
@@ -277,6 +293,9 @@ button {
 
 .profile__text {
   display: flex;
+  grid-column: 2;
+  grid-row: 1;
+  align-self: end;
   min-width: 0;
   flex-direction: column;
   gap: 3px;
@@ -288,7 +307,7 @@ button {
 
 .profile__text strong {
   overflow: hidden;
-  font-size: 15px;
+  font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -296,6 +315,54 @@ button {
 .profile__text small,
 .nav-title {
   color: var(--text-muted);
+}
+
+.profile > svg {
+  grid-column: 3;
+  grid-row: 1 / 3;
+  justify-self: end;
+}
+
+.vip-button.profile-vip-button {
+  display: inline-flex;
+  grid-column: 2;
+  grid-row: 2;
+  align-items: center;
+  align-self: start;
+  gap: 4px;
+  justify-self: start;
+  height: 20px;
+  margin-left: 0;
+  padding: 0 8px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.12);
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 20px;
+  transition:
+    background-color 220ms ease,
+    color 220ms ease,
+    transform 220ms ease,
+    opacity 220ms ease;
+}
+
+.vip-button.profile-vip-button:hover {
+  color: #ffffff;
+  background: var(--accent);
+}
+
+.vip-button.profile-vip-button:active {
+  color: #ffffff;
+  background: var(--accent-pressed);
+  transform: translateY(1px);
+}
+
+.sidebar--compact .profile-vip-button {
+  display: none;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .nav-groups {
@@ -361,7 +428,7 @@ button {
   padding: 0 12px;
   border-radius: 8px;
   color: var(--text-main);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   transition:
     width 360ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -929,15 +996,6 @@ button {
   font-weight: 700;
 }
 
-.topbar-user {
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-}
-
 .view {
   flex: 1;
   min-height: 0;
@@ -960,13 +1018,13 @@ button {
 .tabs a {
   position: relative;
   color: #9ca5b2;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 800;
 }
 
 .tabs a.active {
   color: var(--text-strong);
-  font-size: 20px;
+  font-size: 14px;
 }
 
 .tabs a.active::after {

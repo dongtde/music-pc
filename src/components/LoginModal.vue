@@ -9,7 +9,7 @@
   >
     <template #header>
       <div class="login-modal__title">
-        <span>{{ auth.state.isLoggedIn ? '账号信息' : '登录网易云音乐' }}</span>
+        <span>{{ auth.state.isLoggedIn ? '账号信息' : '登录账号' }}</span>
         <small>{{ headerSubtitle }}</small>
       </div>
     </template>
@@ -69,7 +69,7 @@
             :src="auth.state.qr.image"
             loading="lazy"
             decoding="async"
-            alt="网易云音乐登录二维码"
+            alt="登录二维码"
           />
           <div v-else class="login-qr__loading">二维码暂不可用</div>
         </div>
@@ -83,7 +83,7 @@
         >
           {{ auth.state.error || auth.state.qr.message || '等待扫码' }}
         </strong>
-        <p>打开网易云音乐 App，扫描二维码完成登录。</p>
+        <p>打开 App，扫描二维码完成登录。</p>
 
         <button class="login-modal__button" type="button" :disabled="auth.state.qr.loading" @click="refreshQr">
           <RefreshCw :size="15" :class="{ spin: auth.state.qr.loading }" />
@@ -250,11 +250,11 @@ const modalVisible = computed({
 
 const headerSubtitle = computed(() => {
   if (auth.state.isLoggedIn) {
-    return auth.isGuest.value ? '已连接游客凭证' : '已连接网易云音乐账号'
+    return auth.isGuest.value ? '已连接游客凭证' : '已连接账号'
   }
 
   const subtitles = {
-    qr: '使用网易云音乐 App 扫码',
+    qr: '使用 App 扫码',
     sms: '使用手机短信验证码',
     phone: '使用手机号和密码',
     email: '使用网易邮箱和密码',

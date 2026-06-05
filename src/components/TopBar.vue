@@ -205,20 +205,6 @@
     <router-link class="icon-button" to="/settings" aria-label="设置">
       <Settings :size="18" />
     </router-link>
-    <span class="divider" />
-    <button class="vip-button" type="button">开通VIP</button>
-    <button class="topbar-user" type="button" @click="auth.openLoginModal">
-      <n-avatar
-        round
-        lazy
-        :size="28"
-        :src="avatarUrl || undefined"
-        :img-props="{ decoding: 'async' }"
-        color="#ffa51f"
-      >
-        {{ avatarUrl ? '' : displayName.slice(0, 1) }}
-      </n-avatar>
-    </button>
   </header>
 </template>
 
@@ -246,7 +232,6 @@ import {
 import { useMessage } from 'naive-ui'
 import SongListRow from './SongListRow.vue'
 import { getSearchBootData, getSearchResultData, getSearchSuggestData } from '../services/netease'
-import { useAuthStore } from '../stores/auth'
 import { usePlayerStore } from '../stores/player'
 import { useThemeStore } from '../stores/theme'
 
@@ -294,7 +279,6 @@ const searchTabs = [
 
 const theme = useThemeStore()
 const player = usePlayerStore()
-const auth = useAuthStore()
 const router = useRouter()
 const message = useMessage()
 const searchWrap = ref(null)
@@ -346,8 +330,6 @@ const searchPlaceholder = computed(() =>
 const activeTabIcon = computed(() =>
   searchTabs.find((tab) => tab.type === activeSearchType.value)?.icon ?? Search
 )
-const displayName = auth.displayName
-const avatarUrl = auth.avatarUrl
 
 watch(trimmedKeyword, (keyword) => {
   window.clearTimeout(suggestTimer)
