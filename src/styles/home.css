@@ -1,0 +1,520 @@
+.home-view {
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+}
+
+.soda-feed {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  background: #080809;
+  color: #ffffff;
+}
+
+.soda-feed__tabs {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(8, 8, 9, 0.48);
+  backdrop-filter: blur(18px);
+  transform: translateX(-50%);
+}
+
+.soda-feed__tabs button {
+  height: 32px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.68);
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 900;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
+}
+
+.soda-feed__tabs button:hover,
+.soda-feed__tabs button.active {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.soda-feed__scroller {
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  outline: none;
+  scroll-snap-type: y mandatory;
+}
+
+.soda-feed__scroller::-webkit-scrollbar {
+  width: 0;
+}
+
+.soda-slide {
+  position: relative;
+  display: grid;
+  height: 100%;
+  min-height: 560px;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  overflow: hidden;
+  padding: 82px 116px 46px 66px;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.82) 0%, rgba(0, 0, 0, 0.34) 54%, rgba(0, 0, 0, 0.72) 100%),
+    var(--soda-cover-image),
+    #111113;
+  background-position: center;
+  background-size: cover;
+}
+
+.soda-slide__backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.soda-slide__backdrop::after {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.38), rgba(0, 0, 0, 0.8)),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.78), transparent 48%, rgba(0, 0, 0, 0.74));
+  content: '';
+}
+
+.soda-slide__backdrop img,
+.soda-slide__fallback {
+  position: absolute;
+  inset: -8%;
+  width: 116%;
+  height: 116%;
+  filter: blur(34px) saturate(1.18);
+  opacity: 0.58;
+  transform: scale(1.04);
+}
+
+.soda-slide__backdrop img {
+  object-fit: cover;
+}
+
+.soda-slide__visual {
+  position: absolute;
+  top: 48%;
+  left: 46%;
+  z-index: 1;
+  width: min(47vh, 430px);
+  aspect-ratio: 1 / 1;
+  transform: translate(-50%, -50%);
+}
+
+.soda-slide__cover,
+.soda-slide__disc {
+  position: absolute;
+  display: block;
+  overflow: hidden;
+}
+
+.soda-slide__cover {
+  inset: 0;
+  z-index: 2;
+  border-radius: 8px;
+  box-shadow: 0 28px 62px rgba(0, 0, 0, 0.46);
+  transform: translateX(-18px) rotate(-1deg);
+}
+
+.soda-slide__cover img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.soda-slide__disc {
+  top: 8%;
+  right: -20%;
+  z-index: 1;
+  width: 84%;
+  height: 84%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, #0f0f11 0 9%, transparent 10%),
+    repeating-radial-gradient(circle, #171719 0 9px, #27272b 10px 12px);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.38);
+}
+
+.soda-slide__disc--playing {
+  animation: soda-disc-spin 8s linear infinite;
+}
+
+.soda-slide__caption,
+.soda-action-rail,
+.soda-lyrics-panel,
+.soda-feed__position,
+.soda-feed__tabs {
+  position: absolute;
+}
+
+.soda-slide__caption {
+  right: 176px;
+  bottom: 52px;
+  left: 66px;
+  z-index: 2;
+  max-width: min(560px, calc(100% - 260px));
+}
+
+.soda-slide__kicker {
+  display: inline-flex;
+  width: fit-content;
+  height: 30px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.soda-slide__caption h1 {
+  overflow-wrap: anywhere;
+  margin: 16px 0 8px;
+  color: #ffffff;
+  font-size: 42px;
+  letter-spacing: 0;
+  line-height: 1.08;
+  text-shadow: 0 8px 28px rgba(0, 0, 0, 0.48);
+}
+
+.soda-slide__caption p {
+  overflow: hidden;
+  max-width: 100%;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 16px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  text-shadow: 0 6px 22px rgba(0, 0, 0, 0.38);
+  white-space: nowrap;
+}
+
+.soda-slide__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.soda-slide__tags span {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 26px;
+}
+
+.soda-slide__progress {
+  display: grid;
+  width: min(500px, 100%);
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  gap: 10px;
+  align-items: center;
+  margin-top: 20px;
+  color: rgba(255, 255, 255, 0.62);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  outline: none;
+}
+
+.soda-slide__progress:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.38);
+  outline-offset: 6px;
+}
+
+.soda-slide__progress-time:last-child {
+  text-align: right;
+}
+
+.soda-slide__progress-rail {
+  display: block;
+  overflow: hidden;
+  width: min(420px, 100%);
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.soda-slide__progress-rail span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  box-shadow: 0 0 16px rgba(var(--accent-rgb), 0.58);
+  transition: width 160ms linear;
+}
+
+.soda-lyrics-panel {
+  top: 142px;
+  right: 116px;
+  z-index: 2;
+  display: grid;
+  width: min(340px, 28vw);
+  gap: 16px;
+  padding: 18px 18px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(12, 12, 14, 0.38);
+  box-shadow: 0 22px 54px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(18px) saturate(1.12);
+}
+
+.soda-lyrics-panel header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.soda-lyrics-panel header span {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.soda-lyrics-panel header strong {
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 12px;
+}
+
+.soda-lyrics-list {
+  display: grid;
+  gap: 3px;
+}
+
+.soda-lyrics-list button {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 7px;
+  color: rgba(255, 255, 255, 0.58);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.soda-lyrics-list button:hover,
+.soda-lyrics-list button.active {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateX(2px);
+}
+
+.soda-lyrics-list button.placeholder {
+  cursor: default;
+}
+
+.soda-lyrics-list button.placeholder:hover {
+  color: rgba(255, 255, 255, 0.58);
+  background: transparent;
+  transform: none;
+}
+
+.soda-lyrics-list span,
+.soda-lyrics-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.soda-lyrics-list span {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.soda-lyrics-list small {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 12px;
+}
+
+.soda-action-rail {
+  right: 38px;
+  bottom: 58px;
+  z-index: 3;
+  display: grid;
+  gap: 18px;
+  justify-items: center;
+}
+
+.soda-action-rail button {
+  display: grid;
+  min-width: 56px;
+  justify-items: center;
+  gap: 6px;
+  border: 0;
+  color: rgba(255, 255, 255, 0.82);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  text-shadow: 0 4px 14px rgba(0, 0, 0, 0.44);
+}
+
+.soda-action-rail button > svg,
+.soda-action-rail__play > svg,
+.soda-spin {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  padding: 13px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(16px);
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.soda-action-rail button:hover > svg,
+.soda-action-rail button.active > svg {
+  color: #ffffff;
+  background: var(--accent);
+  transform: translateY(-2px);
+}
+
+.soda-action-rail__play > svg,
+.soda-spin {
+  color: #ffffff;
+  background: var(--accent);
+}
+
+.soda-action-rail button:disabled {
+  cursor: progress;
+}
+
+.soda-spin {
+  animation: soda-spin 900ms linear infinite;
+}
+
+.soda-feed__position {
+  top: 50%;
+  left: 22px;
+  z-index: 4;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 12px;
+  font-weight: 900;
+  transform: translateY(-50%);
+}
+
+.soda-slide__cover.cover--sunset,
+.soda-slide__fallback.cover--sunset {
+  background:
+    radial-gradient(circle at 58% 62%, #f8c85b 0 18%, transparent 19%),
+    linear-gradient(165deg, #cc4b49 0 40%, #eb7f38 42% 66%, #c8354b 68%);
+}
+
+.soda-slide__cover.cover--neon,
+.soda-slide__fallback.cover--neon {
+  background:
+    repeating-linear-gradient(90deg, transparent 0 18px, rgba(255, 43, 171, 0.35) 19px 21px),
+    linear-gradient(135deg, #020313, #161959 50%, #f0198d);
+}
+
+.soda-slide__cover.cover--lofi,
+.soda-slide__fallback.cover--lofi {
+  background:
+    radial-gradient(circle at 72% 18%, rgba(255, 194, 92, 0.34), transparent 20%),
+    linear-gradient(135deg, #2d1d16, #334656);
+}
+
+.soda-slide__cover.cover--stage,
+.soda-slide__fallback.cover--stage {
+  background:
+    radial-gradient(circle at 25% 45%, rgba(193, 221, 232, 0.7), transparent 18%),
+    radial-gradient(circle at 72% 38%, rgba(183, 218, 233, 0.62), transparent 17%),
+    linear-gradient(180deg, #1a2630, #07090c);
+}
+
+.soda-slide__cover.cover--piano,
+.soda-slide__fallback.cover--piano {
+  background:
+    radial-gradient(circle at 22% 14%, #f6d48e 0 14%, transparent 15%),
+    repeating-linear-gradient(90deg, #7d4c20 0 20px, #9f682c 22px 25px);
+}
+
+@keyframes soda-disc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes soda-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .soda-slide__disc--playing,
+  .soda-spin {
+    animation: none;
+  }
+}
+
+@media (max-width: 1400px) {
+  .soda-slide {
+    padding-right: 104px;
+    padding-left: 56px;
+  }
+
+  .soda-slide__visual {
+    left: 45%;
+    width: min(42vh, 350px);
+  }
+
+  .soda-slide__caption {
+    left: 56px;
+    max-width: min(500px, calc(100% - 240px));
+  }
+
+  .soda-slide__caption h1 {
+    font-size: 34px;
+  }
+
+  .soda-lyrics-panel {
+    right: 98px;
+    width: min(300px, 30vw);
+  }
+}

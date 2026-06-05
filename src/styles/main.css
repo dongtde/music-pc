@@ -153,6 +153,19 @@ button {
   width: 100vw;
   height: 100vh;
   background: var(--app-bg);
+  transition:
+    grid-template-columns 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 360ms ease;
+}
+
+.app-shell--immersive {
+  grid-template-columns: 76px minmax(0, 1fr);
+  grid-template-rows: 1fr;
+  background: #080809;
+}
+
+.app-shell--immersive .main-panel {
+  background: #080809;
 }
 
 .sidebar {
@@ -163,9 +176,23 @@ button {
   padding: 24px 10px 16px;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border-subtle);
+  transition:
+    gap 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 360ms ease,
+    border-color 360ms ease;
+}
+
+.app-shell--immersive .sidebar {
+  grid-row: 1;
+  gap: 14px;
+  padding: 16px 8px;
+  border-right-color: rgba(255, 255, 255, 0.08);
+  background: #080809;
 }
 
 .profile {
+  position: relative;
   display: grid;
   width: 100%;
   grid-template-columns: 46px 1fr 18px;
@@ -177,6 +204,27 @@ button {
   background: transparent;
   cursor: pointer;
   text-align: left;
+  transition:
+    height 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    grid-template-columns 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sidebar--compact .profile {
+  display: grid;
+  height: 52px;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  padding: 0;
+}
+
+.sidebar--compact .profile__text,
+.sidebar--compact .profile > svg {
+  position: absolute;
+  width: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-8px);
 }
 
 .profile-avatar {
@@ -205,6 +253,12 @@ button {
   content: '';
 }
 
+.sidebar--compact .profile-avatar {
+  width: 42px;
+  height: 42px;
+  box-shadow: none;
+}
+
 .profile-avatar span {
   width: 18px;
   height: 24px;
@@ -224,6 +278,10 @@ button {
   min-width: 0;
   flex-direction: column;
   gap: 3px;
+  transition:
+    opacity 240ms ease,
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 300ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .profile__text strong {
@@ -247,6 +305,10 @@ button {
   margin-bottom: 24px;
 }
 
+.sidebar--compact .nav-group {
+  margin-bottom: 12px;
+}
+
 .nav-title {
   display: flex;
   align-items: center;
@@ -255,6 +317,21 @@ button {
   padding: 0 12px;
   font-size: 13px;
   font-weight: 700;
+  transition:
+    height 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms ease;
+}
+
+.sidebar--compact .nav-title {
+  height: 10px;
+  padding: 0;
+}
+
+.sidebar--compact .nav-title span,
+.sidebar--compact .mini-action {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .mini-action,
@@ -278,6 +355,40 @@ button {
   color: var(--text-main);
   font-size: 15px;
   font-weight: 700;
+  transition:
+    width 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    gap 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 220ms ease,
+    background-color 220ms ease,
+    background 220ms ease;
+}
+
+.nav-item span,
+.nav-item em {
+  transition:
+    opacity 220ms ease,
+    width 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sidebar--compact .nav-item {
+  width: 44px;
+  height: 44px;
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.sidebar--compact .nav-item span,
+.sidebar--compact .nav-item em {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transform: translateX(-8px);
 }
 
 .nav-item::before {
@@ -294,6 +405,12 @@ button {
   transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.sidebar--compact .nav-item::before {
+  top: 11px;
+  bottom: 11px;
+  left: -4px;
+}
+
 .nav-item em {
   margin-left: auto;
   color: var(--text-muted);
@@ -305,6 +422,11 @@ button {
 .nav-item.is-active {
   color: var(--accent);
   background: var(--active-bg);
+}
+
+.sidebar--compact .nav-item.is-active {
+  color: #ffffff;
+  background: rgba(var(--accent-rgb), 0.86);
 }
 
 .nav-item.is-active::before {

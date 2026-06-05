@@ -10,6 +10,7 @@ export const sidebarGroups = [
   {
     title: '发现',
     items: [
+      { label: '音乐流', to: '/home', icon: 'House' },
       { label: '发现音乐', to: '/discover/recommend', icon: 'Compass', activeMatch: '/discover' },
       { label: '私人 FM', to: '/fm', icon: 'Radio' },
       { label: '视频', to: '/video', icon: 'Video' },

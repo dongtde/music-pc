@@ -59,6 +59,38 @@ export async function getHomeDiscoverData() {
   }
 }
 
+export async function getMusicFeedData({ limit = 80 } = {}) {
+  const [newsongResponse, toplistResponse] = await Promise.all([
+    getPersonalizedNewSongs({ limit }).catch(() => ({})),
+    getToplist().catch(() => ({}))
+  ])
+  const personalizedSongs = (newsongResponse.result ?? []).map(mapNewsong)
+  const toplists = toplistResponse.list ?? []
+  const feedToplists = [
+    ...toplists.filter((item) => /热歌|新歌|原创|飙升/.test(item.name || '')),
+    ...toplists
+  ].filter(Boolean)
+  const seenToplistIds = new Set()
+  const toplistTargets = feedToplists.filter((item) => {
+    if (!item.id || seenToplistIds.has(item.id)) {
+      return false
+    }
+
+    seenToplistIds.add(item.id)
+    return true
+  }).slice(0, 4)
+  const trackResponses = await Promise.all(
+    toplistTargets.map((item) =>
+      getPlaylistTracks({ id: item.id, limit, offset: 0 }).catch(() => ({ songs: [] }))
+    )
+  )
+  const chartSongs = trackResponses.flatMap((response) => response.songs ?? []).map(mapPlaylistTrack)
+
+  return {
+    songs: uniqueSongs([...personalizedSongs, ...chartSongs])
+  }
+}
+
 export async function getPlaylistDetailData(id) {
   const detailResponse = await getPlaylistDetail({ id })
   const rawPlaylist = detailResponse.playlist
@@ -744,6 +776,21 @@ function mapPlaylistTrack(song, index) {
     hasVideo: Boolean(song.mv),
     mvId: song.mv || ''
   }
+}
+
+function uniqueSongs(songs = []) {
+  const seenIds = new Set()
+
+  return songs.filter((song) => {
+    const id = String(song?.id ?? '')
+
+    if (!id || seenIds.has(id)) {
+      return false
+    }
+
+    seenIds.add(id)
+    return true
+  })
 }
 
 function mapHotKeyword(item, index) {

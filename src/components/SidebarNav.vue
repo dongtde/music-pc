@@ -1,5 +1,5 @@
 <template>
-  <aside class="sidebar">
+  <aside class="sidebar" :class="{ 'sidebar--compact': compact }">
     <button class="profile" type="button" @click="auth.openLoginModal">
       <span class="profile-avatar" aria-hidden="true">
         <img
@@ -30,6 +30,8 @@
           :to="item.to"
           class="nav-item"
           :class="{ 'is-active': isActive(item) }"
+          :aria-label="item.label"
+          :title="compact ? item.label : undefined"
         >
           <component :is="icons[item.icon]" :size="18" />
           <span>{{ item.label }}</span>
@@ -48,6 +50,7 @@ import {
   Compass,
   Heart,
   History,
+  House,
   Music2,
   Radio,
   Users,
@@ -56,11 +59,18 @@ import {
 import { sidebarGroups } from '../data/music'
 import { useAuthStore } from '../stores/auth'
 
+defineProps({
+  compact: {
+    type: Boolean,
+    default: false
+  }
+})
+
 const route = useRoute()
 const auth = useAuthStore()
 const displayName = auth.displayName
 const avatarUrl = auth.avatarUrl
-const icons = { CloudDownload, Compass, Heart, History, Music2, Radio, Users, Video }
+const icons = { CloudDownload, Compass, Heart, History, House, Music2, Radio, Users, Video }
 
 function isActive(item) {
   return item.activeMatch ? route.path.startsWith(item.activeMatch) : route.path === item.to

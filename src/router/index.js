@@ -2,12 +2,19 @@ import { createRouter, createWebHistory } from 'vue-router'
 import AlbumDetailView from '../views/AlbumDetailView.vue'
 import ArtistDetailView from '../views/ArtistDetailView.vue'
 import DiscoverView from '../views/DiscoverView.vue'
+import HomeView from '../views/HomeView.vue'
 import PlaylistDetailView from '../views/PlaylistDetailView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import SimpleView from '../views/SimpleView.vue'
 
 const routes = [
-  { path: '/', redirect: '/discover/recommend' },
+  { path: '/', redirect: '/home' },
+  {
+    path: '/home',
+    name: 'home',
+    component: HomeView,
+    meta: { title: '音乐流', icon: 'House' }
+  },
   {
     path: '/discover/:tab?',
     name: 'discover',

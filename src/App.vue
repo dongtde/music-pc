@@ -1,13 +1,19 @@
 <template>
   <n-config-provider :theme="naiveTheme" :theme-overrides="themeOverrides">
     <n-message-provider>
-      <main class="app-shell" :class="{ 'theme-is-switching': theme.state.animating }">
-        <SidebarNav />
+      <main
+        class="app-shell"
+        :class="{
+          'theme-is-switching': theme.state.animating,
+          'app-shell--immersive': isImmersiveRoute
+        }"
+      >
+        <SidebarNav :compact="isImmersiveRoute" />
         <section class="main-panel">
-          <TopBar />
+          <TopBar v-if="!isImmersiveRoute" />
           <router-view />
         </section>
-        <PlayerBar />
+        <PlayerBar v-if="!isImmersiveRoute" />
         <ThemeTransitionOverlay />
         <LoginModal v-model:show="auth.state.loginModalVisible" />
       </main>
@@ -17,6 +23,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { darkTheme } from 'naive-ui'
 import SidebarNav from './components/SidebarNav.vue'
 import TopBar from './components/TopBar.vue'
@@ -28,10 +35,12 @@ import { useThemeStore } from './stores/theme'
 
 const auth = useAuthStore()
 const theme = useThemeStore()
+const route = useRoute()
 theme.initTheme()
 auth.initAuth()
 
 const naiveTheme = computed(() => (theme.state.mode === 'dark' ? darkTheme : null))
+const isImmersiveRoute = computed(() => route.name === 'home')
 
 function hexToRgb(color) {
   const value = color.replace('#', '')
