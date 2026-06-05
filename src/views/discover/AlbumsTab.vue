@@ -1,14 +1,5 @@
 <template>
-  <section class="discover-page albums-page">
-    <section class="discover-banner discover-banner--albums">
-      <div>
-        <span class="tag">专辑</span>
-        <h1>新碟上架</h1>
-        <p>按地区浏览最新发行的专辑、EP 和单曲，同时保留本周热碟入口。</p>
-      </div>
-      <Disc3 :size="52" />
-    </section>
-
+  <section ref="pageRoot" class="discover-page albums-page">
     <div class="filter-row album-filter-row" aria-label="专辑地区">
       <button
         v-for="area in albumAreas"
@@ -22,15 +13,6 @@
     </div>
 
     <div v-if="loading" class="albums-skeleton" aria-busy="true" aria-label="正在加载专辑">
-      <article class="skeleton-album-spotlight">
-        <span class="skeleton-cover" />
-        <div>
-          <span class="skeleton-line skeleton-line--chart-title" />
-          <span class="skeleton-line skeleton-line--album-copy" />
-          <span class="skeleton-line skeleton-line--album-copy-short" />
-        </div>
-      </article>
-
       <section class="skeleton-section skeleton-section--album-rank">
         <span class="skeleton-title skeleton-title--small" />
         <div class="album-rank-list">
@@ -66,34 +48,11 @@
     </div>
 
     <template v-else>
-      <section v-if="newestAlbum" class="album-spotlight">
-        <router-link class="album-spotlight__cover" :to="`/album/${newestAlbum.id}`">
-          <img
-            v-if="newestAlbum.coverUrl"
-            :src="newestAlbum.coverUrl"
-            :alt="newestAlbum.title"
-            loading="lazy"
-            decoding="async"
-          />
-          <span><Play :size="22" fill="currentColor" /></span>
-        </router-link>
-        <div class="album-spotlight__body">
-          <span class="tag">首页新碟</span>
-          <h2>{{ newestAlbum.title }}</h2>
-          <p>{{ newestAlbum.desc || newestAlbum.artist }}</p>
-          <div class="album-spotlight__meta">
-            <span>{{ newestAlbum.artist }}</span>
-            <span v-if="newestAlbum.publishTime">{{ newestAlbum.publishTime }}</span>
-            <span>{{ newestAlbum.listeners }}</span>
-          </div>
-        </div>
-      </section>
-
       <section v-if="topAlbums.length" class="album-rank-panel">
         <h2 class="section-title compact album-rank-title">本周热碟</h2>
         <div class="album-rank-list">
           <router-link
-            v-for="(album, index) in topAlbums"
+            v-for="album in topAlbums"
             :key="album.id"
             :to="`/album/${album.id}`"
             class="album-rank-row"
@@ -107,7 +66,6 @@
                 decoding="async"
               />
               <Disc3 v-else :size="28" />
-              <em>{{ String(index + 1).padStart(2, '0') }}</em>
             </span>
             <strong>{{ album.title }}</strong>
             <small>{{ album.artist }}</small>
@@ -120,44 +78,63 @@
         <small v-if="total">共 {{ total }} 张</small>
       </header>
 
-      <div v-if="albums.length" class="album-grid">
-        <router-link
-          v-for="album in albums"
-          :key="album.id"
-          :to="`/album/${album.id}`"
-          class="album-card"
+      <template v-if="albums.length">
+        <div class="album-grid">
+          <router-link
+            v-for="album in albums"
+            :key="album.id"
+            :to="`/album/${album.id}`"
+            class="album-card"
+          >
+            <div class="album-card__cover">
+              <img
+                v-if="album.coverUrl"
+                :src="album.coverUrl"
+                :alt="album.title"
+                loading="lazy"
+                decoding="async"
+              />
+              <div class="album-card__hover-meta">
+                <span>{{ album.typeName }}</span>
+                <strong>{{ album.artist }}</strong>
+                <small v-if="album.publishTime">{{ album.publishTime }}</small>
+                <small v-if="album.songCount">{{ album.songCount }} 首歌</small>
+              </div>
+              <span class="album-card__play"><Play :size="20" fill="currentColor" /></span>
+            </div>
+            <strong>{{ album.title }}</strong>
+          </router-link>
+          <article
+            v-for="item in loadingMore ? ALBUM_LOAD_MORE_SKELETON_COUNT : 0"
+            :key="`album-load-more-skeleton-${item}`"
+            class="skeleton-playlist-card"
+          >
+            <span class="skeleton-cover" />
+            <span class="skeleton-line skeleton-line--playlist" />
+            <span class="skeleton-line skeleton-line--playlist-short" />
+          </article>
+        </div>
+        <div
+          ref="loadMoreTrigger"
+          class="album-scroll-sentinel"
+          aria-live="polite"
         >
-          <div class="album-card__cover">
-            <img
-              v-if="album.coverUrl"
-              :src="album.coverUrl"
-              :alt="album.title"
-              loading="lazy"
-              decoding="async"
-            />
-            <em>{{ album.typeName }}</em>
-            <span><Play :size="20" fill="currentColor" /></span>
-          </div>
-          <strong>{{ album.title }}</strong>
-          <small class="album-card__artist">{{ album.artist }}</small>
-          <small class="album-card__meta">
-            {{ [album.publishTime, album.songCount ? `${album.songCount} 首歌` : ''].filter(Boolean).join(' · ') }}
-          </small>
-        </router-link>
-      </div>
+          <button
+            v-if="error && albums.length"
+            type="button"
+            @click="loadMore({ force: true })"
+          >
+            加载失败，重试
+          </button>
+        </div>
+      </template>
       <div v-else class="album-empty">暂无专辑数据</div>
-
-      <div v-if="hasMore || loadingMore" class="album-more-row">
-        <button type="button" :disabled="loadingMore" @click="loadMore">
-          {{ loadingMore ? '正在加载...' : '加载更多' }}
-        </button>
-      </div>
     </template>
   </section>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Disc3, Play } from 'lucide-vue-next'
 import SectionTitle from '../../components/SectionTitle.vue'
 import { getAlbumsDiscoveryData } from '../../services/netease'
@@ -165,6 +142,7 @@ import { getAlbumsDiscoveryData } from '../../services/netease'
 const ALBUM_LIMIT = 36
 const ALBUM_SKELETON_COUNT = 18
 const ALBUM_RANK_SKELETON_COUNT = 10
+const ALBUM_LOAD_MORE_SKELETON_COUNT = 6
 const albumAreas = [
   { label: '全部', value: 'ALL' },
   { label: '华语', value: 'ZH' },
@@ -177,13 +155,16 @@ const activeArea = ref('ALL')
 const loading = ref(false)
 const loadingMore = ref(false)
 const error = ref(null)
-const newestAlbum = ref(null)
 const topAlbums = ref([])
 const albums = ref([])
 const total = ref(0)
 const hasMore = ref(false)
 const albumOffset = ref(0)
+const pageRoot = ref(null)
+const loadMoreTrigger = ref(null)
 let albumRequestId = 0
+let loadMoreObserver = null
+let loadMoreScrollRoot = null
 
 const activeAreaLabel = computed(() =>
   albumAreas.find((area) => area.value === activeArea.value)?.label || '全部'
@@ -191,6 +172,10 @@ const activeAreaLabel = computed(() =>
 
 onMounted(() => {
   loadData({ reset: true })
+})
+
+onBeforeUnmount(() => {
+  disconnectLoadMoreObserver()
 })
 
 function selectArea(area) {
@@ -206,8 +191,13 @@ function reload() {
   loadData({ reset: true })
 }
 
-function loadMore() {
-  if (loading.value || loadingMore.value || !hasMore.value) {
+function loadMore({ force = false } = {}) {
+  if (
+    loading.value ||
+    loadingMore.value ||
+    !hasMore.value ||
+    (error.value && !force)
+  ) {
     return
   }
 
@@ -218,6 +208,7 @@ async function loadData({ reset = true } = {}) {
   const requestId = ++albumRequestId
 
   if (reset) {
+    disconnectLoadMoreObserver()
     loading.value = true
     albums.value = []
     albumOffset.value = 0
@@ -241,7 +232,6 @@ async function loadData({ reset = true } = {}) {
     }
 
     if (reset) {
-      newestAlbum.value = data.newestAlbum
       topAlbums.value = data.topAlbums
       albums.value = data.albums
     } else {
@@ -262,6 +252,7 @@ async function loadData({ reset = true } = {}) {
     if (requestId === albumRequestId) {
       loading.value = false
       loadingMore.value = false
+      nextTick(setupLoadMoreObserver)
     }
   }
 }
@@ -280,5 +271,85 @@ function mergeAlbums(currentAlbums, nextAlbums) {
       return true
     })
   ]
+}
+
+function setupLoadMoreObserver() {
+  disconnectLoadMoreObserver()
+
+  if (
+    !hasMore.value ||
+    (error.value && albums.value.length)
+  ) {
+    return
+  }
+
+  loadMoreScrollRoot = getScrollRoot()
+
+  if (loadMoreScrollRoot) {
+    loadMoreScrollRoot.addEventListener('scroll', handleLoadMoreScroll, { passive: true })
+  }
+
+  if (loadMoreTrigger.value && typeof IntersectionObserver !== 'undefined') {
+    loadMoreObserver = new IntersectionObserver(handleLoadMoreIntersect, {
+      root: loadMoreScrollRoot,
+      rootMargin: '360px 0px 360px',
+      threshold: 0
+    })
+    loadMoreObserver.observe(loadMoreTrigger.value)
+  }
+
+  handleLoadMoreScroll()
+}
+
+function handleLoadMoreIntersect(entries) {
+  if (entries.some((entry) => entry.isIntersecting)) {
+    loadMore()
+  }
+}
+
+function handleLoadMoreScroll() {
+  if (
+    loading.value ||
+    loadingMore.value ||
+    !hasMore.value ||
+    (error.value && albums.value.length)
+  ) {
+    return
+  }
+
+  const root = loadMoreScrollRoot || getScrollRoot()
+
+  if (!root) {
+    return
+  }
+
+  const distanceToBottom = root.scrollHeight - root.scrollTop - root.clientHeight
+
+  if (distanceToBottom <= 360) {
+    loadMore()
+  }
+}
+
+function getScrollRoot() {
+  return loadMoreTrigger.value?.closest('.view') || pageRoot.value?.closest('.view') || null
+}
+
+function disconnectLoadMoreObserver() {
+  if (!loadMoreObserver) {
+    if (loadMoreScrollRoot) {
+      loadMoreScrollRoot.removeEventListener('scroll', handleLoadMoreScroll)
+      loadMoreScrollRoot = null
+    }
+
+    return
+  }
+
+  loadMoreObserver.disconnect()
+  loadMoreObserver = null
+
+  if (loadMoreScrollRoot) {
+    loadMoreScrollRoot.removeEventListener('scroll', handleLoadMoreScroll)
+    loadMoreScrollRoot = null
+  }
 }
 </script>

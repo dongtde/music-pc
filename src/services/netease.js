@@ -3,7 +3,6 @@ import {
   getAlbumComments,
   getAlbumDetail,
   getAlbumDynamic,
-  getAlbumNewest,
   getArtistAlbums,
   getArtistDesc,
   getArtistDetail,
@@ -381,8 +380,7 @@ function getArtistToplistCached() {
 
 export async function getAlbumsDiscoveryData({ area = 'ALL', limit = 36, offset = 0 } = {}) {
   const shouldLoadFeatured = offset <= 0
-  const [newestResponse, newAlbumResponse, topResponse] = await Promise.all([
-    shouldLoadFeatured ? getAlbumNewest().catch(() => ({})) : Promise.resolve({}),
+  const [newAlbumResponse, topResponse] = await Promise.all([
     getNewAlbums({ area, limit, offset }).catch(() => ({})),
     shouldLoadFeatured
       ? getTopAlbums({ area, type: 'hot', limit: 16, offset: 0 }).catch(() => ({}))
@@ -392,7 +390,6 @@ export async function getAlbumsDiscoveryData({ area = 'ALL', limit = 36, offset 
   const total = newAlbumResponse.total ?? albums.length
 
   return {
-    newestAlbum: mapAlbumNewest(newestResponse) || (albums[0] ? mapAlbumCard(albums[0], 0) : null),
     albums: albums.map((album, index) => mapAlbumCard(album, offset + index)),
     topAlbums: getTopAlbumList(topResponse).map(mapAlbumCard).slice(0, 10),
     total,
@@ -601,12 +598,6 @@ function getArtistDynamicVideoCount(videoNum = []) {
   const value = totalItem?.num ?? mvItem?.num
 
   return Number.isFinite(Number(value)) ? Number(value) : undefined
-}
-
-function mapAlbumNewest(response = {}) {
-  const album = response.albums?.[0] ?? response.album ?? null
-
-  return album ? mapAlbumCard(album, 0) : null
 }
 
 function getTopAlbumList(response = {}) {
