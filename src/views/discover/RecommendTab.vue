@@ -15,31 +15,51 @@
       </div>
 
       <section class="skeleton-section">
-        <span class="skeleton-title" />
-        <div class="playlist-grid playlist-grid--recommend">
-          <article
-            v-for="item in 12"
-            :key="`recommend-skeleton-${item}`"
-            class="skeleton-playlist-card"
+        <div class="section-head recommend-carousel-head">
+          <span class="skeleton-title" />
+          <span
+            v-if="recommendSkeletonCarouselNeeded"
+            class="recommend-carousel-actions recommend-carousel-actions--skeleton"
           >
-            <span class="skeleton-cover" />
-            <span class="skeleton-line skeleton-line--playlist" />
-            <span class="skeleton-line skeleton-line--playlist-short" />
-          </article>
+            <span class="skeleton-carousel-button" />
+          </span>
+        </div>
+        <div class="recommend-carousel recommend-carousel--skeleton">
+          <div class="recommend-carousel__skeleton-track">
+            <article
+              v-for="item in 12"
+              :key="`recommend-skeleton-${item}`"
+              class="skeleton-playlist-card"
+            >
+              <span class="skeleton-cover" />
+              <span class="skeleton-line skeleton-line--playlist" />
+              <span class="skeleton-line skeleton-line--playlist-short" />
+            </article>
+          </div>
         </div>
       </section>
 
       <section class="skeleton-section">
-        <span class="skeleton-title skeleton-title--small" />
-        <div class="playlist-grid playlist-grid--latest">
-          <article
-            v-for="item in 6"
-            :key="`latest-skeleton-${item}`"
-            class="skeleton-playlist-card"
+        <div class="section-head recommend-carousel-head">
+          <span class="skeleton-title skeleton-title--small" />
+          <span
+            v-if="latestSkeletonCarouselNeeded"
+            class="recommend-carousel-actions recommend-carousel-actions--skeleton"
           >
-            <span class="skeleton-cover" />
-            <span class="skeleton-line skeleton-line--playlist" />
-          </article>
+            <span class="skeleton-carousel-button" />
+          </span>
+        </div>
+        <div class="recommend-carousel recommend-carousel--skeleton">
+          <div class="recommend-carousel__skeleton-track recommend-carousel__skeleton-track--latest">
+            <article
+              v-for="item in 6"
+              :key="`latest-skeleton-${item}`"
+              class="skeleton-playlist-card"
+            >
+              <span class="skeleton-cover" />
+              <span class="skeleton-line skeleton-line--playlist" />
+            </article>
+          </div>
         </div>
       </section>
 
@@ -168,23 +188,87 @@
       </div>
     </section>
 
-    <SectionTitle title="推荐歌单" />
-    <div class="playlist-grid playlist-grid--recommend">
-      <PlaylistCard
-        v-for="playlist in recommendPlaylists"
-        :key="playlist.id"
-        :playlist="playlist"
-      />
+    <div class="section-head recommend-carousel-head">
+      <SectionTitle title="推荐歌单" compact />
+      <div
+        v-if="recommendCarouselNeeded"
+        class="recommend-carousel-actions"
+        aria-label="推荐歌单翻页"
+      >
+        <button
+          v-if="recommendCarouselPageIndex > 0"
+          class="recommend-carousel-button"
+          type="button"
+          aria-label="上一组推荐歌单"
+          @click="moveRecommendCarousel(-1)"
+        >
+          <ChevronLeft :size="18" />
+        </button>
+        <button
+          v-if="recommendCarouselPageIndex < recommendCarouselLastPage"
+          class="recommend-carousel-button"
+          type="button"
+          aria-label="下一组推荐歌单"
+          @click="moveRecommendCarousel(1)"
+        >
+          <ChevronRight :size="18" />
+        </button>
+      </div>
     </div>
-
-    <section class="latest-section">
-      <SectionTitle title="最新歌单" />
-      <div class="playlist-grid playlist-grid--latest">
+    <div class="recommend-carousel">
+      <div
+        ref="recommendPlaylistTrack"
+        class="recommend-carousel__track"
+        aria-label="推荐歌单列表"
+      >
         <PlaylistCard
-          v-for="playlist in latestPlaylistCards"
+          v-for="playlist in recommendPlaylists"
           :key="playlist.id"
           :playlist="playlist"
         />
+      </div>
+    </div>
+
+    <section class="latest-section">
+      <div class="section-head recommend-carousel-head">
+        <SectionTitle title="最新歌单" compact />
+        <div
+          v-if="latestCarouselNeeded"
+          class="recommend-carousel-actions"
+          aria-label="最新歌单翻页"
+        >
+          <button
+            v-if="latestCarouselPageIndex > 0"
+            class="recommend-carousel-button"
+            type="button"
+            aria-label="上一组最新歌单"
+            @click="moveLatestCarousel(-1)"
+          >
+            <ChevronLeft :size="18" />
+          </button>
+          <button
+            v-if="latestCarouselPageIndex < latestCarouselLastPage"
+            class="recommend-carousel-button"
+            type="button"
+            aria-label="下一组最新歌单"
+            @click="moveLatestCarousel(1)"
+          >
+            <ChevronRight :size="18" />
+          </button>
+        </div>
+      </div>
+      <div class="recommend-carousel">
+        <div
+          ref="latestPlaylistTrack"
+          class="recommend-carousel__track recommend-carousel__track--latest"
+          aria-label="最新歌单列表"
+        >
+          <PlaylistCard
+            v-for="playlist in latestPlaylistCards"
+            :key="playlist.id"
+            :playlist="playlist"
+          />
+        </div>
       </div>
     </section>
 
@@ -289,7 +373,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import {
   AudioLines,
   ChevronLeft,
@@ -310,6 +394,9 @@ import { getHomeDiscoverData } from '../../services/netease';
 import { usePlayerStore } from '../../stores/player';
 
 const HOME_SKELETON_MIN_MS = 360;
+const RECOMMEND_CAROUSEL_ROWS = 2;
+const LATEST_CAROUSEL_ROWS = 1;
+const PLAYLIST_CAROUSEL_SMALL_QUERY = '(max-width: 1400px)';
 
 const player = usePlayerStore();
 const fallbackRecommendPlaylists = [
@@ -322,6 +409,11 @@ const latestPlaylistCards = ref(fallbackLatestPlaylistCards);
 const homeRecommendedSingles = ref(recommendedSingles);
 const homeRecommendedMvs = ref(recommendedMvs);
 const isHomeLoading = ref(true);
+const playlistCarouselColumns = ref(6);
+const recommendCarouselPageIndex = ref(0);
+const latestCarouselPageIndex = ref(0);
+const recommendPlaylistTrack = ref(null);
+const latestPlaylistTrack = ref(null);
 const fallbackHeroSlides = [
   {
     id: 'exclusive',
@@ -354,7 +446,40 @@ const fallbackHeroSlides = [
 const heroSlides = ref(fallbackHeroSlides);
 const activeHeroIndex = ref(0);
 const heroLastIndex = computed(() => heroSlides.value.length - 1);
+const recommendCarouselPageStarts = computed(() =>
+  getPlaylistCarouselPageStarts(
+    recommendPlaylists.value.length,
+    RECOMMEND_CAROUSEL_ROWS,
+    playlistCarouselColumns.value
+  )
+);
+const recommendCarouselLastPage = computed(() =>
+  Math.max(recommendCarouselPageStarts.value.length - 1, 0)
+);
+const recommendCarouselNeeded = computed(() => recommendCarouselLastPage.value > 0);
+const latestCarouselPageStarts = computed(() =>
+  getPlaylistCarouselPageStarts(
+    latestPlaylistCards.value.length,
+    LATEST_CAROUSEL_ROWS,
+    playlistCarouselColumns.value
+  )
+);
+const latestCarouselLastPage = computed(() =>
+  Math.max(latestCarouselPageStarts.value.length - 1, 0)
+);
+const latestCarouselNeeded = computed(() => latestCarouselLastPage.value > 0);
+const recommendSkeletonCarouselNeeded = computed(
+  () =>
+    getPlaylistCarouselPageStarts(12, RECOMMEND_CAROUSEL_ROWS, playlistCarouselColumns.value)
+      .length > 1
+);
+const latestSkeletonCarouselNeeded = computed(
+  () =>
+    getPlaylistCarouselPageStarts(6, LATEST_CAROUSEL_ROWS, playlistCarouselColumns.value)
+      .length > 1
+);
 let heroTimer;
+let playlistCarouselMediaQuery;
 
 function setHeroSlide(index) {
   activeHeroIndex.value = index;
@@ -394,6 +519,127 @@ function stopHeroAutoplay() {
   }
 }
 
+function getPlaylistCarouselPageStarts(itemCount, rows, visibleColumns) {
+  const totalColumns = Math.ceil(itemCount / rows);
+  const maxStartColumn = Math.max(totalColumns - visibleColumns, 0);
+  const starts = [];
+
+  for (
+    let startColumn = 0;
+    startColumn <= maxStartColumn;
+    startColumn += visibleColumns
+  ) {
+    starts.push(startColumn);
+  }
+
+  if (!starts.length) {
+    return [0];
+  }
+
+  if (starts[starts.length - 1] !== maxStartColumn) {
+    starts.push(maxStartColumn);
+  }
+
+  return starts;
+}
+
+function clampPlaylistCarouselPages() {
+  recommendCarouselPageIndex.value = Math.min(
+    recommendCarouselPageIndex.value,
+    recommendCarouselLastPage.value
+  );
+  latestCarouselPageIndex.value = Math.min(
+    latestCarouselPageIndex.value,
+    latestCarouselLastPage.value
+  );
+}
+
+function moveRecommendCarousel(direction) {
+  recommendCarouselPageIndex.value = Math.min(
+    Math.max(recommendCarouselPageIndex.value + direction, 0),
+    recommendCarouselLastPage.value
+  );
+  scrollPlaylistCarouselToPage(
+    recommendPlaylistTrack.value,
+    recommendCarouselPageStarts.value,
+    recommendCarouselPageIndex.value,
+    true
+  );
+}
+
+function moveLatestCarousel(direction) {
+  latestCarouselPageIndex.value = Math.min(
+    Math.max(latestCarouselPageIndex.value + direction, 0),
+    latestCarouselLastPage.value
+  );
+  scrollPlaylistCarouselToPage(
+    latestPlaylistTrack.value,
+    latestCarouselPageStarts.value,
+    latestCarouselPageIndex.value,
+    true
+  );
+}
+
+function getPlaylistCarouselScrollLeft(track, startColumn) {
+  const styles = window.getComputedStyle(track);
+  const columnGap = Number.parseFloat(styles.columnGap) || 0;
+  const columnWidth =
+    (track.clientWidth - columnGap * (playlistCarouselColumns.value - 1)) /
+    playlistCarouselColumns.value;
+
+  return startColumn * (columnWidth + columnGap);
+}
+
+function scrollPlaylistCarouselToPage(track, pageStarts, pageIndex, smooth = false) {
+  if (!track) {
+    return;
+  }
+
+  track.scrollTo({
+    left: getPlaylistCarouselScrollLeft(track, pageStarts[pageIndex] ?? 0),
+    behavior: smooth ? 'smooth' : 'auto',
+  });
+}
+
+function syncPlaylistCarouselScrollPositions(smooth = false) {
+  nextTick(() => {
+    scrollPlaylistCarouselToPage(
+      recommendPlaylistTrack.value,
+      recommendCarouselPageStarts.value,
+      recommendCarouselPageIndex.value,
+      smooth
+    );
+    scrollPlaylistCarouselToPage(
+      latestPlaylistTrack.value,
+      latestCarouselPageStarts.value,
+      latestCarouselPageIndex.value,
+      smooth
+    );
+  });
+}
+
+function syncPlaylistCarouselColumns(event) {
+  const matches =
+    event?.matches ??
+    playlistCarouselMediaQuery?.matches ??
+    window.matchMedia(PLAYLIST_CAROUSEL_SMALL_QUERY).matches;
+
+  playlistCarouselColumns.value = matches ? 5 : 6;
+  clampPlaylistCarouselPages();
+  syncPlaylistCarouselScrollPositions();
+}
+
+function setupPlaylistCarouselColumns() {
+  playlistCarouselMediaQuery = window.matchMedia(PLAYLIST_CAROUSEL_SMALL_QUERY);
+  syncPlaylistCarouselColumns();
+  playlistCarouselMediaQuery.addEventListener('change', syncPlaylistCarouselColumns);
+}
+
+function teardownPlaylistCarouselColumns() {
+  playlistCarouselMediaQuery?.removeEventListener('change', syncPlaylistCarouselColumns);
+  playlistCarouselMediaQuery = undefined;
+}
+
 async function loadHomeData() {
   const startedAt = Date.now();
 
@@ -417,12 +663,14 @@ async function loadHomeData() {
       ? data.recommendedMvs
       : recommendedMvs;
     activeHeroIndex.value = 0;
+    clampPlaylistCarouselPages();
   } catch (error) {
     console.warn('Failed to load home data from Netease API:', error);
   } finally {
     player.setQueue(homeRecommendedSingles.value);
     await waitForSkeleton(startedAt);
     isHomeLoading.value = false;
+    syncPlaylistCarouselScrollPositions();
   }
 }
 
@@ -452,8 +700,12 @@ function isCurrentSong(song) {
 }
 
 onMounted(() => {
+  setupPlaylistCarouselColumns();
   startHeroAutoplay();
   loadHomeData();
 });
-onUnmounted(stopHeroAutoplay);
+onUnmounted(() => {
+  stopHeroAutoplay();
+  teardownPlaylistCarouselColumns();
+});
 </script>

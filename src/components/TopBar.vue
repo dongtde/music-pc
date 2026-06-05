@@ -5,7 +5,13 @@
       <button type="button" aria-label="前进" @click="router.forward()"><ChevronRight :size="20" /></button>
     </div>
 
-    <div ref="searchWrap" class="top-search" :class="{ 'top-search--open': searchOpen }">
+    <div
+      ref="searchWrap"
+      class="top-search"
+      :class="{ 'top-search--open': searchExpanded }"
+      @focusout="handleSearchFocusOut"
+      @pointerdown.capture="handleSearchPointerDown"
+    >
       <n-input
         v-model:value="searchKeyword"
         round
@@ -21,8 +27,34 @@
         </template>
       </n-input>
 
-      <div v-if="searchOpen" class="search-panel">
+      <Transition name="search-panel" @after-leave="handleSearchPanelAfterLeave">
+        <div v-if="searchPanelVisible" class="search-panel" @pointerdown.prevent>
         <section v-if="!trimmedKeyword && !searchedKeyword" class="search-section">
+          <div v-if="searchHistory.length" class="search-history-block">
+            <header class="search-section__head search-section__head--controls">
+              <strong>历史搜索</strong>
+              <button
+                type="button"
+                class="mini-action search-history-clear"
+                aria-label="清空历史搜索"
+                @click="clearSearchHistory"
+              >
+                <Trash2 :size="14" />
+              </button>
+            </header>
+            <div class="search-history-list">
+              <button
+                v-for="item in searchHistory"
+                :key="item"
+                class="search-history-item"
+                type="button"
+                @click="pickKeyword(item)"
+              >
+                <Clock3 :size="14" />
+                <span>{{ item }}</span>
+              </button>
+            </div>
+          </div>
           <header class="search-section__head">
             <strong>热门搜索</strong>
             <small>{{ defaultKeyword ? `默认：${defaultKeyword}` : '发现今天大家都在听什么' }}</small>
@@ -155,7 +187,8 @@
             </button>
           </div>
         </section>
-      </div>
+        </div>
+      </Transition>
     </div>
 
     <div class="topbar__spacer" />
@@ -197,6 +230,7 @@ import {
   ChevronRight,
   Disc3,
   Flame,
+  Clock3,
   ListMusic,
   Loader2,
   Mail,
@@ -205,6 +239,7 @@ import {
   Search,
   Settings,
   Sun,
+  Trash2,
   User,
   Video
 } from 'lucide-vue-next'
@@ -243,6 +278,11 @@ const SearchGroup = defineComponent({
   }
 })
 
+const SEARCH_INPUT_TRANSITION_MS = 320
+const SEARCH_PANEL_LEAVE_MS = 220
+const SEARCH_HISTORY_KEY = 'mappic.searchHistory'
+const SEARCH_HISTORY_LIMIT = 8
+
 const searchTabs = [
   { label: '单曲', type: 1, icon: Music },
   { label: '歌手', type: 100, icon: User },
@@ -258,10 +298,12 @@ const auth = useAuthStore()
 const router = useRouter()
 const message = useMessage()
 const searchWrap = ref(null)
-const searchOpen = ref(false)
+const searchExpanded = ref(false)
+const searchPanelVisible = ref(false)
 const searchKeyword = ref('')
 const defaultKeyword = ref('')
 const hotKeywords = ref([])
+const searchHistory = ref([])
 const emptySuggestions = () => ({
   keywordSuggestions: [],
   matches: [],
@@ -280,6 +322,10 @@ const resultLoading = ref(false)
 let suggestTimer = 0
 let suggestRequestId = 0
 let resultRequestId = 0
+let searchPanelTimer = 0
+let searchPanelCloseTimer = 0
+let searchPanelLeaving = false
+let searchPointerDownInside = false
 
 const trimmedKeyword = computed(() => searchKeyword.value.trim())
 const keywordSuggestions = computed(() => suggestions.value.keywordSuggestions.slice(0, 10))
@@ -318,12 +364,15 @@ watch(trimmedKeyword, (keyword) => {
 })
 
 onMounted(() => {
+  loadSearchHistory()
   loadSearchBoot()
   document.addEventListener('pointerdown', handleOutsideClick)
 })
 
 onUnmounted(() => {
   window.clearTimeout(suggestTimer)
+  window.clearTimeout(searchPanelTimer)
+  window.clearTimeout(searchPanelCloseTimer)
   document.removeEventListener('pointerdown', handleOutsideClick)
 })
 
@@ -334,6 +383,61 @@ async function loadSearchBoot() {
     hotKeywords.value = data.hotKeywords.slice(0, 10)
   } catch (error) {
     console.warn('Failed to load search boot data:', error)
+  }
+}
+
+function loadSearchHistory() {
+  try {
+    const raw = window.localStorage.getItem(SEARCH_HISTORY_KEY)
+
+    if (!raw) {
+      searchHistory.value = []
+      return
+    }
+
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) {
+      searchHistory.value = []
+      return
+    }
+
+    searchHistory.value = parsed
+      .map((item) => String(item ?? '').trim())
+      .filter(Boolean)
+      .slice(0, SEARCH_HISTORY_LIMIT)
+  } catch (error) {
+    searchHistory.value = []
+  }
+}
+
+function persistSearchHistory(items) {
+  searchHistory.value = items
+
+  try {
+    window.localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(items))
+  } catch (error) {
+    console.warn('Failed to persist search history:', error)
+  }
+}
+
+function rememberSearchHistory(keyword) {
+  const query = String(keyword ?? '').trim()
+
+  if (!query) {
+    return
+  }
+
+  const next = [query, ...searchHistory.value.filter((item) => item !== query)].slice(0, SEARCH_HISTORY_LIMIT)
+  persistSearchHistory(next)
+}
+
+function clearSearchHistory() {
+  persistSearchHistory([])
+
+  try {
+    window.localStorage.removeItem(SEARCH_HISTORY_KEY)
+  } catch (error) {
+    console.warn('Failed to clear search history:', error)
   }
 }
 
@@ -360,7 +464,97 @@ async function loadSuggestions(keyword) {
 }
 
 function openSearchPanel() {
-  searchOpen.value = true
+  if (searchPanelVisible.value) {
+    return
+  }
+
+  if (searchPanelLeaving) {
+    window.clearTimeout(searchPanelCloseTimer)
+    searchPanelCloseTimer = 0
+    searchPanelLeaving = false
+    searchPanelVisible.value = true
+    return
+  }
+
+  if (searchPanelTimer) {
+    return
+  }
+
+  if (searchExpanded.value) {
+    searchPanelVisible.value = true
+    return
+  }
+
+  searchExpanded.value = true
+  searchPanelTimer = window.setTimeout(() => {
+    searchPanelVisible.value = true
+    searchPanelTimer = 0
+  }, SEARCH_INPUT_TRANSITION_MS)
+}
+
+function closeSearchPanel() {
+  window.clearTimeout(searchPanelTimer)
+  searchPanelTimer = 0
+
+  if (searchPanelVisible.value) {
+    searchPanelLeaving = true
+    searchPanelVisible.value = false
+    window.clearTimeout(searchPanelCloseTimer)
+    searchPanelCloseTimer = window.setTimeout(finishSearchPanelClose, SEARCH_PANEL_LEAVE_MS)
+    return
+  }
+
+  if (searchPanelLeaving) {
+    return
+  }
+
+  searchExpanded.value = false
+}
+
+function handleSearchPanelAfterLeave() {
+  if (searchPanelCloseTimer) {
+    return
+  }
+
+  finishSearchPanelClose()
+}
+
+function finishSearchPanelClose() {
+  window.clearTimeout(searchPanelCloseTimer)
+  searchPanelCloseTimer = 0
+  searchPanelLeaving = false
+
+  if (!searchPanelVisible.value) {
+    searchExpanded.value = false
+  }
+}
+
+function handleSearchPointerDown() {
+  searchPointerDownInside = true
+  window.setTimeout(() => {
+    searchPointerDownInside = false
+  }, 0)
+}
+
+function handleSearchFocusOut(event) {
+  const relatedTarget = event.relatedTarget
+
+  if (
+    searchPointerDownInside ||
+    (relatedTarget instanceof Element && searchWrap.value?.contains(relatedTarget))
+  ) {
+    return
+  }
+
+  window.requestAnimationFrame(() => {
+    const activeElement = document.activeElement
+
+    if (activeElement instanceof Element && searchWrap.value?.contains(activeElement)) {
+      return
+    }
+
+    closeSearchPanel()
+  })
 }
 
 function clearSearch() {
@@ -382,7 +576,8 @@ function submitSearch(keyword = trimmedKeyword.value || defaultKeyword.value) {
     return
   }
 
-  searchOpen.value = true
+  rememberSearchHistory(query)
+  openSearchPanel()
   searchKeyword.value = query
   searchedKeyword.value = query
   activeSearchType.value = 1
@@ -441,7 +636,7 @@ function handleSuggestionSelect(item) {
   }
 
   if (item.to) {
-    searchOpen.value = false
+    closeSearchPanel()
     router.push(item.to)
     return
   }
@@ -451,7 +646,7 @@ function handleSuggestionSelect(item) {
 
 function handleResultSelect(item) {
   if (item.to) {
-    searchOpen.value = false
+    closeSearchPanel()
     router.push(item.to)
     return
   }
@@ -509,6 +704,6 @@ function handleOutsideClick(event) {
     return
   }
 
-  searchOpen.value = false
+  closeSearchPanel()
 }
 </script>

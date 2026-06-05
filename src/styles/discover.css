@@ -1707,6 +1707,107 @@
   margin: 0;
 }
 
+.recommend-carousel-head {
+  margin-bottom: 20px;
+}
+
+.recommend-carousel-head .skeleton-title {
+  margin: 0;
+}
+
+.recommend-carousel-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.recommend-carousel-button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+  color: var(--text-soft);
+  background: var(--control-bg);
+  cursor: pointer;
+  transition:
+    background-color 220ms ease,
+    border-color 220ms ease,
+    color 220ms ease,
+    transform 220ms ease;
+}
+
+.recommend-carousel-button:hover {
+  border-color: rgba(var(--accent-rgb), 0.5);
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.12);
+  transform: translateY(-1px);
+}
+
+.recommend-carousel-button:disabled {
+  cursor: default;
+  opacity: 0.42;
+  transform: none;
+}
+
+.recommend-carousel-button:disabled:hover {
+  border-color: var(--border-subtle);
+  color: var(--text-soft);
+  background: var(--control-bg);
+}
+
+.recommend-carousel {
+  overflow: hidden;
+}
+
+.recommend-carousel__track,
+.recommend-carousel__skeleton-track {
+  display: grid;
+  grid-auto-columns: calc(16.6667% - 18.333px);
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+
+.recommend-carousel__track::-webkit-scrollbar,
+.recommend-carousel__skeleton-track::-webkit-scrollbar {
+  display: none;
+}
+
+.recommend-carousel__track--latest,
+.recommend-carousel__skeleton-track--latest {
+  grid-template-rows: 1fr;
+}
+
+.recommend-carousel-actions--skeleton {
+  pointer-events: none;
+}
+
+.skeleton-carousel-button {
+  display: block;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--skeleton-outline);
+  border-radius: 50%;
+  background:
+    linear-gradient(
+      100deg,
+      transparent 0%,
+      var(--skeleton-glint) 42%,
+      transparent 72%
+    ),
+    var(--skeleton-base);
+  background-size: 220% 100%;
+  animation: skeleton-shimmer 1500ms ease-in-out infinite;
+}
+
 .playlist-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(170px, 1fr));
@@ -2705,6 +2806,7 @@
   .skeleton-song-thumb,
   .skeleton-radio-icon,
   .skeleton-chart-summary-cover,
+  .skeleton-carousel-button,
   .skeleton-region-chart-card {
     animation: none;
   }
@@ -2751,6 +2853,16 @@
   .playlist-grid {
     gap: 20px;
     grid-template-columns: repeat(5, minmax(145px, 1fr));
+  }
+
+  .playlist-grid.playlist-grid--dense {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .recommend-carousel__track,
+  .recommend-carousel__skeleton-track {
+    grid-auto-columns: calc(20% - 12.8px);
+    gap: 22px 16px;
   }
 
   .playlist-grid--recommend {

@@ -319,9 +319,9 @@ const progressPreviewLyric = computed(() => {
 const progressTooltipPercent = computed(() =>
   Math.min(92, Math.max(8, progressPreviewPercent.value))
 )
-const queueTracks = computed(() => player.state.queue.slice(0, 8).map((song, index) => ({
+const queueTracks = computed(() => player.state.queue.map((song, index) => ({
   ...song,
-  id: song.id ?? `queue-${song.rank}`,
+  id: song.id ?? `queue-${index + 1}`,
   rank: String(index + 1).padStart(2, '0'),
   to: `/playlist/new-${String(index + 1).padStart(2, '0')}`,
   vip: Boolean(song.vip),
