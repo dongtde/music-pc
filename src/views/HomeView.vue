@@ -1,7 +1,11 @@
 <template>
   <div class="view home-view">
     <section class="soda-feed" aria-label="主页推荐听歌">
-      <nav class="soda-feed__tabs" aria-label="推荐口味">
+      <nav
+        class="soda-feed__tabs"
+        aria-label="推荐口味"
+        :style="{ '--active-tab-index': activeMoodIndex }"
+      >
         <button
           v-for="mood in moods"
           :key="mood.value"
@@ -16,9 +20,15 @@
       <div
         ref="feedScroller"
         class="soda-feed__scroller"
+        :class="{ 'soda-feed__scroller--dragging': feedDragging }"
         tabindex="0"
         @scroll="handleFeedScroll"
         @keydown="handleFeedKeydown"
+        @pointerdown="startFeedDrag"
+        @pointermove="handleFeedPointerMove"
+        @pointerup="stopFeedDrag"
+        @pointerleave="stopFeedDrag"
+        @pointercancel="stopFeedDrag"
       >
         <article
           v-for="(song, index) in recommendationQueue"
@@ -65,8 +75,8 @@
                   <AudioLines :size="16" />
                   {{ getMoodSignal(index) }}
                 </span>
-                <span class="soda-slide__meta-tag">{{ song.vip ? 'VIP 试听' : '完整播放' }}</span>
-                <span class="soda-slide__meta-tag">{{ song.hasVideo ? '有视频' : '纯音频' }}</span>
+                <span v-if="song.vip" class="soda-slide__meta-tag">VIP</span>
+                <span v-if="song.hasVideo" class="soda-slide__meta-tag">视频</span>
               </div>
               <h1>{{ song.name }}</h1>
               <p>{{ song.artist }}<span v-if="song.album"> · {{ song.album }}</span></p>
@@ -235,15 +245,24 @@ const recommendationQueue = shallowRef(applyMoodQueue(allSongs.value, activeMood
 const lyricLines = shallowRef(createLyricPlaceholder('点击播放后显示歌词'))
 const isLyricLoading = ref(false)
 const lyricsScroll = ref(null)
+const feedDragging = ref(false)
 const lyricsDragging = ref(false)
 const lyricsWheeling = ref(false)
 const previewLyricIndex = ref(null)
 const lyricsPreviewing = ref(false)
+const feedDragState = {
+  pointerId: null,
+  startIndex: 0,
+  startY: 0,
+  startScrollTop: 0,
+  moved: false
+}
 const lyricsDragState = {
   startY: 0,
   startScrollTop: 0,
   moved: false
 }
+const feedDragThreshold = 6
 const lyricsDragScrollSpeed = 2.2
 const lyricsWheelScrollSpeed = 1.2
 const lyricsLoadTimeoutMs = 12000
@@ -256,6 +275,7 @@ let autoPlayTimer = 0
 let removeTrackEndedListener = null
 let lyricRequestId = 0
 let syncedQueue = null
+let feedSnapRequestId = 0
 let lyricsPreviewFrame = 0
 let lyricsPreviewTimer = null
 let lyricsWheelTimer = null
@@ -278,7 +298,9 @@ const moodSignals = {
 const activeSong = computed(() => recommendationQueue.value[activeIndex.value])
 const activeSongId = computed(() => String(activeSong.value?.id ?? ''))
 const currentTrackId = computed(() => String(player.state.currentTrack.id ?? ''))
-const progressTick = computed(() => Math.floor(player.state.currentTime || 0))
+const activeMoodIndex = computed(() =>
+  Math.max(0, moods.findIndex((mood) => mood.value === activeMood.value))
+)
 const hydratedSlideBounds = computed(() => ({
   start: Math.max(0, activeIndex.value - slideHydrateRadius),
   end: Math.min(recommendationQueue.value.length - 1, activeIndex.value + slideHydrateRadius)
@@ -340,13 +362,16 @@ watch(activeLyricIndex, async () => {
 })
 
 onMounted(() => {
+  restoreActiveTrackPosition()
   syncPlayerQueue()
   removeTrackEndedListener = player.onTrackEnded(handleTrackEnded)
   window.addEventListener('resize', handleLyricsResize)
+  snapFeedToActiveIndex('auto')
   loadRecommendations()
 })
 
 onUnmounted(() => {
+  feedSnapRequestId += 1
   window.cancelAnimationFrame(scrollFrame)
   window.cancelAnimationFrame(resizeFrame)
   window.cancelAnimationFrame(lyricsPreviewFrame)
@@ -364,10 +389,9 @@ async function loadRecommendations() {
     const songs = data.songs.length ? data.songs : recommendedSingles
     allSongs.value = prepareQueue(songs)
     recommendationQueue.value = applyMoodQueue(allSongs.value, activeMood.value)
-    activeIndex.value = 0
+    restoreActiveTrackPosition()
     syncPlayerQueue()
-    await nextTick()
-    scrollToIndex(0, 'auto')
+    await snapFeedToActiveIndex('auto')
   } catch (error) {
     console.warn('Failed to load home recommendations:', error)
   }
@@ -380,6 +404,37 @@ function syncPlayerQueue() {
 
   syncedQueue = recommendationQueue.value
   player.setQueue(syncedQueue)
+}
+
+function restoreActiveTrackPosition() {
+  const currentId = currentTrackId.value
+  const nextIndex = recommendationQueue.value.findIndex((song) => String(song.id) === currentId)
+
+  activeIndex.value = nextIndex >= 0 ? nextIndex : 0
+}
+
+async function snapFeedToActiveIndex(behavior = 'auto') {
+  const requestId = ++feedSnapRequestId
+
+  await nextTick()
+  await waitForLayoutFrame()
+
+  if (requestId !== feedSnapRequestId) {
+    return
+  }
+
+  scrollToIndex(activeIndex.value, behavior)
+  await waitForLayoutFrame()
+
+  if (requestId === feedSnapRequestId) {
+    scrollToIndex(activeIndex.value, 'auto')
+  }
+}
+
+function waitForLayoutFrame() {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(resolve)
+  })
 }
 
 function prepareQueue(songs) {
@@ -399,13 +454,25 @@ function prepareQueue(songs) {
 
 function applyMoodQueue(songs, mood) {
   const queue = [...songs]
+  const filters = {
+    daily: (items) => items,
+    hot: (items) => items.filter((song) => song.feedSource === 'chart' || song.hasVideo),
+    new: (items) => items.filter((song) => song.feedSource === 'new'),
+    chill: (items) => items.filter((song) => getChillWeight(song) >= 2)
+  }
   const sorters = {
     daily: (items) => items,
-    hot: (items) => items.sort((current, next) => Number(next.hasVideo) - Number(current.hasVideo)),
+    hot: (items) => items.sort((current, next) =>
+      Number(next.hasVideo) - Number(current.hasVideo) ||
+      Number(next.vip) - Number(current.vip)
+    ),
     new: (items) => items.reverse(),
     chill: (items) => items.sort((current, next) => getChillWeight(next) - getChillWeight(current))
   }
-  const sortedQueue = (sorters[mood] ?? sorters.daily)(queue)
+  const filteredQueue = (filters[mood] ?? filters.daily)(queue)
+  const sortedQueue = (sorters[mood] ?? sorters.daily)(
+    filteredQueue.length ? filteredQueue : queue
+  )
 
   return sortedQueue.map((song, index) => ({
     ...song,
@@ -426,15 +493,23 @@ function getChillWeight(song) {
 }
 
 function setMood(value) {
+  if (value === activeMood.value) {
+    return
+  }
+
   activeMood.value = value
 
+  feedScroller.value?.scrollTo({
+    top: 0,
+    behavior: 'auto'
+  })
   recommendationQueue.value = applyMoodQueue(allSongs.value, value)
   activeIndex.value = 0
   syncPlayerQueue()
-  nextTick(() => scrollToIndex(0, 'smooth'))
+  nextTick(() => scrollToIndex(0, 'auto'))
 
   if (autoPlayAfterGesture.value) {
-    scheduleAutoPlay()
+    scheduleAutoPlay({ restart: true })
   }
 }
 
@@ -447,14 +522,11 @@ function handleFeedScroll() {
     scrollFrame = 0
     const scroller = feedScroller.value
 
-    if (!scroller?.clientHeight) {
+    if (!scroller?.clientHeight || !recommendationQueue.value.length) {
       return
     }
 
-    const nextIndex = Math.min(
-      recommendationQueue.value.length - 1,
-      Math.max(0, Math.round(scroller.scrollTop / scroller.clientHeight))
-    )
+    const nextIndex = getFeedIndexFromScroll()
 
     if (nextIndex === activeIndex.value) {
       return
@@ -462,10 +534,84 @@ function handleFeedScroll() {
 
     activeIndex.value = nextIndex
 
-    if (autoPlayAfterGesture.value) {
-      scheduleAutoPlay()
+    if (autoPlayAfterGesture.value && !feedDragging.value) {
+      scheduleAutoPlay({ restart: true })
     }
   })
+}
+
+function startFeedDrag(event) {
+  const scroller = feedScroller.value
+
+  if (!scroller || event.button > 0 || shouldIgnoreFeedDrag(event)) {
+    return
+  }
+
+  feedSnapRequestId += 1
+  feedDragging.value = true
+  feedDragState.pointerId = event.pointerId
+  feedDragState.startIndex = activeIndex.value
+  feedDragState.startY = event.clientY
+  feedDragState.startScrollTop = scroller.scrollTop
+  feedDragState.moved = false
+  scroller.style.scrollSnapType = 'none'
+  scroller.setPointerCapture?.(event.pointerId)
+  event.preventDefault()
+}
+
+function handleFeedPointerMove(event) {
+  const scroller = feedScroller.value
+
+  if (!scroller || !feedDragging.value || event.pointerId !== feedDragState.pointerId) {
+    return
+  }
+
+  const deltaY = event.clientY - feedDragState.startY
+
+  if (Math.abs(deltaY) < feedDragThreshold && !feedDragState.moved) {
+    return
+  }
+
+  feedDragState.moved = true
+  event.preventDefault()
+  scroller.scrollTop = feedDragState.startScrollTop - deltaY
+}
+
+function stopFeedDrag(event) {
+  if (!feedDragging.value || event.pointerId !== feedDragState.pointerId) {
+    return
+  }
+
+  const scroller = feedScroller.value
+  const shouldSnap = feedDragState.moved
+
+  scroller?.releasePointerCapture?.(event.pointerId)
+  if (scroller) {
+    scroller.style.scrollSnapType = ''
+  }
+  feedDragging.value = false
+  feedDragState.pointerId = null
+
+  if (!shouldSnap || !scroller?.clientHeight) {
+    return
+  }
+
+  const nextIndex = getFeedIndexFromScroll()
+  activeIndex.value = nextIndex
+  scrollToIndex(nextIndex, 'smooth')
+
+  if (nextIndex !== feedDragState.startIndex) {
+    autoPlayAfterGesture.value = true
+    scheduleAutoPlay({ restart: true })
+  }
+}
+
+function shouldIgnoreFeedDrag(event) {
+  const target = event.target
+
+  return Boolean(target?.closest?.(
+    '.soda-lyrics-panel, .soda-action-rail, .soda-slide__progress, button, a, input, textarea, select'
+  ))
 }
 
 function handleFeedKeydown(event) {
@@ -490,23 +636,26 @@ function scrollToIndex(index, behavior = 'smooth') {
   )
 
   scroller.scrollTo({
-    top: nextIndex * scroller.clientHeight,
+    top: getSlideTop(nextIndex),
     behavior
   })
 }
 
-function scheduleAutoPlay() {
+function scheduleAutoPlay(options = {}) {
   window.clearTimeout(autoPlayTimer)
   autoPlayTimer = window.setTimeout(() => {
-    playActiveSong({ auto: true })
+    playActiveSong({ auto: true, restart: true, ...options })
   }, 180)
 }
 
 async function playSongFromGesture(index) {
   autoPlayAfterGesture.value = true
+  const shouldScroll = index !== activeIndex.value
   activeIndex.value = index
   await nextTick()
-  scrollToIndex(index, 'smooth')
+  if (shouldScroll) {
+    scrollToIndex(index, 'smooth')
+  }
   await playActiveSong()
 }
 
@@ -530,7 +679,7 @@ async function handleTrackEnded() {
   autoPlayAfterGesture.value = true
   activeIndex.value = (activeIndex.value + 1) % recommendationQueue.value.length
   scrollToIndex(activeIndex.value, 'smooth')
-  await playActiveSong({ auto: true })
+  await playActiveSong({ auto: true, restart: true })
 }
 
 async function loadActiveLyrics(trackId) {
@@ -573,6 +722,38 @@ async function loadActiveLyrics(trackId) {
   if (requestId === lyricRequestId) {
     await refreshLyricsLayout('auto')
   }
+}
+
+function getFeedIndexFromScroll() {
+  const scroller = feedScroller.value
+
+  if (!scroller?.clientHeight || !recommendationQueue.value.length) {
+    return activeIndex.value
+  }
+
+  let nearestIndex = activeIndex.value
+  let nearestDistance = Number.POSITIVE_INFINITY
+
+  Array.from(scroller.children).forEach((slide, index) => {
+    const distance = Math.abs(slide.offsetTop - scroller.scrollTop)
+
+    if (distance < nearestDistance) {
+      nearestDistance = distance
+      nearestIndex = index
+    }
+  })
+
+  return Math.min(
+    recommendationQueue.value.length - 1,
+    Math.max(0, nearestIndex)
+  )
+}
+
+function getSlideTop(index) {
+  const scroller = feedScroller.value
+  const slide = scroller?.children[index]
+
+  return slide?.offsetTop ?? index * (scroller?.clientHeight || 0)
 }
 
 async function getCachedTrackLyrics(trackId) {
@@ -624,6 +805,22 @@ async function playActiveSong(options = {}) {
   syncPlayerQueue()
 
   if (String(player.state.currentTrack.id) === String(song.id)) {
+    if (options.restart) {
+      player.seekTo(0)
+
+      if (!player.state.isPlaying) {
+        const resumed = await player.togglePlay()
+        showPlaybackError(resumed)
+
+        if (!resumed) {
+          return
+        }
+      }
+
+      loadActiveLyrics(song.id)
+      return
+    }
+
     if (options.auto && player.state.isPlaying) {
       return
     }

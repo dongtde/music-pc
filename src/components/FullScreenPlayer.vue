@@ -227,7 +227,7 @@ watch(
       coverFlightActive.value = Boolean(sourceRect);
       await nextTick();
       await waitForLayoutFrame();
-      centerCurrentLyric('auto');
+      refreshLyricsLayout('auto');
       playCoverFlight('enter', { sourceRect });
       return;
     }
@@ -262,6 +262,7 @@ watch(currentLyricIndex, async () => {
   }
 
   await nextTick();
+  updateLyricsEdgePadding();
   centerCurrentLyric();
 });
 
@@ -287,8 +288,7 @@ async function loadTrackLyrics(trackId) {
 
   if (!isNeteaseTrackId(trackId)) {
     lyricLines.value = createLyricPlaceholder(trackId ? '暂无歌词' : '无播放歌曲');
-    await nextTick();
-    centerCurrentLyric('auto');
+    await refreshLyricsLayout('auto');
     return;
   }
 
@@ -312,8 +312,7 @@ async function loadTrackLyrics(trackId) {
     lyricLines.value = createLyricPlaceholder('歌词加载失败');
   }
 
-  await nextTick();
-  centerCurrentLyric('auto');
+  await refreshLyricsLayout('auto');
 }
 
 function syncPlaybackLyric(currentTime) {
@@ -527,6 +526,29 @@ function clearLyricsWheelTimer() {
   }
 }
 
+async function refreshLyricsLayout(behavior = 'smooth') {
+  await nextTick();
+  updateLyricsEdgePadding();
+  centerCurrentLyric(behavior);
+}
+
+function updateLyricsEdgePadding() {
+  const scroller = lyricsScroll.value;
+
+  if (!scroller) {
+    return;
+  }
+
+  const activeLine = scroller.querySelector(
+    `[data-lyric-index="${currentLyricIndex.value}"]`,
+  );
+  const firstLine = scroller.querySelector('[data-lyric-index="0"]');
+  const lineHeight = activeLine?.offsetHeight || firstLine?.offsetHeight || 86;
+  const edgePadding = Math.max(0, scroller.clientHeight / 2 - lineHeight / 2);
+
+  scroller.style.setProperty('--full-player-lyrics-edge-padding', `${edgePadding}px`);
+}
+
 function centerCurrentLyric(behavior = 'smooth') {
   const scroller = lyricsScroll.value;
   const lyricIndex = currentLyricIndex.value;
@@ -553,6 +575,7 @@ function centerCurrentLyric(behavior = 'smooth') {
 }
 
 function handleLyricsResize() {
+  updateLyricsEdgePadding();
   centerCurrentLyric('auto');
 }
 

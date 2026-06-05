@@ -212,9 +212,11 @@ button {
 
 .sidebar--compact .profile {
   display: grid;
-  height: 52px;
+  width: 44px;
+  height: 44px;
   grid-template-columns: 1fr;
   justify-items: center;
+  margin: 0 auto;
   padding: 0;
 }
 
@@ -254,8 +256,8 @@ button {
 }
 
 .sidebar--compact .profile-avatar {
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   box-shadow: none;
 }
 
@@ -307,6 +309,12 @@ button {
 
 .sidebar--compact .nav-group {
   margin-bottom: 12px;
+}
+
+.sidebar--compact .nav-groups {
+  display: grid;
+  justify-items: center;
+  padding-right: 0;
 }
 
 .nav-title {
@@ -378,13 +386,16 @@ button {
   height: 44px;
   justify-content: center;
   gap: 0;
+  margin: 0 auto;
   padding: 0;
   color: rgba(255, 255, 255, 0.76);
 }
 
 .sidebar--compact .nav-item span,
 .sidebar--compact .nav-item em {
+  flex: 0 0 0;
   width: 0;
+  margin-left: 0;
   opacity: 0;
   overflow: hidden;
   pointer-events: none;

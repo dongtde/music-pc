@@ -64,7 +64,9 @@ export async function getMusicFeedData({ limit = 80 } = {}) {
     getPersonalizedNewSongs({ limit }).catch(() => ({})),
     getToplist().catch(() => ({}))
   ])
-  const personalizedSongs = (newsongResponse.result ?? []).map(mapNewsong)
+  const personalizedSongs = (newsongResponse.result ?? [])
+    .map(mapNewsong)
+    .map((song) => ({ ...song, feedSource: 'new' }))
   const toplists = toplistResponse.list ?? []
   const feedToplists = [
     ...toplists.filter((item) => /热歌|新歌|原创|飙升/.test(item.name || '')),
@@ -84,7 +86,10 @@ export async function getMusicFeedData({ limit = 80 } = {}) {
       getPlaylistTracks({ id: item.id, limit, offset: 0 }).catch(() => ({ songs: [] }))
     )
   )
-  const chartSongs = trackResponses.flatMap((response) => response.songs ?? []).map(mapPlaylistTrack)
+  const chartSongs = trackResponses
+    .flatMap((response) => response.songs ?? [])
+    .map(mapPlaylistTrack)
+    .map((song) => ({ ...song, feedSource: 'chart' }))
 
   return {
     songs: uniqueSongs([...personalizedSongs, ...chartSongs])
