@@ -536,6 +536,86 @@
   transition: width 160ms linear;
 }
 
+.soda-danmaku {
+  position: absolute;
+  inset: 92px 116px 122px 64px;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+  mask-image: linear-gradient(90deg, transparent 0%, #000 8%, #000 86%, transparent 100%);
+}
+
+.soda-danmaku__item {
+  position: absolute;
+  top: var(--danmaku-top, 12%);
+  left: 100%;
+  display: inline-flex;
+  max-width: min(44vw, 480px);
+  height: 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 0 7px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(10, 10, 12, 0.42);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(14px);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  opacity: 0.88;
+  text-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
+  transform: translate3d(18vw, 0, 0) scale(var(--danmaku-scale, 1));
+  animation: soda-danmaku-fly var(--danmaku-duration, 20s) linear infinite;
+  animation-delay: var(--danmaku-delay, 0s);
+  white-space: nowrap;
+  will-change: transform;
+}
+
+.soda-danmaku__item--hot {
+  border-color: rgba(var(--accent-rgb), 0.34);
+  color: #ffffff;
+  background: linear-gradient(
+    90deg,
+    rgba(var(--accent-rgb), 0.38),
+    rgba(8, 8, 10, 0.38) 58%
+  );
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.28),
+    0 0 20px rgba(var(--accent-rgb), 0.18);
+}
+
+.soda-danmaku__item--fallback {
+  opacity: 0.74;
+}
+
+.soda-danmaku__avatar {
+  display: grid;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.soda-danmaku__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.soda-danmaku__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .soda-action-rail {
   position: absolute;
   right: 64px;
@@ -673,10 +753,24 @@
   }
 }
 
+@keyframes soda-danmaku-fly {
+  to {
+    transform: translate3d(calc(-120vw - 100%), 0, 0) scale(var(--danmaku-scale, 1));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .soda-slide__disc--playing,
-  .soda-spin {
+  .soda-spin,
+  .soda-danmaku__item {
     animation: none;
+  }
+
+  .soda-danmaku__item {
+    right: calc(12px + var(--danmaku-lane, 0) * 10px);
+    left: auto;
+    opacity: 0.66;
+    transform: translate3d(0, 0, 0) scale(var(--danmaku-scale, 1));
   }
 }
 
@@ -703,6 +797,10 @@
     width: min(100%, 420px);
   }
 
+  .soda-danmaku {
+    inset: 84px 96px 118px 46px;
+  }
+
   .soda-action-rail {
     right: 48px;
     bottom: 72px;
@@ -726,6 +824,14 @@
 
   .soda-lyrics-list span {
     font-size: 16px;
+  }
+
+  .soda-danmaku {
+    inset: 78px 82px 116px 30px;
+  }
+
+  .soda-danmaku__item {
+    max-width: min(50vw, 360px);
   }
 
   .soda-action-rail {

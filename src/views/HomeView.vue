@@ -148,6 +148,15 @@
             </div>
           </section>
 
+          <DanmakuLayer
+            v-if="index === activeIndex"
+            :key="`danmaku-${song.id}-${songCommentTrackId}`"
+            :enabled="danmakuEnabled"
+            :song="song"
+            :hot-comments="activeDanmakuHotComments"
+            :comments="activeDanmakuComments"
+          />
+
           <aside class="soda-action-rail" aria-label="歌曲操作">
             <button
               type="button"
@@ -173,6 +182,16 @@
               <span v-if="getSongCommentLabel(song)" class="soda-action-rail__count">
                 {{ getSongCommentLabel(song) }}
               </span>
+            </button>
+            <button
+              type="button"
+              :aria-label="danmakuEnabled ? '关闭弹幕' : '开启弹幕'"
+              :title="danmakuEnabled ? '关闭弹幕' : '开启弹幕'"
+              :class="{ active: danmakuEnabled }"
+              @click.stop="toggleDanmaku"
+            >
+              <Radio :size="24" />
+              <span class="soda-action-rail__label">{{ danmakuEnabled ? '弹幕开' : '弹幕' }}</span>
             </button>
             <button type="button" aria-label="下一首" title="下一首" @click.stop="goNextFromGesture">
               <SkipForward :size="24" />
@@ -249,9 +268,11 @@ import {
   MessageCircleMore,
   Pause,
   Play,
+  Radio,
   SkipForward
 } from 'lucide-vue-next'
 import CommentModal from '../components/CommentModal.vue'
+import DanmakuLayer from '../components/DanmakuLayer.vue'
 import { recommendedSingles } from '../data/music'
 import {
   getMusicFeedData,
@@ -283,6 +304,7 @@ const lyricsDragging = ref(false)
 const lyricsWheeling = ref(false)
 const previewLyricIndex = ref(null)
 const lyricsPreviewing = ref(false)
+const danmakuEnabled = ref(true)
 const songCommentsModalVisible = ref(false)
 const songCommentSong = ref(null)
 const songHotComments = ref([])
@@ -382,6 +404,12 @@ const songCommentSubtitle = computed(() => {
 const displaySongCommentTotal = computed(() =>
   songCommentTotal.value || getSongCommentCount(songCommentSong.value)
 )
+const activeDanmakuHotComments = computed(() =>
+  String(songCommentTrackId.value) === activeSongId.value ? songHotComments.value : []
+)
+const activeDanmakuComments = computed(() =>
+  String(songCommentTrackId.value) === activeSongId.value ? songComments.value : []
+)
 
 watch(
   () => player.state.currentTrack.id,
@@ -406,9 +434,16 @@ watch(
   (trackId) => {
     loadActiveLyrics(trackId)
     loadActiveSongStats(trackId)
+    preloadActiveSongComments()
   },
   { immediate: true }
 )
+
+watch(danmakuEnabled, (enabled) => {
+  if (enabled) {
+    preloadActiveSongComments()
+  }
+})
 
 watch(activeLyricIndex, async () => {
   if (lyricsInteractionActive.value) {
@@ -992,6 +1027,38 @@ async function openSongCommentsModal(song = activeSong.value) {
   if (
     String(songCommentTrackId.value) === trackId &&
     (songComments.value.length || songCommentsLoading.value)
+  ) {
+    return
+  }
+
+  resetSongComments()
+  await loadSongComments(trackId, true)
+}
+
+function toggleDanmaku() {
+  danmakuEnabled.value = !danmakuEnabled.value
+}
+
+async function preloadActiveSongComments(song = activeSong.value) {
+  if (!danmakuEnabled.value || !song) {
+    return
+  }
+
+  const trackId = String(song.id ?? '')
+
+  songCommentSong.value = song
+
+  if (!isNeteaseTrackId(trackId)) {
+    if (String(songCommentTrackId.value) !== trackId) {
+      resetSongComments()
+      songCommentTrackId.value = trackId
+    }
+    return
+  }
+
+  if (
+    String(songCommentTrackId.value) === trackId &&
+    (songHotComments.value.length || songComments.value.length || songCommentsLoading.value)
   ) {
     return
   }
