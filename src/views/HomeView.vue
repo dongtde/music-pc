@@ -150,6 +150,35 @@
 
           <aside class="soda-action-rail" aria-label="歌曲操作">
             <button
+              type="button"
+              :aria-label="`${isLiked(song) ? '取消喜欢' : '喜欢'} ${getSongLikeLabel(song)}`"
+              :title="isLiked(song) ? '取消喜欢' : '喜欢'"
+              :class="{ active: isLiked(song) }"
+              @click.stop="toggleLike(song)"
+            >
+              <Heart :size="24" :fill="isLiked(song) ? 'currentColor' : 'none'" />
+              <span class="soda-action-rail__label">{{ isLiked(song) ? '已喜欢' : '喜欢' }}</span>
+              <span v-if="getSongLikeLabel(song)" class="soda-action-rail__count">
+                {{ getSongLikeLabel(song) }}
+              </span>
+            </button>
+            <button
+              type="button"
+              :aria-label="`评论 ${getSongCommentLabel(song)}`"
+              title="评论"
+              @click.stop="showCommentHint"
+            >
+              <MessageCircleMore :size="24" />
+              <span class="soda-action-rail__label">评论</span>
+              <span v-if="getSongCommentLabel(song)" class="soda-action-rail__count">
+                {{ getSongCommentLabel(song) }}
+              </span>
+            </button>
+            <button type="button" aria-label="下一首" title="下一首" @click.stop="goNextFromGesture">
+              <SkipForward :size="24" />
+              <span class="soda-action-rail__label">下一首</span>
+            </button>
+            <button
               class="soda-action-rail__play"
               type="button"
               :aria-label="getPlayLabel(song)"
@@ -164,25 +193,7 @@
               />
               <Pause v-else-if="isSongPlaying(song)" :size="26" fill="currentColor" />
               <Play v-else :size="26" fill="currentColor" />
-              <span>{{ isSongPlaying(song) ? '暂停' : '播放' }}</span>
-            </button>
-            <button
-              type="button"
-              :aria-label="isLiked(song) ? '取消喜欢' : '喜欢'"
-              :title="isLiked(song) ? '取消喜欢' : '喜欢'"
-              :class="{ active: isLiked(song) }"
-              @click.stop="toggleLike(song)"
-            >
-              <Heart :size="24" :fill="isLiked(song) ? 'currentColor' : 'none'" />
-              <span>{{ isLiked(song) ? '已喜欢' : '喜欢' }}</span>
-            </button>
-            <button type="button" aria-label="评论" title="评论" @click.stop="showCommentHint">
-              <MessageCircleMore :size="24" />
-              <span>评论</span>
-            </button>
-            <button type="button" aria-label="下一首" title="下一首" @click.stop="goNextFromGesture">
-              <SkipForward :size="24" />
-              <span>下一首</span>
+              <span class="soda-action-rail__label">{{ isSongPlaying(song) ? '暂停' : '播放' }}</span>
             </button>
           </aside>
 
@@ -228,7 +239,7 @@ import {
   SkipForward
 } from 'lucide-vue-next'
 import { recommendedSingles } from '../data/music'
-import { getMusicFeedData, getTrackLyricData } from '../services/netease'
+import { getMusicFeedData, getSongInteractionStatsData, getTrackLyricData } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
 import '../styles/home.css'
 
@@ -239,6 +250,7 @@ const activeMood = ref('daily')
 const activeIndex = ref(0)
 const autoPlayAfterGesture = ref(false)
 const likedIds = shallowRef(new Set())
+const songStats = shallowRef(new Map())
 const emptySlideStyle = Object.freeze({ '--soda-cover-image': 'none' })
 const allSongs = shallowRef(prepareQueue(recommendedSingles))
 const recommendationQueue = shallowRef(applyMoodQueue(allSongs.value, activeMood.value))
@@ -269,6 +281,7 @@ const lyricsLoadTimeoutMs = 12000
 const recommendationLimit = 36
 const slideHydrateRadius = 2
 const lyricCache = new Map()
+const songStatsLoadingIds = new Set()
 let scrollFrame = 0
 let resizeFrame = 0
 let autoPlayTimer = 0
@@ -348,6 +361,7 @@ watch(
   () => activeSong.value?.id,
   (trackId) => {
     loadActiveLyrics(trackId)
+    loadActiveSongStats(trackId)
   },
   { immediate: true }
 )
@@ -724,6 +738,58 @@ async function loadActiveLyrics(trackId) {
   }
 }
 
+async function loadActiveSongStats(trackId) {
+  const id = String(trackId ?? '')
+
+  if (!isNeteaseTrackId(id) || songStats.value.has(id) || songStatsLoadingIds.has(id)) {
+    return
+  }
+
+  songStatsLoadingIds.add(id)
+
+  try {
+    const stats = await getSongInteractionStatsData(id)
+    updateSongStats(id, stats)
+  } catch (error) {
+    console.warn('Failed to load feed song stats:', error)
+  } finally {
+    songStatsLoadingIds.delete(id)
+  }
+}
+
+function updateSongStats(trackId, stats) {
+  const id = String(trackId ?? '')
+
+  if (!id) {
+    return
+  }
+
+  const previousStats = songStats.value.get(id) ?? {}
+  const nextStats = {
+    ...previousStats,
+    ...stats
+  }
+  const nextSongStats = new Map(songStats.value)
+
+  nextSongStats.set(id, nextStats)
+  songStats.value = nextSongStats
+  mergeStatsIntoTracks(id, nextStats)
+}
+
+function mergeStatsIntoTracks(trackId, stats) {
+  const id = String(trackId)
+
+  for (const queue of [allSongs.value, recommendationQueue.value]) {
+    queue
+      .filter((song) => String(song?.id) === id)
+      .forEach((song) => Object.assign(song, stats))
+  }
+
+  if (String(player.state.currentTrack.id) === id) {
+    Object.assign(player.state.currentTrack, stats)
+  }
+}
+
 function getFeedIndexFromScroll() {
   const scroller = feedScroller.value
 
@@ -842,14 +908,24 @@ async function playActiveSong(options = {}) {
 function toggleLike(song) {
   const nextLikedIds = new Set(likedIds.value)
   const id = String(song.id)
+  const wasLiked = nextLikedIds.has(id)
 
-  if (nextLikedIds.has(id)) {
+  if (wasLiked) {
     nextLikedIds.delete(id)
   } else {
     nextLikedIds.add(id)
   }
 
   likedIds.value = nextLikedIds
+
+  if (isNeteaseTrackId(id)) {
+    const nextLikedCount = Math.max(0, getSongLikeCount(song) + (wasLiked ? -1 : 1))
+
+    updateSongStats(id, {
+      likedCount: nextLikedCount,
+      likedCountLabel: formatActionCount(nextLikedCount)
+    })
+  }
 }
 
 function showCommentHint() {
@@ -858,6 +934,52 @@ function showCommentHint() {
 
 function isLiked(song) {
   return likedIds.value.has(String(song.id))
+}
+
+function getSongStats(song) {
+  return songStats.value.get(String(song?.id ?? '')) ?? song ?? {}
+}
+
+function getSongLikeCount(song) {
+  return Number(getSongStats(song).likedCount) || 0
+}
+
+function getSongCommentCount(song) {
+  return Number(getSongStats(song).commentCount) || 0
+}
+
+function getSongLikeLabel(song) {
+  const stats = getSongStats(song)
+
+  return stats.likedCountLabel || formatActionCount(getSongLikeCount(song))
+}
+
+function getSongCommentLabel(song) {
+  const stats = getSongStats(song)
+
+  return stats.commentCountLabel || formatActionCount(getSongCommentCount(song))
+}
+
+function formatActionCount(value = 0) {
+  const count = Number(value) || 0
+
+  if (count <= 0) {
+    return ''
+  }
+
+  if (count >= 100000) {
+    return '10w+'
+  }
+
+  if (count >= 10000) {
+    return '1w+'
+  }
+
+  if (count >= 1000) {
+    return '999+'
+  }
+
+  return String(count)
 }
 
 function isActiveSong(song) {

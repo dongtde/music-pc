@@ -318,7 +318,10 @@ function serializeTrack(track) {
     duration: track.duration,
     coverUrl: track.coverUrl,
     coverPalette: track.coverPalette,
+    likedCount: track.likedCount,
+    likedCountLabel: track.likedCountLabel,
     commentCount: track.commentCount,
+    commentCountLabel: track.commentCountLabel,
     vip: track.vip,
     hasVideo: track.hasVideo,
     to: track.to

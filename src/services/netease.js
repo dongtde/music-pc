@@ -17,6 +17,7 @@ import {
   getPersonalizedPlaylists,
   getLyric,
   getCloudSearch,
+  getCommentInfoList,
   getNewAlbums,
   getPlaylistDetail,
   getPlaylistCategories,
@@ -28,6 +29,7 @@ import {
   getSearchMultiMatch,
   getSearchSuggestPc,
   getSongComments,
+  getSongRedCount,
   getToplist,
   getTopPlaylists,
   getTopAlbums
@@ -133,6 +135,35 @@ export async function getTrackLyricData(id) {
   return lines.length
     ? lines
     : [{ time: '--:--', text: '暂无歌词', seconds: 0, placeholder: true }]
+}
+
+export async function getSongInteractionStatsData(id) {
+  const trackId = String(id ?? '')
+
+  if (!trackId) {
+    return {
+      likedCount: 0,
+      likedCountLabel: '',
+      commentCount: 0,
+      commentCountLabel: ''
+    }
+  }
+
+  const [redResponse, commentResponse] = await Promise.all([
+    getSongRedCount({ id: trackId }).catch(() => ({})),
+    getCommentInfoList({ type: 0, ids: trackId }).catch(() => ({}))
+  ])
+  const redData = redResponse.data ?? {}
+  const commentInfo = Array.isArray(commentResponse.data)
+    ? commentResponse.data.find((item) => String(item.resourceId) === trackId) ?? commentResponse.data[0] ?? {}
+    : {}
+
+  return {
+    likedCount: toFiniteCount(redData.count),
+    likedCountLabel: redData.countDesc || '',
+    commentCount: toFiniteCount(commentInfo.commentCount),
+    commentCountLabel: commentInfo.commentCountDesc || ''
+  }
 }
 
 export async function getSearchBootData() {
@@ -1067,6 +1098,12 @@ function formatPlayCount(count = 0) {
   }
 
   return String(count)
+}
+
+function toFiniteCount(value = 0) {
+  const count = Number(value)
+
+  return Number.isFinite(count) ? count : 0
 }
 
 function trimNumber(number) {

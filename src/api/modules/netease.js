@@ -174,6 +174,12 @@ export function getPlaylistComments(params = {}) {
   })
 }
 
+export function getCommentInfoList(params = {}) {
+  return http.get('/comment/info/list', {
+    params
+  })
+}
+
 export function getLoginStatus(params = {}) {
   return http.get('/login/status', {
     params
@@ -249,6 +255,12 @@ export function logout(params = {}) {
 
 export function getSongComments(params = {}) {
   return http.get('/comment/music', {
+    params
+  })
+}
+
+export function getSongRedCount(params = {}) {
+  return http.get('/song/red/count', {
     params
   })
 }
