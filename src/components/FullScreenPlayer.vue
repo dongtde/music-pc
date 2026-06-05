@@ -103,6 +103,14 @@
         </section>
       </div>
 
+      <DanmakuLayer
+        class="full-player__danmaku"
+        :enabled="open && danmakuEnabled"
+        :song="track"
+        :hot-comments="danmakuHotComments"
+        :comments="danmakuComments"
+      />
+
       <div class="full-player__spectrum" aria-hidden="true">
         <span v-for="bar in 64" :key="bar" />
       </div>
@@ -131,6 +139,7 @@ import {
   watch,
 } from 'vue';
 import { ChevronDown, Play } from 'lucide-vue-next';
+import DanmakuLayer from './DanmakuLayer.vue';
 import { getTrackLyricData } from '../services/netease';
 import { usePlayerStore } from '../stores/player';
 import '../styles/full-player.css';
@@ -147,6 +156,18 @@ const props = defineProps({
   sourceRect: {
     type: Object,
     default: null,
+  },
+  danmakuEnabled: {
+    type: Boolean,
+    default: true,
+  },
+  danmakuHotComments: {
+    type: Array,
+    default: () => [],
+  },
+  danmakuComments: {
+    type: Array,
+    default: () => [],
   },
 });
 

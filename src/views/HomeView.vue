@@ -276,14 +276,12 @@ import DanmakuLayer from '../components/DanmakuLayer.vue'
 import { recommendedSingles } from '../data/music'
 import {
   getMusicFeedData,
-  getSongCommentsData,
   getSongInteractionStatsData,
   getTrackLyricData
 } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
+import { useSongComments } from '../composables/useSongComments'
 import '../styles/home.css'
-
-const COMMENT_LIMIT = 30
 
 const player = usePlayerStore()
 const message = useMessage()
@@ -306,15 +304,6 @@ const previewLyricIndex = ref(null)
 const lyricsPreviewing = ref(false)
 const danmakuEnabled = ref(true)
 const songCommentsModalVisible = ref(false)
-const songCommentSong = ref(null)
-const songHotComments = ref([])
-const songComments = ref([])
-const songCommentTotal = ref(0)
-const songCommentsOffset = ref(0)
-const songCommentsHasMore = ref(false)
-const songCommentsLoading = ref(false)
-const songCommentsError = ref('')
-const songCommentTrackId = ref(null)
 const feedDragState = {
   pointerId: null,
   startIndex: 0,
@@ -345,7 +334,6 @@ let feedSnapRequestId = 0
 let lyricsPreviewFrame = 0
 let lyricsPreviewTimer = null
 let lyricsWheelTimer = null
-let songCommentsRequestId = 0
 let suppressNextLyricClick = false
 
 const moods = [
@@ -392,6 +380,26 @@ const previewLyric = computed(() => {
 
   return lyricLines.value[index] ?? null
 })
+const songCommentState = useSongComments({
+  track: activeSong,
+  getFallbackTotal: getSongCommentCount,
+  onLoaded: ({ trackId, data }) => {
+    updateSongStats(trackId, {
+      commentCount: data.total,
+      commentCountLabel: formatActionCount(data.total)
+    })
+  }
+})
+const songCommentSong = songCommentState.track
+const songHotComments = songCommentState.hotComments
+const songComments = songCommentState.comments
+const songCommentsHasMore = songCommentState.hasMore
+const songCommentsLoading = songCommentState.loading
+const songCommentsError = songCommentState.error
+const songCommentTrackId = songCommentState.trackId
+const displaySongCommentTotal = songCommentState.displayTotal
+const activeDanmakuHotComments = songCommentState.activeHotComments
+const activeDanmakuComments = songCommentState.activeComments
 const songCommentSubtitle = computed(() => {
   const song = songCommentSong.value
 
@@ -401,15 +409,6 @@ const songCommentSubtitle = computed(() => {
 
   return `${song.name} - ${song.artist}`
 })
-const displaySongCommentTotal = computed(() =>
-  songCommentTotal.value || getSongCommentCount(songCommentSong.value)
-)
-const activeDanmakuHotComments = computed(() =>
-  String(songCommentTrackId.value) === activeSongId.value ? songHotComments.value : []
-)
-const activeDanmakuComments = computed(() =>
-  String(songCommentTrackId.value) === activeSongId.value ? songComments.value : []
-)
 
 watch(
   () => player.state.currentTrack.id,
@@ -1013,26 +1012,8 @@ async function openSongCommentsModal(song = activeSong.value) {
     return
   }
 
-  const trackId = String(song.id ?? '')
-
-  songCommentSong.value = song
   songCommentsModalVisible.value = true
-
-  if (!isNeteaseTrackId(trackId)) {
-    resetSongComments()
-    songCommentsError.value = '当前歌曲暂无评论数据'
-    return
-  }
-
-  if (
-    String(songCommentTrackId.value) === trackId &&
-    (songComments.value.length || songCommentsLoading.value)
-  ) {
-    return
-  }
-
-  resetSongComments()
-  await loadSongComments(trackId, true)
+  await songCommentState.open(song)
 }
 
 function toggleDanmaku() {
@@ -1040,112 +1021,11 @@ function toggleDanmaku() {
 }
 
 async function preloadActiveSongComments(song = activeSong.value) {
-  if (!danmakuEnabled.value || !song) {
-    return
-  }
-
-  const trackId = String(song.id ?? '')
-
-  songCommentSong.value = song
-
-  if (!isNeteaseTrackId(trackId)) {
-    if (String(songCommentTrackId.value) !== trackId) {
-      resetSongComments()
-      songCommentTrackId.value = trackId
-    }
-    return
-  }
-
-  if (
-    String(songCommentTrackId.value) === trackId &&
-    (songHotComments.value.length || songComments.value.length || songCommentsLoading.value)
-  ) {
-    return
-  }
-
-  resetSongComments()
-  await loadSongComments(trackId, true)
-}
-
-function resetSongComments() {
-  songCommentsRequestId += 1
-  songCommentTrackId.value = null
-  songHotComments.value = []
-  songComments.value = []
-  songCommentTotal.value = 0
-  songCommentsOffset.value = 0
-  songCommentsHasMore.value = false
-  songCommentsLoading.value = false
-  songCommentsError.value = ''
-}
-
-async function loadSongComments(trackId = songCommentSong.value?.id, reset = false) {
-  if (songCommentsLoading.value) {
-    return
-  }
-
-  const id = String(trackId ?? '')
-
-  if (!isNeteaseTrackId(id)) {
-    songCommentsError.value = '当前歌曲暂无评论数据'
-    return
-  }
-
-  const requestId = ++songCommentsRequestId
-  const offset = reset ? 0 : songCommentsOffset.value
-
-  songCommentsLoading.value = true
-  songCommentsError.value = ''
-
-  try {
-    const data = await getSongCommentsData({
-      id,
-      limit: COMMENT_LIMIT,
-      offset
-    })
-
-    if (
-      requestId !== songCommentsRequestId ||
-      String(songCommentSong.value?.id ?? '') !== id
-    ) {
-      return
-    }
-
-    if (reset) {
-      songHotComments.value = data.hotComments
-      songComments.value = data.comments
-    } else {
-      songComments.value = [...songComments.value, ...data.comments]
-    }
-
-    songCommentTrackId.value = id
-    songCommentTotal.value = data.total
-    songCommentsHasMore.value = data.more || songComments.value.length < data.total
-    songCommentsOffset.value = songComments.value.length
-    updateSongStats(id, {
-      commentCount: data.total,
-      commentCountLabel: formatActionCount(data.total)
-    })
-  } catch (error) {
-    if (requestId !== songCommentsRequestId) {
-      return
-    }
-
-    console.warn('Failed to load feed song comments:', error)
-    songCommentsError.value = '评论加载失败'
-  } finally {
-    if (requestId === songCommentsRequestId) {
-      songCommentsLoading.value = false
-    }
-  }
+  await songCommentState.preload(song, { enabled: danmakuEnabled.value })
 }
 
 function loadMoreSongComments() {
-  if (!songCommentsHasMore.value || songCommentsLoading.value) {
-    return
-  }
-
-  loadSongComments(songCommentSong.value?.id)
+  songCommentState.loadMore(songCommentSong.value)
 }
 
 function isLiked(song) {

@@ -3,6 +3,9 @@
     :open="fullPlayerOpen"
     :track="currentTrack"
     :source-rect="fullPlayerCoverRect"
+    :danmaku-enabled="danmakuEnabled"
+    :danmaku-hot-comments="activeDanmakuHotComments"
+    :danmaku-comments="activeDanmakuComments"
     @close="closeFullPlayer"
     @cover-flight-end="handleCoverFlightEnd"
   />
@@ -166,6 +169,17 @@
     </div>
 
     <div class="player-tools">
+      <button
+        v-if="fullPlayerOpen"
+        class="icon-button"
+        type="button"
+        :aria-label="danmakuEnabled ? '关闭弹幕' : '开启弹幕'"
+        :title="danmakuEnabled ? '关闭弹幕' : '开启弹幕'"
+        :class="{ active: danmakuEnabled }"
+        @click="toggleDanmaku"
+      >
+        <Radio :size="18" />
+      </button>
       <button class="icon-button" type="button" aria-label="麦克风"><Mic2 :size="17" /></button>
       <div class="control-popover-wrap queue-popover-wrap">
         <button
@@ -217,17 +231,16 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { Ellipsis, Heart, ListMusic, Loader2, Maximize2, MessageCircleMore, Mic2, Minimize2, Pause, Play, Plus, Repeat, Repeat1, Repeat2, Shuffle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-vue-next'
+import { Ellipsis, Heart, ListMusic, Loader2, Maximize2, MessageCircleMore, Mic2, Minimize2, Pause, Play, Plus, Radio, Repeat, Repeat1, Repeat2, Shuffle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import CommentModal from './CommentModal.vue'
 import FullScreenPlayer from './FullScreenPlayer.vue'
 import SongListRow from './SongListRow.vue'
 import { useThemeStore } from '../stores/theme'
 import { usePlayerStore } from '../stores/player'
-import { getSongCommentsData, getTrackLyricData } from '../services/netease'
+import { getTrackLyricData } from '../services/netease'
+import { useSongComments } from '../composables/useSongComments'
 import '../styles/player.css'
-
-const COMMENT_LIMIT = 30
 
 const theme = useThemeStore()
 const player = usePlayerStore()
@@ -250,17 +263,9 @@ const progressPreviewPercent = ref(0)
 const progressPreviewTime = ref(0)
 const pendingProgressTime = ref(0)
 const progressLyricLines = ref([])
+const danmakuEnabled = ref(true)
 const songCommentsModalVisible = ref(false)
-const songHotComments = ref([])
-const songComments = ref([])
-const songCommentTotal = ref(0)
-const songCommentsOffset = ref(0)
-const songCommentsHasMore = ref(false)
-const songCommentsLoading = ref(false)
-const songCommentsError = ref('')
-const songCommentTrackId = ref(null)
 let progressLyricRequestId = 0
-let songCommentsRequestId = 0
 let removeTrackEndedListener = null
 
 const fallbackCoverPalette = {
@@ -278,9 +283,23 @@ const playModes = [
 
 const activePlayMode = computed(() => playModes.find((mode) => mode.value === playMode.value) ?? playModes[3])
 const currentTrack = computed(() => player.state.currentTrack)
-const displaySongCommentTotal = computed(() =>
-  songCommentTotal.value || Number(currentTrack.value.commentCount) || 0
-)
+const songCommentState = useSongComments({
+  track: currentTrack,
+  getFallbackTotal: (track) => Number(track?.commentCount) || 0,
+  onLoaded: ({ trackId, data }) => {
+    if (String(currentTrack.value.id) === String(trackId)) {
+      currentTrack.value.commentCount = data.total
+    }
+  }
+})
+const songHotComments = songCommentState.hotComments
+const songComments = songCommentState.comments
+const songCommentsHasMore = songCommentState.hasMore
+const songCommentsLoading = songCommentState.loading
+const songCommentsError = songCommentState.error
+const displaySongCommentTotal = songCommentState.displayTotal
+const activeDanmakuHotComments = songCommentState.activeHotComments
+const activeDanmakuComments = songCommentState.activeComments
 const currentVolumeIcon = computed(() => Number(volume.value) > 0 ? Volume2 : VolumeX)
 const currentTrackCoverStyle = computed(() => {
   const palette = currentTrack.value.coverPalette ?? fallbackCoverPalette
@@ -343,14 +362,16 @@ watch(
   () => currentTrack.value.id,
   (trackId) => {
     loadProgressLyrics(trackId)
-    resetSongComments()
-
-    if (isNeteaseTrackId(trackId)) {
-      loadSongComments(trackId, true)
-    }
+    songCommentState.preload(currentTrack.value)
   },
   { immediate: true }
 )
+
+watch(fullPlayerOpen, (open) => {
+  if (open && danmakuEnabled.value) {
+    songCommentState.preload(currentTrack.value)
+  }
+})
 
 function toggleModeMenu() {
   modeMenuOpen.value = !modeMenuOpen.value
@@ -464,98 +485,22 @@ async function loadProgressLyrics(trackId) {
   }
 }
 
-function resetSongComments() {
-  songCommentsRequestId += 1
-  songCommentTrackId.value = null
-  songHotComments.value = []
-  songComments.value = []
-  songCommentTotal.value = 0
-  songCommentsOffset.value = 0
-  songCommentsHasMore.value = false
-  songCommentsLoading.value = false
-  songCommentsError.value = ''
-}
-
-async function loadSongComments(trackId = currentTrack.value.id, reset = false) {
-  if (songCommentsLoading.value) {
-    return
-  }
-
-  if (!isNeteaseTrackId(trackId)) {
-    songCommentsError.value = '当前歌曲暂无评论数据'
-    return
-  }
-
-  const requestId = ++songCommentsRequestId
-  const offset = reset ? 0 : songCommentsOffset.value
-  songCommentsLoading.value = true
-  songCommentsError.value = ''
-
-  try {
-    const data = await getSongCommentsData({
-      id: trackId,
-      limit: COMMENT_LIMIT,
-      offset
-    })
-
-    if (
-      requestId !== songCommentsRequestId ||
-      String(trackId) !== String(currentTrack.value.id)
-    ) {
-      return
-    }
-
-    if (reset) {
-      songHotComments.value = data.hotComments
-      songComments.value = data.comments
-    } else {
-      songComments.value = [...songComments.value, ...data.comments]
-    }
-
-    songCommentTrackId.value = trackId
-    songCommentTotal.value = data.total
-    songCommentsHasMore.value = data.more || songComments.value.length < data.total
-    songCommentsOffset.value = songComments.value.length
-    currentTrack.value.commentCount = data.total
-  } catch (error) {
-    if (requestId !== songCommentsRequestId) {
-      return
-    }
-
-    console.warn('Failed to load song comments:', error)
-    songCommentsError.value = '评论加载失败'
-  } finally {
-    if (requestId === songCommentsRequestId) {
-      songCommentsLoading.value = false
-    }
-  }
-}
-
 async function openSongCommentsModal() {
   songCommentsModalVisible.value = true
   closePlayerPopovers()
-
-  const trackId = currentTrack.value.id
-
-  if (!isNeteaseTrackId(trackId)) {
-    songCommentsError.value = '当前歌曲暂无评论数据'
-    return
-  }
-
-  if (
-    !songCommentsLoading.value &&
-    (String(songCommentTrackId.value) !== String(trackId) || !songComments.value.length)
-  ) {
-    await loadSongComments(trackId, true)
-  }
+  await songCommentState.open(currentTrack.value)
 }
 
 function loadMoreSongComments() {
-  if (!songCommentsHasMore.value) {
-    return
-  }
+  songCommentState.loadMore(currentTrack.value)
+}
 
-  loadSongComments(currentTrack.value.id)
+function toggleDanmaku() {
+  danmakuEnabled.value = !danmakuEnabled.value
+
+  if (danmakuEnabled.value) {
+    songCommentState.preload(currentTrack.value)
+  }
 }
 
 function formatCommentBadge(value = 0) {

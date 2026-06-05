@@ -1,44 +1,48 @@
-import axios from 'axios'
+import axios from 'axios';
 
 const http = axios.create({
-  baseURL: 'http://localhost:3000',
+  baseURL: '/api',
   timeout: 12000,
-  withCredentials: true
-})
+  withCredentials: true,
+});
 
 http.interceptors.request.use((config) => {
-  const cookie = getStoredCookie()
+  const cookie = getStoredCookie();
 
   if (cookie && !config.params?.cookie && !config.params?.noCookie) {
     config.params = {
       ...(config.params ?? {}),
-      cookie
-    }
+      cookie,
+    };
   }
 
-  return config
-})
+  return config;
+});
 
 http.interceptors.response.use(
   (response) => {
-    const data = response.data
-    const acceptCodes = response.config.acceptCodes ?? [200]
+    const data = response.data;
+    const acceptCodes = response.config.acceptCodes ?? [200];
 
     if (data?.code && !acceptCodes.includes(data.code)) {
-      return Promise.reject(new Error(data.message ?? `Netease API responded with code ${data.code}`))
+      return Promise.reject(
+        new Error(
+          data.message ?? `Netease API responded with code ${data.code}`,
+        ),
+      );
     }
 
-    return data
+    return data;
   },
-  (error) => Promise.reject(error)
-)
+  (error) => Promise.reject(error),
+);
 
 function getStoredCookie() {
   try {
-    return window.localStorage.getItem('mappic:netease-cookie') || ''
+    return window.localStorage.getItem('mappic:netease-cookie') || '';
   } catch {
-    return ''
+    return '';
   }
 }
 
-export default http
+export default http;

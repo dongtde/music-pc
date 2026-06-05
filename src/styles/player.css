@@ -769,6 +769,7 @@
 
 .mode-button.active,
 .volume-button.active,
+.player-tools > .icon-button.active,
 .queue-popover-wrap .icon-button.active {
   color: var(--accent);
   background: rgba(var(--accent-rgb), 0.14);

@@ -32,6 +32,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import '../styles/danmaku.css'
 
 const props = defineProps({
   enabled: {
