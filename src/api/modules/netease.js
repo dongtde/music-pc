@@ -18,8 +18,122 @@ export function getPersonalizedMvs(params = {}) {
   })
 }
 
+export function subscribeMv(params = {}) {
+  return http.get('/mv/sub', {
+    params
+  })
+}
+
+export function getSubscribedMvs(params = {}) {
+  return http.get('/mv/sublist', {
+    params
+  })
+}
+
+export function getMvComments(params = {}) {
+  return http.get('/comment/mv', {
+    params
+  })
+}
+
+export function likeResource(params = {}) {
+  return http.get('/resource/like', {
+    params
+  })
+}
+
+export function getSimilarMvs(params = {}) {
+  return http.get('/simi/mv', {
+    params
+  })
+}
+
+export function getAllMvs(params = {}) {
+  return http.get('/mv/all', {
+    params
+  })
+}
+
+export function getFirstMvs(params = {}) {
+  return http.get('/mv/first', {
+    params
+  })
+}
+
+export function getExclusiveMvs(params = {}) {
+  return http.get('/mv/exclusive/rcmd', {
+    params
+  })
+}
+
+export function getTopMvs(params = {}) {
+  return http.get('/top/mv', {
+    params
+  })
+}
+
+export function getMvDetail(params = {}) {
+  return http.get('/mv/detail', {
+    params
+  })
+}
+
+export function getMvDetailInfo(params = {}) {
+  return http.get('/mv/detail/info', {
+    params
+  })
+}
+
+export function getMvUrl(params = {}) {
+  return http.get('/mv/url', {
+    params
+  })
+}
+
+export function getFollowArtistNewMvs(params = {}) {
+  return http.get('/artist/new/mv', {
+    params
+  })
+}
+
+export function getUgcMv(params = {}) {
+  return http.get('/ugc/mv/get', {
+    params
+  })
+}
+
 export function getPersonalizedNewSongs(params = {}) {
   return http.get('/personalized/newsong', {
+    params
+  })
+}
+
+export function getPersonalFm(params = {}) {
+  return http.get('/personal_fm', {
+    params
+  })
+}
+
+export function getPersonalFmByMode(params = {}) {
+  return http.get('/personal/fm/mode', {
+    params
+  })
+}
+
+export function sendFmTrash(params = {}) {
+  return http.get('/fm_trash', {
+    params
+  })
+}
+
+export function checkSongLike(params = {}) {
+  return http.get('/song/like/check', {
+    params
+  })
+}
+
+export function updateSongLike(params = {}) {
+  return http.get('/song/like', {
     params
   })
 }

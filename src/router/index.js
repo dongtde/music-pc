@@ -2,10 +2,12 @@ import { createRouter, createWebHistory } from 'vue-router'
 import AlbumDetailView from '../views/AlbumDetailView.vue'
 import ArtistDetailView from '../views/ArtistDetailView.vue'
 import DiscoverView from '../views/DiscoverView.vue'
+import FMView from '../views/FMView.vue'
 import HomeView from '../views/HomeView.vue'
 import PlaylistDetailView from '../views/PlaylistDetailView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import SimpleView from '../views/SimpleView.vue'
+import VideoView from '../views/VideoView.vue'
 
 const routes = [
   { path: '/', redirect: '/home' },
@@ -24,13 +26,14 @@ const routes = [
   {
     path: '/fm',
     name: 'fm',
-    component: SimpleView,
+    component: FMView,
     meta: { title: '私人 FM', icon: 'Radio' }
   },
   {
-    path: '/video',
+    path: '/mv',
     name: 'video',
-    component: SimpleView,
+    alias: '/video',
+    component: VideoView,
     meta: { title: '视频', icon: 'Video' }
   },
   {

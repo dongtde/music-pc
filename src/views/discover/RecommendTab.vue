@@ -278,7 +278,7 @@
         <router-link
           v-for="mv in homeRecommendedMvs"
           :key="mv.id"
-          :to="`/playlist/mv-${mv.id}`"
+          :to="{ name: 'video', query: { mvId: mv.id } }"
           class="mv-card"
         >
           <div class="mv-cover" :class="`cover--${mv.type}`">

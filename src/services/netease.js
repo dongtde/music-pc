@@ -3,22 +3,34 @@ import {
   getAlbumComments,
   getAlbumDetail,
   getAlbumDynamic,
+  getAllMvs,
   getArtistAlbums,
   getArtistDesc,
   getArtistDetail,
   getArtistDynamic,
   getArtistHotSongs,
   getArtistList,
+  getArtistMvs,
   getArtistSongs,
   getArtistToplist,
   getArtistVideos,
+  getExclusiveMvs,
+  getFirstMvs,
+  getFollowArtistNewMvs,
   getPersonalizedMvs,
   getPersonalizedNewSongs,
   getPersonalizedPlaylists,
   getLyric,
   getCloudSearch,
   getCommentInfoList,
+  checkSongLike,
+  getMvComments,
+  getMvDetail,
+  getMvDetailInfo,
+  getMvUrl,
   getNewAlbums,
+  getPersonalFm,
+  getPersonalFmByMode,
   getPlaylistDetail,
   getPlaylistCategories,
   getPlaylistHotCategories,
@@ -30,9 +42,17 @@ import {
   getSearchSuggestPc,
   getSongComments,
   getSongRedCount,
+  getSimilarMvs,
+  getSubscribedMvs,
+  sendFmTrash,
+  getTopMvs,
   getToplist,
   getTopPlaylists,
-  getTopAlbums
+  getTopAlbums,
+  getUgcMv,
+  likeResource,
+  subscribeMv,
+  updateSongLike
 } from '../api/modules/netease'
 
 const COVER_TYPES = ['sunset', 'neon', 'lofi', 'stage', 'piano']
@@ -96,6 +116,188 @@ export async function getMusicFeedData({ limit = 80 } = {}) {
   return {
     songs: uniqueSongs([...personalizedSongs, ...chartSongs])
   }
+}
+
+export async function getPersonalFmData({ mode = 'DEFAULT', submode = '', timestamp = Date.now() } = {}) {
+  const normalizedMode = String(mode || 'DEFAULT')
+  const params = {
+    timestamp
+  }
+  let response
+
+  if (normalizedMode === 'DEFAULT' && !submode) {
+    response = await getPersonalFm(params)
+  } else {
+    response = await getPersonalFmByMode({
+      ...params,
+      mode: normalizedMode,
+      submode: submode || undefined
+    })
+  }
+
+  return {
+    tracks: extractPersonalFmSongs(response).map(mapFmTrack)
+  }
+}
+
+export async function getSongLikeStateData(ids = []) {
+  const songIds = ids
+    .map((id) => Number(id))
+    .filter((id) => Number.isFinite(id))
+
+  if (!songIds.length) {
+    return new Set()
+  }
+
+  const response = await checkSongLike({
+    ids: JSON.stringify(songIds),
+    timestamp: Date.now()
+  })
+  const likedIds = Array.isArray(response.data)
+    ? response.data
+    : Array.isArray(response.ids)
+      ? response.ids
+      : []
+
+  return new Set(likedIds.map((id) => String(id)))
+}
+
+export async function updateSongLikeStateData({ id, uid, like }) {
+  return updateSongLike({
+    id,
+    uid,
+    like: Boolean(like),
+    timestamp: Date.now()
+  })
+}
+
+export async function movePersonalFmSongToTrash(id) {
+  return sendFmTrash({
+    id,
+    timestamp: Date.now()
+  })
+}
+
+export async function getVideoCenterData({
+  area = '全部',
+  type = '全部',
+  order = '上升最快',
+  limit = 18,
+  offset = 0
+} = {}) {
+  const [
+    recommendedResponse,
+    firstResponse,
+    exclusiveResponse,
+    topResponse,
+    allResponse,
+    subscribedResponse,
+    followNewResponse
+  ] = await Promise.all([
+    getPersonalizedMvs().catch(() => ({})),
+    getFirstMvs({ area, limit: 12 }).catch(() => ({})),
+    getExclusiveMvs({ limit: 12, offset: 0 }).catch(() => ({})),
+    getTopMvs({ area: area === '全部' ? undefined : area, limit: 10, offset: 0 }).catch(() => ({})),
+    getAllMvs({ area, type, order, limit, offset }).catch(() => ({})),
+    getSubscribedMvs().catch(() => ({})),
+    getFollowArtistNewMvs({ limit: 10 }).catch(() => ({}))
+  ])
+  const recommended = (recommendedResponse.result ?? []).map(mapVideoMv)
+  const first = getMvListPayload(firstResponse).map(mapVideoMv)
+  const exclusive = getMvListPayload(exclusiveResponse).map(mapVideoMv)
+  const top = getMvListPayload(topResponse).map(mapVideoMv)
+  const all = getMvListPayload(allResponse).map(mapVideoMv)
+  const subscribed = getMvListPayload(subscribedResponse).map(mapVideoMv)
+  const followArtistNew = getMvListPayload(followNewResponse).map(mapVideoMv)
+  const hero = top[0] ?? recommended[0] ?? first[0] ?? exclusive[0] ?? all[0] ?? null
+  const active = hero ? await getMvPlaybackData(hero.id).catch(() => ({ mv: hero })) : null
+
+  return {
+    recommended,
+    first,
+    exclusive,
+    top,
+    all,
+    subscribed,
+    followArtistNew,
+    total: allResponse.count ?? allResponse.total ?? all.length,
+    more: Boolean(allResponse.hasMore || allResponse.more),
+    active
+  }
+}
+
+export async function getFilteredMvsData({
+  area = '全部',
+  type = '全部',
+  order = '上升最快',
+  limit = 18,
+  offset = 0
+} = {}) {
+  const response = await getAllMvs({ area, type, order, limit, offset })
+  const items = getMvListPayload(response).map(mapVideoMv)
+
+  return {
+    items,
+    total: response.count ?? response.total ?? items.length,
+    more: Boolean(response.hasMore || response.more)
+  }
+}
+
+export async function getMvPlaybackData(id, quality = 1080) {
+  const [detailResponse, infoResponse, urlResponse, simiResponse, commentResponse, ugcResponse] = await Promise.all([
+    getMvDetail({ mvid: id }).catch(() => ({})),
+    getMvDetailInfo({ mvid: id }).catch(() => ({})),
+    getMvUrl({ id, r: quality || 1080 }).catch(() => ({})),
+    getSimilarMvs({ mvid: id }).catch(() => ({})),
+    getMvComments({ id, limit: 12, offset: 0 }).catch(() => ({})),
+    getUgcMv({ id }).catch(() => ({}))
+  ])
+  const detail = detailResponse.data ?? detailResponse.mv ?? {}
+  const mv = mapVideoMv(detail)
+  const fallbackUrl = getMvFallbackUrl(detail.brs, quality)
+  const artistId = mv.artistId || detail.artistId || detail.artists?.[0]?.id
+  const artistMvResponse = artistId
+    ? await getArtistMvs({ id: artistId, limit: 8 }).catch(() => ({}))
+    : {}
+
+  return {
+    mv: {
+      ...mv,
+      description: detail.desc || detail.description || detail.briefDesc || '',
+      publishTime: formatPlainDate(detail.publishTime),
+      brs: detail.brs ?? [],
+      url: urlResponse.data?.url || fallbackUrl.url || '',
+      urlQuality: urlResponse.data?.r || fallbackUrl.quality || quality || '',
+      stats: mapMvStats(infoResponse),
+      encyclopedia: mapMvEncyclopedia(ugcResponse)
+    },
+    similar: getMvListPayload(simiResponse).map(mapVideoMv),
+    artistMvs: getMvListPayload(artistMvResponse).map(mapVideoMv),
+    comments: mapMvCommentResult(commentResponse)
+  }
+}
+
+export async function getMvCommentsData({ id, limit = 20, offset = 0 }) {
+  const response = await getMvComments({ id, limit, offset })
+
+  return mapMvCommentResult(response)
+}
+
+export async function toggleMvSubscribeData({ id, subscribe }) {
+  return subscribeMv({
+    mvid: id,
+    t: subscribe ? 1 : 0,
+    timestamp: Date.now()
+  })
+}
+
+export async function toggleMvLikeData({ id, like }) {
+  return likeResource({
+    id,
+    type: 1,
+    t: like ? 1 : 0,
+    timestamp: Date.now()
+  })
 }
 
 export async function getPlaylistDetailData(id) {
@@ -758,6 +960,16 @@ function mapComment(comment) {
   }
 }
 
+function mapMvCommentResult(result = {}) {
+  return {
+    hotComments: (result.hotComments ?? []).map(mapComment),
+    comments: (result.comments ?? []).map(mapComment),
+    total: result.total ?? 0,
+    more: Boolean(result.more),
+    isFirstPage: true
+  }
+}
+
 function formatCommentTime(value) {
   if (!value) {
     return ''
@@ -812,6 +1024,52 @@ function mapPlaylistTrack(song, index) {
     hasVideo: Boolean(song.mv),
     mvId: song.mv || ''
   }
+}
+
+function mapFmTrack(song, index) {
+  const album = song.al ?? song.album ?? {}
+  const artists = song.ar ?? song.artists ?? []
+  const artistIds = getArtistIds(artists)
+  const reason = song.reason || song.alg || song.extInfo?.reason || ''
+
+  return {
+    id: song.id,
+    name: song.name,
+    artistId: artistIds[0] ?? '',
+    artistIds,
+    artist: artists.map((artist) => artist.name).filter(Boolean).join(' / ') || '未知歌手',
+    album: album.name || '未知专辑',
+    albumId: album.id ?? '',
+    rank: String(index + 1).padStart(2, '0'),
+    type: coverType(index),
+    time: formatDuration(song.dt ?? song.duration),
+    duration: formatDuration(song.dt ?? song.duration),
+    coverUrl: resizeNeteaseImage(album.picUrl ?? song.picUrl, 520),
+    vip: Boolean(song.fee && song.fee !== 0),
+    hasVideo: Boolean(song.mv),
+    mvId: song.mv || '',
+    reason,
+    source: '私人 FM'
+  }
+}
+
+function extractPersonalFmSongs(response = {}) {
+  const candidates = [
+    response.data,
+    response.songs,
+    response.recommend,
+    response.resources,
+    response.data?.songs,
+    response.data?.list,
+    response.data?.resources,
+    response.data?.items,
+    response.data?.tracks
+  ]
+  const songs = candidates.find((item) => Array.isArray(item)) ?? []
+
+  return songs
+    .map((item) => item.song ?? item.resource?.song ?? item.resourceInfo?.song ?? item)
+    .filter((song) => song?.id)
 }
 
 function uniqueSongs(songs = []) {
@@ -1038,6 +1296,107 @@ function mapMv(mv, index) {
   }
 }
 
+function mapVideoMv(mv = {}, index = 0) {
+  const artists = Array.isArray(mv.artists) ? mv.artists : []
+  const artistName = mv.artistName || mv.creatorName || getArtistNames(artists) || mv.artist?.name || '未知艺人'
+  const id = mv.id ?? mv.mvid ?? mv.vid
+
+  return {
+    id,
+    title: mv.name || mv.title || '未命名 MV',
+    name: mv.name || mv.title || '未命名 MV',
+    artist: artistName,
+    artistId: mv.artistId ?? mv.artist?.id ?? artists[0]?.id ?? '',
+    desc: mv.copywriter || mv.briefDesc || mv.desc || mv.description || '',
+    coverUrl: resizeNeteaseImage(mv.cover || mv.coverUrl || mv.picUrl || mv.imgurl || mv.imgurl16v9, 640),
+    playCount: formatPlayCount(mv.playCount ?? mv.playTime ?? mv.plays ?? 0),
+    playCountRaw: Number(mv.playCount ?? mv.playTime ?? mv.plays ?? 0) || 0,
+    duration: formatDuration(mv.duration ?? mv.durationms ?? 0),
+    publishTime: formatPlainDate(mv.publishTime ?? mv.publishTimeStr),
+    type: coverType(index || Number(id) || 0),
+    score: mv.score ?? mv.lastRank ?? '',
+    rank: mv.rank ?? '',
+    subed: Boolean(mv.subed),
+    liked: Boolean(mv.liked),
+    videoType: 'mv'
+  }
+}
+
+function mapMvStats(response = {}) {
+  const data = response.data ?? response
+
+  return {
+    likedCount: toFiniteCount(data.likedCount),
+    shareCount: toFiniteCount(data.shareCount),
+    commentCount: toFiniteCount(data.commentCount),
+    liked: Boolean(data.liked)
+  }
+}
+
+function mapMvEncyclopedia(response = {}) {
+  const data = response.data ?? response
+  const candidates = [
+    data.introduction,
+    data.desc,
+    data.description,
+    data.briefDesc,
+    data.mv?.desc,
+    data.mv?.description
+  ]
+  const text = candidates.find((item) => typeof item === 'string' && item.trim()) || ''
+
+  return {
+    title: data.title || data.name || data.mv?.name || '',
+    text,
+    raw: data
+  }
+}
+
+function getMvListPayload(response = {}) {
+  const candidates = [
+    response.data,
+    response.result,
+    response.mvs,
+    response.list,
+    response.data?.list,
+    response.data?.mvs,
+    response.data?.records,
+    response.newWorks,
+    response.works
+  ]
+  const items = candidates.find((item) => Array.isArray(item)) ?? []
+
+  return items
+    .map((item) => item.mv ?? item.resource?.mv ?? item.resource ?? item)
+    .filter((item) => item?.id || item?.mvid || item?.vid)
+}
+
+function getMvFallbackUrl(brs, quality = 1080) {
+  if (!brs) {
+    return { url: '', quality: '' }
+  }
+
+  const targetQuality = Number(quality) || 1080
+  const candidates = Array.isArray(brs)
+    ? brs.map((item) => ({
+        quality: Number(item?.br ?? item?.r ?? item?.quality ?? 0),
+        url: item?.url || item?.src || ''
+      }))
+    : Object.entries(brs).map(([key, value]) => ({
+        quality: Number(key),
+        url: typeof value === 'string' ? value : value?.url || value?.src || ''
+      }))
+
+  return candidates
+    .filter((item) => item.url)
+    .sort((current, next) => {
+      const currentDistance = Math.abs((current.quality || targetQuality) - targetQuality)
+      const nextDistance = Math.abs((next.quality || targetQuality) - targetQuality)
+
+      return currentDistance - nextDistance
+    })[0] ?? { url: '', quality: '' }
+}
+
 function mapArtistVideo(record, index) {
   const resource = record.resource ?? {}
   const base = resource.mlogBaseData ?? record.mlogBaseData ?? {}
@@ -1108,6 +1467,27 @@ function toFiniteCount(value = 0) {
 
 function trimNumber(number) {
   return Number(number.toFixed(1)).toString()
+}
+
+function formatPlainDate(value) {
+  if (!value) {
+    return ''
+  }
+
+  if (typeof value === 'string' && /^\d{4}-\d{1,2}-\d{1,2}/.test(value)) {
+    return value.slice(0, 10)
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${date.getFullYear()}-${month}-${day}`
 }
 
 function formatDate(value) {

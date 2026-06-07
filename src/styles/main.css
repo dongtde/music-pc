@@ -173,6 +173,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 22px;
+  overflow: hidden;
   padding: 24px 10px 16px;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border-subtle);
@@ -185,8 +186,8 @@ button {
 
 .app-shell--immersive .sidebar {
   grid-row: 1;
-  gap: 14px;
-  padding: 16px 8px;
+  gap: 22px;
+  padding: 24px 10px 16px;
   border-right-color: rgba(255, 255, 255, 0.08);
   background: #080809;
 }
@@ -201,8 +202,7 @@ button {
   align-items: center;
   width: 100%;
   min-height: 46px;
-  padding: 0 12px;
-  transition: padding 360ms cubic-bezier(0.22, 1, 0.36, 1);
+  padding: 0 5px;
 }
 
 .profile {
@@ -221,10 +221,10 @@ button {
 
 .sidebar--compact .profile-card {
   grid-template-columns: 44px;
-  grid-template-rows: 44px;
+  grid-template-rows: 46px;
   width: 44px;
-  min-height: 44px;
-  margin: 0 auto;
+  min-height: 46px;
+  margin: 0 0 0 6px;
   padding: 0;
 }
 
@@ -366,8 +366,18 @@ button {
 }
 
 .nav-groups {
-  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding-right: 4px;
+  scrollbar-width: none;
+}
+
+.nav-groups::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .nav-group {
@@ -375,13 +385,14 @@ button {
 }
 
 .sidebar--compact .nav-group {
-  margin-bottom: 12px;
+  margin-bottom: 24px;
 }
 
 .sidebar--compact .nav-groups {
   display: grid;
-  justify-items: center;
-  padding-right: 0;
+  width: 100%;
+  justify-items: start;
+  padding: 0 0 0 6px;
 }
 
 .nav-title {
@@ -399,7 +410,7 @@ button {
 }
 
 .sidebar--compact .nav-title {
-  height: 10px;
+  height: 26px;
   padding: 0;
 }
 
@@ -425,7 +436,7 @@ button {
   align-items: center;
   gap: 13px;
   height: 44px;
-  padding: 0 12px;
+  padding: 0 12px 0 19px;
   border-radius: 8px;
   color: var(--text-main);
   font-size: 14px;
@@ -434,7 +445,6 @@ button {
     width 360ms cubic-bezier(0.22, 1, 0.36, 1),
     height 360ms cubic-bezier(0.22, 1, 0.36, 1),
     gap 360ms cubic-bezier(0.22, 1, 0.36, 1),
-    padding 360ms cubic-bezier(0.22, 1, 0.36, 1),
     color 220ms ease,
     background-color 220ms ease,
     background 220ms ease;
@@ -442,20 +452,36 @@ button {
 
 .nav-item span,
 .nav-item em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   transition:
     opacity 220ms ease,
     width 300ms cubic-bezier(0.22, 1, 0.36, 1),
     transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.nav-item > svg {
+  flex: 0 0 auto;
+}
+
 .sidebar--compact .nav-item {
+  overflow: hidden;
   width: 44px;
   height: 44px;
   justify-content: center;
   gap: 0;
-  margin: 0 auto;
+  margin: 0;
   padding: 0;
   color: rgba(255, 255, 255, 0.76);
+}
+
+.sidebar--compact .nav-item > svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .sidebar--compact .nav-item span,
@@ -495,6 +521,10 @@ button {
   font-size: 12px;
   font-style: normal;
   font-weight: 500;
+}
+
+.sidebar--compact .nav-item em {
+  margin-left: 0;
 }
 
 .nav-item.is-active {
