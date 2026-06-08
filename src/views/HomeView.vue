@@ -1,21 +1,22 @@
 <template>
-  <div class="view home-view">
-    <section class="soda-feed" aria-label="主页推荐听歌">
-      <nav
-        class="soda-feed__tabs"
-        aria-label="推荐口味"
-        :style="{ '--active-tab-index': activeMoodIndex }"
+  <div class="view home-view" :class="{ 'home-view--video': activeHomeSection === 'video' }">
+    <nav
+      class="soda-feed__tabs"
+      aria-label="首页分类"
+      :style="{ '--active-tab-index': activeHomeSectionIndex }"
+    >
+      <button
+        v-for="section in homeSections"
+        :key="section.value"
+        type="button"
+        :class="{ active: activeHomeSection === section.value }"
+        @click="setHomeSection(section.value)"
       >
-        <button
-          v-for="mood in moods"
-          :key="mood.value"
-          type="button"
-          :class="{ active: activeMood === mood.value }"
-          @click="setMood(mood.value)"
-        >
-          {{ mood.label }}
-        </button>
-      </nav>
+        {{ section.label }}
+      </button>
+    </nav>
+
+    <section v-if="activeHomeSection === 'music'" class="soda-feed" aria-label="主页推荐听歌">
 
       <div
         ref="feedScroller"
@@ -242,6 +243,165 @@
 
     </section>
 
+    <section v-else class="soda-video-feed" aria-label="沉浸式视频 MV">
+      <div
+        ref="mvScroller"
+        class="soda-video-feed__scroller"
+        :class="{ 'soda-video-feed__scroller--dragging': mvDragging }"
+        tabindex="0"
+        @scroll="handleMvScroll"
+        @keydown="handleMvKeydown"
+        @pointerdown="startMvDrag"
+        @pointermove="handleMvPointerMove"
+        @pointerup="stopMvDrag"
+        @pointerleave="stopMvDrag"
+        @pointercancel="stopMvDrag"
+      >
+        <article
+          v-for="(mv, index) in mvQueue"
+          :key="mv.id"
+          class="soda-mv-slide"
+          :class="{ active: index === activeMvIndex }"
+          :aria-label="`${mv.title} - ${mv.artist}`"
+        >
+          <div class="soda-mv-slide__backdrop" aria-hidden="true">
+            <img
+              v-if="mv.coverUrl"
+              :src="mv.coverUrl"
+              alt=""
+              :loading="index === activeMvIndex ? 'eager' : 'lazy'"
+              :fetchpriority="index === activeMvIndex ? 'high' : 'low'"
+              decoding="async"
+            />
+            <span v-else class="soda-slide__fallback" :class="`cover--${mv.type}`" />
+          </div>
+
+          <div class="soda-mv-stage">
+            <video
+              v-if="index === activeMvIndex && getHomeMvVideoUrl(mv)"
+              :key="`${mv.id}-${getHomeMvVideoUrl(mv)}`"
+              :ref="(element) => setHomeVideoElement(element, index)"
+              class="soda-mv-stage__video"
+              :src="getHomeMvVideoUrl(mv)"
+              :poster="mv.coverUrl"
+              playsinline
+              preload="metadata"
+              @loadedmetadata="handleHomeMvMetadata"
+              @timeupdate="handleHomeMvTimeUpdate"
+              @play="handleHomeMvPlay"
+              @pause="handleHomeMvPause"
+              @ended="goNextMvFromGesture"
+              @error="handleHomeMvError"
+              @click="toggleHomeMvPlayback(index)"
+            />
+            <button
+              v-else
+              class="soda-mv-poster"
+              type="button"
+              :disabled="mvQueueLoading || isActiveMvLoading(mv)"
+              @click.stop="playMvFromGesture(index)"
+            >
+              <img v-if="mv.coverUrl" :src="mv.coverUrl" :alt="mv.title" />
+              <span>
+                <Loader2 v-if="isActiveMvLoading(mv)" class="soda-spin" :size="34" />
+                <Play v-else :size="38" fill="currentColor" />
+              </span>
+              <small v-if="index === activeMvIndex && homeMvState.error">{{ homeMvState.error }}</small>
+              <small v-else>{{ isActiveMvLoading(mv) ? '正在获取播放地址' : '点击播放 MV' }}</small>
+            </button>
+            <button
+              v-if="index === activeMvIndex && getHomeMvVideoUrl(mv) && !homeMvState.isPlaying"
+              class="soda-mv-stage__play"
+              type="button"
+              :disabled="isActiveMvLoading(mv)"
+              :aria-label="`播放 ${mv.title}`"
+              @click.stop="playMvFromGesture(index)"
+            >
+              <Play :size="42" fill="currentColor" />
+            </button>
+          </div>
+
+          <section class="soda-mv-caption">
+            <h1>{{ mv.title }}</h1>
+            <p>{{ mv.artist }}<span v-if="mv.playCount"> · {{ mv.playCount }} 播放</span></p>
+            <small v-if="mv.desc">{{ mv.desc }}</small>
+          </section>
+
+          <DanmakuLayer
+            v-if="index === activeMvIndex"
+            :key="`home-mv-danmaku-${mv.id}-${homeMvCommentState.trackId}`"
+            class="soda-mv-slide__danmaku"
+            :enabled="homeMvDanmakuEnabled && isActiveMvPlaying(mv)"
+            :song="{ id: mv.id, name: mv.title }"
+            :hot-comments="homeMvCommentState.hotComments"
+            :comments="homeMvCommentState.comments"
+          />
+
+          <aside class="soda-action-rail soda-mv-action-rail" aria-label="MV 操作">
+            <button
+              type="button"
+              :aria-label="`${isHomeMvLiked(mv) ? '取消喜欢' : '喜欢'} ${getHomeMvLikeLabel(mv)}`"
+              :title="isHomeMvLiked(mv) ? '取消喜欢' : '喜欢'"
+              :class="{ active: isHomeMvLiked(mv) }"
+              @click.stop="toggleHomeMvLike(mv)"
+            >
+              <Heart :size="24" :fill="isHomeMvLiked(mv) ? 'currentColor' : 'none'" />
+              <span class="soda-action-rail__label">{{ isHomeMvLiked(mv) ? '已喜欢' : '喜欢' }}</span>
+              <span v-if="getHomeMvLikeLabel(mv)" class="soda-action-rail__count">
+                {{ getHomeMvLikeLabel(mv) }}
+              </span>
+            </button>
+            <button
+              type="button"
+              :aria-label="`评论 ${getHomeMvCommentLabel(mv)}`"
+              title="评论"
+              @click.stop="openHomeMvComments(mv)"
+            >
+              <MessageCircleMore :size="24" />
+              <span class="soda-action-rail__label">评论</span>
+              <span v-if="getHomeMvCommentLabel(mv)" class="soda-action-rail__count">
+                {{ getHomeMvCommentLabel(mv) }}
+              </span>
+            </button>
+            <button
+              type="button"
+              :aria-label="homeMvDanmakuEnabled ? '关闭弹幕' : '开启弹幕'"
+              :title="homeMvDanmakuEnabled ? '关闭弹幕' : '开启弹幕'"
+              :class="{ active: homeMvDanmakuEnabled }"
+              @click.stop="toggleHomeMvDanmaku"
+            >
+              <Radio :size="24" />
+              <span class="soda-action-rail__label">{{ homeMvDanmakuEnabled ? '弹幕开' : '弹幕' }}</span>
+            </button>
+          </aside>
+
+          <footer class="soda-mv-slide__footer">
+            <div
+              class="soda-slide__progress soda-mv-progress"
+              role="slider"
+              :tabindex="index === activeMvIndex ? 0 : -1"
+              :aria-valuemin="0"
+              :aria-valuemax="Math.floor(getHomeMvDuration(mv) || 0)"
+              :aria-valuenow="getHomeMvProgressNow(mv)"
+              :aria-label="`${mv.title} 播放进度`"
+              @pointerdown="seekHomeMvFromProgress($event, mv)"
+            >
+              <span class="soda-slide__progress-time">{{ getHomeMvCurrentTimeLabel(mv) }}</span>
+              <span class="soda-slide__progress-rail" aria-hidden="true">
+                <span :style="{ width: `${getHomeMvProgress(mv)}%` }" />
+              </span>
+              <span class="soda-slide__progress-time">{{ getHomeMvDurationLabel(mv) }}</span>
+            </div>
+          </footer>
+        </article>
+
+        <div v-if="mvQueueLoading && !mvQueue.length" class="soda-video-empty">
+          <Loader2 class="soda-spin" :size="34" />
+          <span>正在加载 MV</span>
+        </div>
+      </div>
+    </section>
+
   <CommentModal
     v-model:show="songCommentsModalVisible"
     title="歌曲评论"
@@ -254,11 +414,24 @@
     :has-more="songCommentsHasMore"
     @load-more="loadMoreSongComments"
   />
+
+  <CommentModal
+    v-model:show="homeMvCommentsModalVisible"
+    title="MV 评论"
+    :subtitle="homeMvCommentSubtitle"
+    :total="homeMvCommentState.total"
+    :hot-comments="homeMvCommentState.hotComments"
+    :comments="homeMvCommentState.comments"
+    :loading="homeMvCommentState.loading"
+    :error="homeMvCommentState.error"
+    :has-more="homeMvCommentState.more"
+    @load-more="loadMoreHomeMvComments"
+  />
   </div>
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useMessage } from 'naive-ui'
 import {
   AudioLines,
@@ -274,11 +447,14 @@ import {
 } from 'lucide-vue-next'
 import CommentModal from '../components/CommentModal.vue'
 import DanmakuLayer from '../components/DanmakuLayer.vue'
-import { recommendedSingles } from '../data/music'
+import { recommendedMvs as fallbackMvs, recommendedSingles } from '../data/music'
 import {
   getMusicFeedData,
+  getMvCommentsData,
+  getMvPlaybackData,
   getSongInteractionStatsData,
-  getTrackLyricData
+  getTrackLyricData,
+  getVideoCenterData
 } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
 import { useSongComments } from '../composables/useSongComments'
@@ -287,11 +463,40 @@ import '../styles/home.css'
 const player = usePlayerStore()
 const message = useMessage()
 const feedScroller = ref(null)
+const mvScroller = ref(null)
+const homeVideoElement = ref(null)
+const activeHomeSection = ref('music')
 const activeMood = ref('daily')
 const activeIndex = ref(0)
+const activeMvIndex = ref(0)
 const autoPlayAfterGesture = ref(false)
+const mvAutoPlayAfterGesture = ref(false)
 const likedIds = shallowRef(new Set())
+const likedMvIds = shallowRef(new Set())
 const songStats = shallowRef(new Map())
+const mvQueue = shallowRef(prepareMvQueue(fallbackMvs))
+const mvQueueLoading = ref(false)
+const activeMvLoading = ref(false)
+const mvDragging = ref(false)
+const homeMvDanmakuEnabled = ref(true)
+const homeMvCommentsModalVisible = ref(false)
+const homeMvState = reactive({
+  isPlaying: false,
+  isReady: false,
+  currentTime: 0,
+  duration: 0,
+  error: ''
+})
+const homeMvCommentState = reactive({
+  trackId: '',
+  loading: false,
+  error: '',
+  hotComments: [],
+  comments: [],
+  total: 0,
+  more: false,
+  offset: 0
+})
 const defaultCoverTintRgb = '255, 63, 115'
 const coverTintFallbacks = Object.freeze({
   sunset: '236, 127, 56',
@@ -324,6 +529,13 @@ const feedDragState = {
   startScrollTop: 0,
   moved: false
 }
+const mvDragState = {
+  pointerId: null,
+  startIndex: 0,
+  startY: 0,
+  startScrollTop: 0,
+  moved: false
+}
 const lyricsDragState = {
   startY: 0,
   startScrollTop: 0,
@@ -334,28 +546,37 @@ const lyricsDragScrollSpeed = 2.2
 const lyricsWheelScrollSpeed = 1.2
 const lyricsLoadTimeoutMs = 12000
 const recommendationLimit = 36
+const mvRecommendationLimit = 36
 const slideHydrateRadius = 2
 const lyricCache = new Map()
 const songStatsLoadingIds = new Set()
 const coverTintCache = new Map()
 const coverTintRequests = new Set()
+const mvPlaybackCache = new Map()
+const mvPlaybackRequests = new Map()
+const mvCommentCache = new Map()
 let scrollFrame = 0
+let mvScrollFrame = 0
 let resizeFrame = 0
 let autoPlayTimer = 0
+let mvAutoPlayTimer = 0
+let sectionSwitchSnapTimer = 0
 let removeTrackEndedListener = null
 let lyricRequestId = 0
+let mvPlaybackRequestId = 0
+let mvQueueLoaded = false
+let feedScrollLocked = false
 let syncedQueue = null
 let feedSnapRequestId = 0
+let mvSnapRequestId = 0
 let lyricsPreviewFrame = 0
 let lyricsPreviewTimer = null
 let lyricsWheelTimer = null
 let suppressNextLyricClick = false
 
-const moods = [
-  { label: '推荐', value: 'daily' },
-  { label: '热歌', value: 'hot' },
-  { label: '新歌', value: 'new' },
-  { label: '放松', value: 'chill' }
+const homeSections = [
+  { label: '音乐', value: 'music' },
+  { label: '视频', value: 'video' }
 ]
 
 const moodSignals = {
@@ -365,12 +586,23 @@ const moodSignals = {
   chill: ['低压氛围', '通勤友好', '耳机时间']
 }
 
+const activeHomeSectionIndex = computed(() =>
+  Math.max(0, homeSections.findIndex((section) => section.value === activeHomeSection.value))
+)
 const activeSong = computed(() => recommendationQueue.value[activeIndex.value])
 const activeSongId = computed(() => String(activeSong.value?.id ?? ''))
+const activeMv = computed(() => mvQueue.value[activeMvIndex.value])
+const activeMvId = computed(() => String(activeMv.value?.id ?? ''))
+const homeMvCommentSubtitle = computed(() => {
+  const mv = activeMv.value
+
+  if (!mv) {
+    return ''
+  }
+
+  return `${mv.title} - ${mv.artist}`
+})
 const currentTrackId = computed(() => String(player.state.currentTrack.id ?? ''))
-const activeMoodIndex = computed(() =>
-  Math.max(0, moods.findIndex((mood) => mood.value === activeMood.value))
-)
 const hydratedSlideBounds = computed(() => ({
   start: Math.max(0, activeIndex.value - slideHydrateRadius),
   end: Math.min(recommendationQueue.value.length - 1, activeIndex.value + slideHydrateRadius)
@@ -469,11 +701,37 @@ watch(activeLyricIndex, async () => {
   centerCurrentLyric()
 })
 
+watch(activeHomeSection, async (section) => {
+  if (section === 'video') {
+    await loadHomeMvs()
+    await snapMvToActiveIndex('auto')
+    loadActiveMvPlayback(activeMv.value?.id)
+    return
+  }
+
+  pauseHomeMv()
+})
+
+watch(
+  () => activeMv.value?.id,
+  (id) => {
+    if (activeHomeSection.value !== 'video') {
+      return
+    }
+
+    pauseHomeMv()
+    resetHomeMvState()
+    restoreHomeMvComments(id)
+    loadActiveMvPlayback(id, { autoplay: mvAutoPlayAfterGesture.value })
+  }
+)
+
 onMounted(() => {
   restoreActiveTrackPosition()
   syncPlayerQueue()
   removeTrackEndedListener = player.onTrackEnded(handleTrackEnded)
   window.addEventListener('resize', handleLyricsResize)
+  window.addEventListener('keydown', handleGlobalPlaybackKeydown)
   snapFeedToActiveIndex('auto')
   hydrateVisibleCoverTints()
   loadRecommendations()
@@ -481,13 +739,19 @@ onMounted(() => {
 
 onUnmounted(() => {
   feedSnapRequestId += 1
+  mvSnapRequestId += 1
   window.cancelAnimationFrame(scrollFrame)
+  window.cancelAnimationFrame(mvScrollFrame)
   window.cancelAnimationFrame(resizeFrame)
   window.cancelAnimationFrame(lyricsPreviewFrame)
   window.clearTimeout(autoPlayTimer)
+  window.clearTimeout(mvAutoPlayTimer)
+  window.clearTimeout(sectionSwitchSnapTimer)
   window.removeEventListener('resize', handleLyricsResize)
+  window.removeEventListener('keydown', handleGlobalPlaybackKeydown)
   clearLyricsPreviewTimer()
   clearLyricsWheelTimer()
+  pauseHomeMv()
   removeTrackEndedListener?.()
   removeTrackEndedListener = null
 })
@@ -505,6 +769,726 @@ async function loadRecommendations() {
   } catch (error) {
     console.warn('Failed to load home recommendations:', error)
   }
+}
+
+function setHomeSection(value) {
+  if (value === activeHomeSection.value) {
+    return
+  }
+
+  activeHomeSection.value = value
+
+  if (value === 'music') {
+    stabilizeMusicFeedAfterSectionSwitch()
+    return
+  }
+
+  nextTick(() => snapMvToActiveIndex('auto'))
+}
+
+function stabilizeMusicFeedAfterSectionSwitch() {
+  const targetIndex = activeIndex.value
+
+  feedScrollLocked = true
+  window.clearTimeout(sectionSwitchSnapTimer)
+
+  nextTick(async () => {
+    await waitForLayoutFrame()
+
+    if (activeHomeSection.value !== 'music') {
+      feedScrollLocked = false
+      return
+    }
+
+    activeIndex.value = clampSongIndex(targetIndex)
+    scrollToIndex(activeIndex.value, 'auto')
+
+    sectionSwitchSnapTimer = window.setTimeout(() => {
+      if (activeHomeSection.value === 'music') {
+        activeIndex.value = clampSongIndex(targetIndex)
+        scrollToIndex(activeIndex.value, 'auto')
+      }
+
+      feedScrollLocked = false
+    }, 180)
+  })
+}
+
+function handleGlobalPlaybackKeydown(event) {
+  if (!isPlaybackSpaceKey(event) || shouldIgnorePlaybackShortcut(event)) {
+    return
+  }
+
+  event.preventDefault()
+
+  if (activeHomeSection.value === 'video') {
+    toggleHomeMvPlayback(activeMvIndex.value)
+    return
+  }
+
+  autoPlayAfterGesture.value = true
+  playActiveSong()
+}
+
+function isPlaybackSpaceKey(event) {
+  return (
+    event.code === 'Space' ||
+    event.key === ' ' ||
+    event.key === 'Spacebar'
+  )
+}
+
+function shouldIgnorePlaybackShortcut(event) {
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.repeat) {
+    return true
+  }
+
+  const target = event.target
+
+  return Boolean(target?.closest?.(
+    'input, textarea, select, button, a, [contenteditable="true"], [role="textbox"]'
+  ))
+}
+
+async function loadHomeMvs({ force = false } = {}) {
+  if ((mvQueueLoaded && !force) || mvQueueLoading.value) {
+    return
+  }
+
+  mvQueueLoading.value = true
+  homeMvState.error = ''
+
+  try {
+    const data = await getVideoCenterData({ limit: mvRecommendationLimit })
+    const mvs = uniqueMvs([
+      data.active?.mv,
+      ...data.recommended,
+      ...data.first,
+      ...data.top,
+      ...data.exclusive,
+      ...data.all
+    ])
+
+    mvQueue.value = prepareMvQueue(mvs.length ? mvs : fallbackMvs)
+    activeMvIndex.value = Math.min(activeMvIndex.value, Math.max(0, mvQueue.value.length - 1))
+    mvQueueLoaded = true
+
+    if (data.active?.mv?.id) {
+      rememberHomeMvPayload(data.active)
+    }
+  } catch (error) {
+    console.warn('Failed to load home MV feed:', error)
+    homeMvState.error = error?.message || 'MV 加载失败'
+    mvQueue.value = prepareMvQueue(fallbackMvs)
+  } finally {
+    mvQueueLoading.value = false
+  }
+}
+
+function prepareMvQueue(mvs = []) {
+  return uniqueMvs(mvs).map((mv, index) => {
+    const coverUrl = resizeNeteaseCover(
+      mv.coverUrl ?? mv.cover ?? mv.picUrl ?? mv.imgurl ?? mv.imgurl16v9,
+      960
+    )
+    const id = mv.id ?? mv.mvid ?? mv.vid ?? `home-mv-${index + 1}`
+    const title = mv.title ?? mv.name ?? '未命名 MV'
+    const artist = mv.artist ?? mv.artistName ?? mv.creatorName ?? '未知艺人'
+    const playCount = mv.playCount ?? mv.views ?? ''
+
+    return {
+      ...mv,
+      id,
+      title,
+      name: title,
+      artist,
+      coverUrl,
+      playCount: typeof playCount === 'number' ? formatActionCount(playCount) : playCount,
+      duration: mv.duration || '--:--',
+      desc: mv.desc ?? mv.description ?? mv.briefDesc ?? '',
+      type: mv.type ?? getCoverType(index)
+    }
+  })
+}
+
+function uniqueMvs(items = []) {
+  const seen = new Set()
+
+  return items.filter((item) => {
+    const id = String(item?.id ?? item?.mvid ?? item?.vid ?? '')
+
+    if (!id || seen.has(id)) {
+      return false
+    }
+
+    seen.add(id)
+    return true
+  })
+}
+
+async function loadActiveMvPlayback(id, { autoplay = false } = {}) {
+  const mvId = String(id ?? '')
+
+  if (!mvId) {
+    return
+  }
+
+  const requestId = ++mvPlaybackRequestId
+  homeMvState.error = ''
+
+  if (mvPlaybackCache.has(mvId)) {
+    activeMvLoading.value = false
+    rememberHomeMvPayload(mvPlaybackCache.get(mvId))
+    await nextTick()
+
+    if (autoplay && requestId === mvPlaybackRequestId) {
+      await playCurrentHomeMv({ skipLoad: true })
+    }
+    return
+  }
+
+  activeMvLoading.value = true
+
+  try {
+    const payload = await getHomeMvPlayback(mvId)
+
+    if (requestId !== mvPlaybackRequestId || mvId !== activeMvId.value) {
+      return
+    }
+
+    rememberHomeMvPayload(payload)
+    await nextTick()
+
+    if (autoplay) {
+      await playCurrentHomeMv({ skipLoad: true })
+    }
+  } catch (error) {
+    if (requestId === mvPlaybackRequestId) {
+      console.warn('Failed to load home MV playback:', error)
+      homeMvState.error = error?.message || '播放地址加载失败'
+    }
+  } finally {
+    if (requestId === mvPlaybackRequestId) {
+      activeMvLoading.value = false
+    }
+  }
+}
+
+function getHomeMvPlayback(id) {
+  const mvId = String(id)
+
+  if (mvPlaybackCache.has(mvId)) {
+    return Promise.resolve(mvPlaybackCache.get(mvId))
+  }
+
+  if (mvPlaybackRequests.has(mvId)) {
+    return mvPlaybackRequests.get(mvId)
+  }
+
+  const request = getMvPlaybackData(mvId)
+    .then((payload) => {
+      mvPlaybackCache.set(mvId, payload)
+      return payload
+    })
+    .finally(() => {
+      mvPlaybackRequests.delete(mvId)
+    })
+
+  mvPlaybackRequests.set(mvId, request)
+  return request
+}
+
+function rememberHomeMvPayload(payload) {
+  const mv = payload?.mv
+
+  if (!mv?.id) {
+    return
+  }
+
+  mvPlaybackCache.set(String(mv.id), payload)
+  if (payload.comments) {
+    cacheHomeMvComments(mv.id, payload.comments)
+  }
+  mvQueue.value = mvQueue.value.map((item) =>
+    String(item.id) === String(mv.id)
+      ? {
+          ...item,
+          ...mv,
+          coverUrl: resizeNeteaseCover(mv.coverUrl ?? item.coverUrl, 960),
+          playCount: mv.playCount || item.playCount,
+          desc: mv.description || mv.desc || item.desc
+        }
+      : item
+  )
+
+  if (String(mv.id) === activeMvId.value && payload.comments) {
+    applyHomeMvComments(mv.id, payload.comments)
+  }
+}
+
+function cacheHomeMvComments(trackId, data) {
+  const id = String(trackId ?? '')
+
+  if (!id) {
+    return
+  }
+
+  mvCommentCache.set(id, {
+    hotComments: data.hotComments ?? [],
+    comments: data.comments ?? [],
+    total: data.total ?? 0,
+    more: Boolean(data.more),
+    offset: data.comments?.length ?? 0
+  })
+}
+
+function restoreHomeMvComments(trackId) {
+  const id = String(trackId ?? '')
+  const cached = mvCommentCache.get(id)
+
+  if (cached) {
+    applyHomeMvComments(id, cached)
+    return
+  }
+
+  homeMvCommentState.trackId = id
+  homeMvCommentState.error = ''
+  homeMvCommentState.hotComments = []
+  homeMvCommentState.comments = []
+  homeMvCommentState.total = 0
+  homeMvCommentState.more = false
+  homeMvCommentState.offset = 0
+}
+
+function applyHomeMvComments(trackId, data) {
+  homeMvCommentState.trackId = String(trackId ?? '')
+  homeMvCommentState.error = ''
+  homeMvCommentState.hotComments = data.hotComments ?? []
+  homeMvCommentState.comments = data.comments ?? []
+  homeMvCommentState.total = data.total ?? 0
+  homeMvCommentState.more = Boolean(data.more)
+  homeMvCommentState.offset = data.offset ?? data.comments?.length ?? 0
+}
+
+function toggleHomeMvLike(mv) {
+  if (!mv?.id) {
+    return
+  }
+
+  const nextLikedIds = new Set(likedMvIds.value)
+  const id = String(mv.id)
+
+  if (nextLikedIds.has(id)) {
+    nextLikedIds.delete(id)
+  } else {
+    nextLikedIds.add(id)
+  }
+
+  likedMvIds.value = nextLikedIds
+}
+
+async function openHomeMvComments(mv = activeMv.value) {
+  if (!mv?.id) {
+    return
+  }
+
+  homeMvCommentsModalVisible.value = true
+
+  if (String(homeMvCommentState.trackId) !== String(mv.id)) {
+    restoreHomeMvComments(mv.id)
+  }
+
+  if (!homeMvCommentState.comments.length && !homeMvCommentState.hotComments.length) {
+    await loadHomeMvComments(mv.id, { reset: true })
+  }
+}
+
+async function loadHomeMvComments(trackId, { reset = false } = {}) {
+  const id = String(trackId ?? '')
+
+  if (!id || homeMvCommentState.loading) {
+    return
+  }
+
+  homeMvCommentState.loading = true
+  homeMvCommentState.error = ''
+
+  try {
+    const data = await getMvCommentsData({
+      id,
+      limit: 20,
+      offset: reset ? 0 : homeMvCommentState.offset
+    })
+    const nextData = {
+      hotComments: reset ? data.hotComments : homeMvCommentState.hotComments,
+      comments: reset ? data.comments : [...homeMvCommentState.comments, ...data.comments],
+      total: data.total,
+      more: data.more,
+      offset: reset
+        ? data.comments.length
+        : homeMvCommentState.comments.length + data.comments.length
+    }
+
+    cacheHomeMvComments(id, nextData)
+    applyHomeMvComments(id, nextData)
+  } catch (error) {
+    console.warn('Failed to load home MV comments:', error)
+    homeMvCommentState.error = error?.message || 'MV 评论加载失败'
+  } finally {
+    homeMvCommentState.loading = false
+  }
+}
+
+function loadMoreHomeMvComments() {
+  if (!homeMvCommentState.more) {
+    return
+  }
+
+  loadHomeMvComments(homeMvCommentState.trackId || activeMv.value?.id)
+}
+
+function toggleHomeMvDanmaku() {
+  homeMvDanmakuEnabled.value = !homeMvDanmakuEnabled.value
+}
+
+async function snapMvToActiveIndex(behavior = 'auto') {
+  const requestId = ++mvSnapRequestId
+
+  await nextTick()
+  await waitForLayoutFrame()
+
+  if (requestId !== mvSnapRequestId) {
+    return
+  }
+
+  scrollToMvIndex(activeMvIndex.value, behavior)
+  await waitForLayoutFrame()
+
+  if (requestId === mvSnapRequestId) {
+    scrollToMvIndex(activeMvIndex.value, 'auto')
+  }
+}
+
+function handleMvScroll() {
+  if (mvScrollFrame) {
+    return
+  }
+
+  mvScrollFrame = window.requestAnimationFrame(() => {
+    mvScrollFrame = 0
+
+    if (!mvScroller.value?.clientHeight || !mvQueue.value.length) {
+      return
+    }
+
+    const nextIndex = getMvIndexFromScroll()
+
+    if (nextIndex === activeMvIndex.value) {
+      return
+    }
+
+    activeMvIndex.value = nextIndex
+
+    if (mvAutoPlayAfterGesture.value && !mvDragging.value) {
+      scheduleMvAutoPlay()
+    }
+  })
+}
+
+function startMvDrag(event) {
+  const scroller = mvScroller.value
+
+  if (!scroller || event.button > 0 || shouldIgnoreMvDrag(event)) {
+    return
+  }
+
+  mvSnapRequestId += 1
+  mvDragging.value = true
+  mvDragState.pointerId = event.pointerId
+  mvDragState.startIndex = activeMvIndex.value
+  mvDragState.startY = event.clientY
+  mvDragState.startScrollTop = scroller.scrollTop
+  mvDragState.moved = false
+  scroller.style.scrollSnapType = 'none'
+  scroller.setPointerCapture?.(event.pointerId)
+  event.preventDefault()
+}
+
+function handleMvPointerMove(event) {
+  const scroller = mvScroller.value
+
+  if (!scroller || !mvDragging.value || event.pointerId !== mvDragState.pointerId) {
+    return
+  }
+
+  const deltaY = event.clientY - mvDragState.startY
+
+  if (Math.abs(deltaY) < feedDragThreshold && !mvDragState.moved) {
+    return
+  }
+
+  mvDragState.moved = true
+  event.preventDefault()
+  scroller.scrollTop = mvDragState.startScrollTop - deltaY
+}
+
+function stopMvDrag(event) {
+  if (!mvDragging.value || event.pointerId !== mvDragState.pointerId) {
+    return
+  }
+
+  const scroller = mvScroller.value
+  const shouldSnap = mvDragState.moved
+
+  scroller?.releasePointerCapture?.(event.pointerId)
+  if (scroller) {
+    scroller.style.scrollSnapType = ''
+  }
+  mvDragging.value = false
+  mvDragState.pointerId = null
+
+  if (!shouldSnap || !scroller?.clientHeight) {
+    return
+  }
+
+  const nextIndex = getMvIndexFromScroll()
+  activeMvIndex.value = nextIndex
+  scrollToMvIndex(nextIndex, 'smooth')
+
+  if (nextIndex !== mvDragState.startIndex) {
+    mvAutoPlayAfterGesture.value = true
+    scheduleMvAutoPlay()
+  }
+}
+
+function shouldIgnoreMvDrag(event) {
+  const target = event.target
+
+  return Boolean(target?.closest?.(
+    '.soda-mv-stage, .soda-mv-action-rail, .soda-mv-progress, button, a, input, textarea, select'
+  ))
+}
+
+function handleMvKeydown(event) {
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+    return
+  }
+
+  event.preventDefault()
+  scrollToMvIndex(activeMvIndex.value + (event.key === 'ArrowDown' ? 1 : -1), 'smooth')
+}
+
+function getMvIndexFromScroll() {
+  const scroller = mvScroller.value
+
+  if (!scroller?.clientHeight || !mvQueue.value.length) {
+    return activeMvIndex.value
+  }
+
+  let nearestIndex = activeMvIndex.value
+  let nearestDistance = Number.POSITIVE_INFINITY
+
+  Array.from(scroller.children).forEach((slide, index) => {
+    if (!slide.classList?.contains('soda-mv-slide')) {
+      return
+    }
+
+    const distance = Math.abs(slide.offsetTop - scroller.scrollTop)
+
+    if (distance < nearestDistance) {
+      nearestDistance = distance
+      nearestIndex = index
+    }
+  })
+
+  return Math.min(
+    mvQueue.value.length - 1,
+    Math.max(0, nearestIndex)
+  )
+}
+
+function getMvSlideTop(index) {
+  const scroller = mvScroller.value
+  const slide = scroller?.querySelectorAll('.soda-mv-slide')?.[index]
+
+  return slide?.offsetTop ?? index * (scroller?.clientHeight || 0)
+}
+
+function scrollToMvIndex(index, behavior = 'smooth') {
+  const scroller = mvScroller.value
+
+  if (!scroller || !mvQueue.value.length) {
+    return
+  }
+
+  const nextIndex = Math.min(
+    mvQueue.value.length - 1,
+    Math.max(0, index)
+  )
+
+  scroller.scrollTo({
+    top: getMvSlideTop(nextIndex),
+    behavior
+  })
+}
+
+function scheduleMvAutoPlay() {
+  window.clearTimeout(mvAutoPlayTimer)
+  mvAutoPlayTimer = window.setTimeout(() => {
+    loadActiveMvPlayback(activeMv.value?.id, { autoplay: true })
+  }, 220)
+}
+
+async function playMvFromGesture(index) {
+  mvAutoPlayAfterGesture.value = true
+  const shouldScroll = index !== activeMvIndex.value
+  activeMvIndex.value = index
+  await nextTick()
+
+  if (shouldScroll) {
+    scrollToMvIndex(index, 'smooth')
+  }
+
+  await loadActiveMvPlayback(activeMv.value?.id, { autoplay: true })
+  await playCurrentHomeMv({ skipLoad: true })
+}
+
+async function toggleHomeMvPlayback(index = activeMvIndex.value) {
+  if (index !== activeMvIndex.value) {
+    await playMvFromGesture(index)
+    return
+  }
+
+  if (homeMvState.isPlaying) {
+    pauseHomeMv()
+    return
+  }
+
+  await playMvFromGesture(index)
+}
+
+async function goNextMvFromGesture() {
+  if (!mvQueue.value.length) {
+    return
+  }
+
+  mvAutoPlayAfterGesture.value = true
+  const nextIndex = (activeMvIndex.value + 1) % mvQueue.value.length
+  activeMvIndex.value = nextIndex
+  scrollToMvIndex(nextIndex, 'smooth')
+  await loadActiveMvPlayback(activeMv.value?.id, { autoplay: true })
+}
+
+async function playCurrentHomeMv({ skipLoad = false } = {}) {
+  const mv = activeMv.value
+
+  if (!mv?.id) {
+    return false
+  }
+
+  if (!skipLoad && !getHomeMvVideoUrl(mv)) {
+    await loadActiveMvPlayback(mv.id, { autoplay: true })
+    return false
+  }
+
+  await nextTick()
+  const video = homeVideoElement.value
+
+  if (!video || !getHomeMvVideoUrl(mv)) {
+    return false
+  }
+
+  try {
+    if (player.state.isPlaying) {
+      await player.togglePlay()
+    }
+
+    await video.play()
+    homeMvState.error = ''
+    return true
+  } catch (error) {
+    console.warn('Failed to play home MV:', error)
+    homeMvState.error = '浏览器阻止自动播放，请点击播放'
+    return false
+  }
+}
+
+function pauseHomeMv() {
+  const video = homeVideoElement.value
+
+  if (video && !video.paused) {
+    video.pause()
+  }
+
+  homeMvState.isPlaying = false
+}
+
+function resetHomeMvState() {
+  homeVideoElement.value = null
+  homeMvState.isPlaying = false
+  homeMvState.isReady = false
+  homeMvState.currentTime = 0
+  homeMvState.duration = 0
+  homeMvState.error = ''
+}
+
+function setHomeVideoElement(element, index) {
+  if (element && index === activeMvIndex.value) {
+    homeVideoElement.value = element
+  }
+}
+
+function handleHomeMvMetadata(event) {
+  const video = event.target
+  homeMvState.isReady = true
+  homeMvState.duration = Number.isFinite(video.duration)
+    ? video.duration
+    : parseDuration(activeMv.value?.duration)
+}
+
+function handleHomeMvTimeUpdate(event) {
+  homeMvState.currentTime = Number.isFinite(event.target.currentTime)
+    ? event.target.currentTime
+    : 0
+}
+
+function handleHomeMvPlay() {
+  homeMvState.isPlaying = true
+  homeMvState.error = ''
+
+  if (player.state.isPlaying) {
+    player.togglePlay()
+  }
+}
+
+function handleHomeMvPause() {
+  homeMvState.isPlaying = false
+}
+
+function handleHomeMvError() {
+  homeMvState.isPlaying = false
+  homeMvState.error = '视频播放失败'
+}
+
+function seekHomeMvFromProgress(event, mv) {
+  if (String(mv?.id) !== activeMvId.value) {
+    return
+  }
+
+  const video = homeVideoElement.value
+  const duration = homeMvState.duration || video?.duration || parseDuration(mv.duration)
+
+  if (!video || !duration) {
+    return
+  }
+
+  const rail = event.currentTarget.querySelector('.soda-slide__progress-rail')
+  const rect = (rail ?? event.currentTarget).getBoundingClientRect()
+  const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
+  const nextTime = ratio * duration
+
+  video.currentTime = nextTime
+  homeMvState.currentTime = nextTime
 }
 
 function syncPlayerQueue() {
@@ -626,12 +1610,17 @@ function setMood(value) {
 }
 
 function handleFeedScroll() {
-  if (scrollFrame) {
+  if (feedScrollLocked || activeHomeSection.value !== 'music' || scrollFrame) {
     return
   }
 
   scrollFrame = window.requestAnimationFrame(() => {
     scrollFrame = 0
+
+    if (feedScrollLocked || activeHomeSection.value !== 'music') {
+      return
+    }
+
     const scroller = feedScroller.value
 
     if (!scroller?.clientHeight || !recommendationQueue.value.length) {
@@ -1118,6 +2107,90 @@ function getPlayLabel(song) {
   return isSongPlaying(song) ? '暂停' : '播放'
 }
 
+function getHomeMvVideoUrl(mv) {
+  return normalizeVideoUrl(mv?.url)
+}
+
+function isHomeMvLiked(mv) {
+  return Boolean(mv?.id && likedMvIds.value.has(String(mv.id)))
+}
+
+function getHomeMvStats(mv) {
+  return mv?.stats ?? mv ?? {}
+}
+
+function getHomeMvLikeLabel(mv) {
+  const stats = getHomeMvStats(mv)
+  const baseCount = Number(stats.likedCount) || 0
+  const count = baseCount + (isHomeMvLiked(mv) ? 1 : 0)
+
+  return formatActionCount(count)
+}
+
+function getHomeMvCommentLabel(mv) {
+  if (String(mv?.id) === String(homeMvCommentState.trackId) && homeMvCommentState.total) {
+    return formatActionCount(homeMvCommentState.total)
+  }
+
+  const stats = getHomeMvStats(mv)
+
+  return formatActionCount(stats.commentCount)
+}
+
+function isActiveMvLoading(mv) {
+  return Boolean(
+    activeMvLoading.value &&
+    mv?.id &&
+    String(mv.id) === activeMvId.value
+  )
+}
+
+function isActiveMvPlaying(mv) {
+  return Boolean(
+    mv?.id &&
+    String(mv.id) === activeMvId.value &&
+    homeMvState.isPlaying
+  )
+}
+
+function getHomeMvDuration(mv) {
+  if (String(mv?.id) === activeMvId.value) {
+    return homeMvState.duration || parseDuration(mv.duration)
+  }
+
+  return parseDuration(mv?.duration)
+}
+
+function getHomeMvProgress(mv) {
+  const duration = getHomeMvDuration(mv)
+
+  if (String(mv?.id) !== activeMvId.value || !duration) {
+    return 0
+  }
+
+  return Math.min(100, (homeMvState.currentTime / duration) * 100)
+}
+
+function getHomeMvProgressNow(mv) {
+  return String(mv?.id) === activeMvId.value
+    ? Math.floor(homeMvState.currentTime || 0)
+    : 0
+}
+
+function getHomeMvCurrentTimeLabel(mv) {
+  return String(mv?.id) === activeMvId.value
+    ? formatTime(homeMvState.currentTime)
+    : '0:00'
+}
+
+function getHomeMvDurationLabel(mv) {
+  if (String(mv?.id) === activeMvId.value && homeMvState.duration) {
+    return formatTime(homeMvState.duration)
+  }
+
+  return mv?.duration || '0:00'
+}
+
 function getSongProgress(song) {
   if (!isActiveSong(song) || !player.state.duration) {
     return 0
@@ -1468,6 +2541,34 @@ function formatTime(value = 0) {
   return `${minutes}:${seconds}`
 }
 
+function parseDuration(duration = '0:00') {
+  if (typeof duration !== 'string') {
+    return 0
+  }
+
+  const parts = duration.split(':').map(Number)
+
+  if (!parts.length || parts.some(Number.isNaN)) {
+    return 0
+  }
+
+  return parts.reduce((total, part) => total * 60 + part, 0)
+}
+
+function normalizeVideoUrl(url) {
+  if (typeof url !== 'string') {
+    return ''
+  }
+
+  const value = url.trim()
+
+  if (!value) {
+    return ''
+  }
+
+  return value.startsWith('//') ? `https:${value}` : value
+}
+
 function getMoodSignal(index) {
   const signals = moodSignals[activeMood.value] ?? moodSignals.daily
 
@@ -1493,6 +2594,17 @@ function createSlideStyle(coverUrl, tintRgb = defaultCoverTintRgb) {
     '--soda-cover-image': coverUrl ? `url("${coverUrl}")` : 'none',
     '--soda-cover-tint-rgb': tintRgb
   })
+}
+
+function clampSongIndex(index) {
+  if (!recommendationQueue.value.length) {
+    return 0
+  }
+
+  return Math.min(
+    recommendationQueue.value.length - 1,
+    Math.max(0, index)
+  )
 }
 
 function hydrateVisibleCoverTints() {
