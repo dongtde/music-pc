@@ -833,7 +833,7 @@
 
 .volume-rail {
   top: 23px;
-  width: 4px;
+  width: 3px;
   background: color-mix(in srgb, var(--accent) 20%, var(--control-bg));
 }
 

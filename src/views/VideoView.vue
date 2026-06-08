@@ -4,11 +4,11 @@
       <section ref="playerSection" class="mv-watch">
         <div ref="playerStage" class="mv-watch__stage" @mousemove="showControls" @mouseleave="hideControlsSoon">
           <video
-            v-if="activeMv?.url"
-            :key="`${activeMv.id}-${activeMv.urlQuality || 'auto'}`"
+            v-if="activeVideoUrl"
+            :key="`${activeMv.id}-${activeMv.urlQuality || 'auto'}-${activeVideoUrl}`"
             ref="videoElement"
             class="mv-watch__video"
-            :src="activeMv.url"
+            :src="activeVideoUrl"
             :poster="activeMv.coverUrl"
             playsinline
             preload="metadata"
@@ -22,7 +22,7 @@
           />
 
           <button
-            v-if="activeMv?.url && !isVideoPlaying"
+            v-if="activeVideoUrl && !isVideoPlaying"
             class="mv-watch__play"
             type="button"
             :disabled="loading"
@@ -32,7 +32,7 @@
           </button>
 
           <button
-            v-else-if="activeMv && !activeMv.url"
+            v-if="activeMv && !activeVideoUrl"
             class="mv-watch__poster"
             type="button"
             :disabled="loading"
@@ -46,7 +46,7 @@
             <small>{{ loading ? '正在获取播放地址' : '播放地址加载失败，点击重试' }}</small>
           </button>
 
-          <div v-else class="mv-watch__empty">
+          <div v-if="!activeMv" class="mv-watch__empty">
             <Video :size="48" />
             <span>{{ loading ? '正在加载 MV' : '暂无可播放 MV' }}</span>
           </div>
@@ -154,7 +154,7 @@
               <Bookmark :size="18" :fill="activeMv?.subed ? 'currentColor' : 'none'" />
               <span>{{ activeMv?.subed ? '已收藏' : '收藏' }}</span>
             </button>
-            <button class="mv-detail-action" type="button" :disabled="!activeMv?.url" @click="downloadActiveMv">
+            <button class="mv-detail-action" type="button" :disabled="!activeVideoUrl" @click="downloadActiveMv">
               <Download :size="18" />
               <span>下载</span>
             </button>
@@ -205,7 +205,6 @@
 
     <template v-else>
       <header class="mv-page-head">
-        <h1>视频</h1>
         <nav class="mv-tabs" aria-label="视频分类">
           <button
             v-for="tab in browseTabs"
@@ -484,6 +483,7 @@ const commentState = reactive({
 let controlsTimer = null
 
 const activeMv = computed(() => activePayload.value?.mv ?? null)
+const activeVideoUrl = computed(() => normalizePlayableUrl(activeMv.value?.url))
 const isWatchMode = computed(() => Boolean(route.query.mvId))
 const isVideoPlaying = computed(() => videoState.isPlaying)
 const progressPercent = computed(() => {
@@ -539,7 +539,7 @@ const playbackStatusText = computed(() => {
   if (videoState.isPlaying) {
     return '正在播放'
   }
-  if (activeMv.value?.url) {
+  if (activeVideoUrl.value) {
     return videoState.isReady ? '已就绪' : '准备播放'
   }
   return activeMv.value ? '等待播放地址' : '等待 MV'
@@ -726,7 +726,7 @@ async function playActiveMv({ skipScroll = false } = {}) {
   videoState.error = ''
   shouldPlayAfterLoad.value = true
 
-  if (!activeMv.value.url) {
+  if (!activeVideoUrl.value) {
     await reloadActiveMv({ autoplay: true })
     return false
   }
@@ -1010,12 +1010,12 @@ async function toggleSubscribe() {
 }
 
 function downloadActiveMv() {
-  if (!activeMv.value?.url) {
+  if (!activeVideoUrl.value) {
     return
   }
 
   const link = document.createElement('a')
-  link.href = activeMv.value.url
+  link.href = activeVideoUrl.value
   link.download = `${activeMv.value.title || 'mv'}.mp4`
   link.target = '_blank'
   link.rel = 'noopener'
@@ -1095,6 +1095,20 @@ function extractQualityValues(brs) {
   return Object.keys(brs)
     .map(Number)
     .filter((item) => Number.isFinite(item) && item > 0)
+}
+
+function normalizePlayableUrl(url) {
+  if (typeof url !== 'string') {
+    return ''
+  }
+
+  const value = url.trim()
+
+  if (!value) {
+    return ''
+  }
+
+  return value.startsWith('//') ? `https:${value}` : value
 }
 
 function uniqueMvs(items = []) {
