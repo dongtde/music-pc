@@ -739,16 +739,104 @@ export async function getSongCommentsData({ id, limit = 20, offset = 0 }) {
 }
 
 function mapBanner(banner, index) {
+  const targetType = Number(banner.targetType)
+  const targetId = banner.targetId ?? ''
+  const target = targetType === 1 && banner.song ? mapBannerSong(banner.song, index) : null
+
   return {
-    id: `${banner.targetType}-${banner.targetId || index}`,
+    id: `${targetType || 'banner'}-${targetId || index}`,
+    targetType,
+    targetId,
+    targetKind: getBannerTargetKind(targetType),
+    target,
     tag: banner.typeTitle || '推荐',
-    title: banner.typeTitle || '网易云音乐推荐',
-    desc: banner.url?.startsWith('http') ? '点击查看活动详情' : '来自网易云音乐的精选内容',
-    action: '立即查看',
-    link: `/playlist/banner-${banner.targetType}-${banner.targetId || index}`,
+    title: target?.name || banner.typeTitle || '网易云音乐推荐',
+    desc: getBannerDescription(banner, target, targetType),
+    action: getBannerAction(targetType),
+    link: getBannerLink(targetType, targetId),
+    externalUrl: banner.url?.startsWith('http') ? banner.url : '',
     tone: coverType(index),
     imageUrl: banner.imageUrl ?? banner.bigImageUrl
   }
+}
+
+function mapBannerSong(song, index) {
+  const album = song.al ?? song.album ?? {}
+  const artists = song.ar ?? song.artists ?? []
+  const artistIds = getArtistIds(artists)
+
+  return {
+    id: song.id,
+    name: song.name,
+    artistId: artistIds[0] ?? '',
+    artistIds,
+    artist: artists.map((artist) => artist.name).filter(Boolean).join(' / ') || '未知歌手',
+    albumId: album.id ?? '',
+    album: album.name || '未知专辑',
+    rank: String(index + 1).padStart(2, '0'),
+    type: coverType(index),
+    time: formatDuration(song.dt ?? song.duration),
+    duration: formatDuration(song.dt ?? song.duration),
+    coverUrl: album.picUrl ?? album.blurPicUrl,
+    vip: Boolean(song.fee && song.fee !== 0),
+    hasVideo: Boolean(song.mv),
+    mvId: song.mv || ''
+  }
+}
+
+function getBannerTargetKind(targetType) {
+  const targetKinds = {
+    1: 'song',
+    10: 'album',
+    100: 'artist',
+    1000: 'playlist',
+    1004: 'mv'
+  }
+
+  return targetKinds[targetType] ?? 'other'
+}
+
+function getBannerDescription(banner, target, targetType) {
+  if (target?.artist) {
+    return target.artist
+  }
+
+  if (targetType === 1000) {
+    return '点击进入歌单详情'
+  }
+
+  if (banner.url?.startsWith('http')) {
+    return '点击查看活动详情'
+  }
+
+  return '来自网易云音乐的精选内容'
+}
+
+function getBannerAction(targetType) {
+  const actions = {
+    1: '立即播放',
+    10: '查看专辑',
+    100: '查看歌手',
+    1000: '查看歌单',
+    1004: '观看 MV'
+  }
+
+  return actions[targetType] ?? '立即查看'
+}
+
+function getBannerLink(targetType, targetId) {
+  if (!targetId) {
+    return ''
+  }
+
+  const links = {
+    10: `/album/${targetId}`,
+    100: `/artist/${targetId}`,
+    1000: `/playlist/${targetId}`,
+    1004: `/mv?mvId=${targetId}`
+  }
+
+  return links[targetType] ?? ''
 }
 
 function mapPlaylist(playlist, index) {

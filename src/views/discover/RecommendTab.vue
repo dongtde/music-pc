@@ -128,35 +128,40 @@
         class="hero__track"
         :style="{ transform: `translateX(-${activeHeroIndex * 100}%)` }"
       >
-        <article
-          v-for="slide in heroSlides"
-          :key="slide.id"
-          class="hero__slide"
-          :class="`hero__slide--${slide.tone}`"
+        <div
+          v-for="(page, pageIndex) in heroPages"
+          :key="`hero-page-${pageIndex}`"
+          class="hero__page"
         >
-          <img
-            v-if="slide.imageUrl"
-            class="hero__image"
-            :src="slide.imageUrl"
-            :alt="slide.title"
-            loading="lazy"
-            decoding="async"
-          />
-          <div v-if="!slide.imageUrl" class="hero__visual" aria-hidden="true">
-            <span class="hero__disc" />
-            <span class="hero__ring hero__ring--one" />
-            <span class="hero__ring hero__ring--two" />
-          </div>
-          <div class="hero__content">
-            <span class="tag">{{ slide.tag }}</span>
-            <h1>{{ slide.title }}</h1>
-            <p>{{ slide.desc }}</p>
-            <router-link class="hero__play" :to="slide.link">
-              <Play :size="18" fill="currentColor" />
-              <span>{{ slide.action }}</span>
-            </router-link>
-          </div>
-        </article>
+          <article
+            v-for="slide in page"
+            :key="slide.id"
+            class="hero__slide"
+            :class="`hero__slide--${slide.tone}`"
+            role="button"
+            tabindex="0"
+            @click="handleHeroSlideClick(slide)"
+            @keydown.enter.prevent="handleHeroSlideClick(slide)"
+            @keydown.space.prevent="handleHeroSlideClick(slide)"
+          >
+            <img
+              v-if="slide.imageUrl"
+              class="hero__image"
+              :src="slide.imageUrl"
+              :alt="slide.title"
+              loading="lazy"
+              decoding="async"
+            />
+            <div v-if="!slide.imageUrl" class="hero__visual" aria-hidden="true">
+              <span class="hero__disc" />
+              <span class="hero__ring hero__ring--one" />
+              <span class="hero__ring hero__ring--two" />
+            </div>
+            <div class="hero__content">
+              <span class="tag">{{ slide.tag }}</span>
+            </div>
+          </article>
+        </div>
       </div>
 
       <button
@@ -178,11 +183,11 @@
 
       <div class="hero__dots" aria-label="轮播图切换">
         <button
-          v-for="(slide, index) in heroSlides"
-          :key="slide.id"
+          v-for="(page, index) in heroPages"
+          :key="`hero-dot-${index}`"
           type="button"
           :class="{ active: activeHeroIndex === index }"
-          :aria-label="`切换到${slide.title}`"
+          :aria-label="`切换到第 ${index + 1} 页`"
           @click="setHeroSlide(index)"
         />
       </div>
@@ -341,6 +346,8 @@
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { useMessage } from 'naive-ui';
 import {
   ChevronLeft,
   ChevronRight,
@@ -362,11 +369,14 @@ import { usePlayerStore } from '../../stores/player';
 
 const HOME_SKELETON_MIN_MS = 360;
 const RECOMMENDED_SINGLE_DISPLAY_LIMIT = 12;
+const HERO_SLIDES_PER_PAGE = 3;
 const RECOMMEND_CAROUSEL_ROWS = 2;
 const LATEST_CAROUSEL_ROWS = 1;
 const PLAYLIST_CAROUSEL_SMALL_QUERY = '(max-width: 1400px)';
 
 const player = usePlayerStore();
+const router = useRouter();
+const message = useMessage();
 const fallbackRecommendPlaylists = [
   ...playlists,
   ...curatedPlaylists.slice(playlists.length),
@@ -416,7 +426,9 @@ const fallbackHeroSlides = [
 ];
 const heroSlides = ref(fallbackHeroSlides);
 const activeHeroIndex = ref(0);
-const heroLastIndex = computed(() => heroSlides.value.length - 1);
+const heroActionLoadingId = ref('');
+const heroPages = computed(() => chunkItems(heroSlides.value, HERO_SLIDES_PER_PAGE));
+const heroLastIndex = computed(() => Math.max(heroPages.value.length - 1, 0));
 const recommendCarouselPageStarts = computed(() =>
   getPlaylistCarouselPageStarts(
     recommendPlaylists.value.length,
@@ -452,8 +464,18 @@ const latestSkeletonCarouselNeeded = computed(
 let heroTimer;
 let playlistCarouselMediaQuery;
 
+function chunkItems(items, size) {
+  const chunks = [];
+
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+
+  return chunks.length ? chunks : [[]];
+}
+
 function setHeroSlide(index) {
-  activeHeroIndex.value = index;
+  activeHeroIndex.value = Math.min(Math.max(index, 0), heroLastIndex.value);
   startHeroAutoplay();
 }
 
@@ -475,6 +497,11 @@ function prevHeroSlide() {
 
 function startHeroAutoplay() {
   stopHeroAutoplay();
+
+  if (heroLastIndex.value <= 0) {
+    return;
+  }
+
   heroTimer = window.setInterval(() => {
     activeHeroIndex.value =
       activeHeroIndex.value === heroLastIndex.value
@@ -488,6 +515,83 @@ function stopHeroAutoplay() {
     window.clearInterval(heroTimer);
     heroTimer = undefined;
   }
+}
+
+async function handleHeroSlideClick(slide) {
+  if (!slide) {
+    return;
+  }
+
+  if (slide.targetKind === 'song') {
+    await playHeroSong(slide);
+    startHeroAutoplay();
+    return;
+  }
+
+  if (slide.link) {
+    router.push(slide.link);
+    return;
+  }
+
+  if (slide.externalUrl) {
+    window.open(slide.externalUrl, '_blank', 'noopener');
+    return;
+  }
+
+  message.info('这条推荐暂时无法打开');
+}
+
+async function playHeroSong(slide) {
+  if (heroActionLoadingId.value) {
+    return;
+  }
+
+  const track = slide.target ?? createHeroTrack(slide);
+
+  if (!track?.id) {
+    message.error('这条推荐暂时无法播放');
+    return;
+  }
+
+  const queue = [
+    track,
+    ...homeRecommendedSingles.value.filter(
+      (song) => String(song.id) !== String(track.id)
+    ),
+  ];
+
+  player.setQueue(queue);
+
+  if (String(player.state.currentTrack.id) === String(track.id)) {
+    await player.togglePlay();
+    return;
+  }
+
+  heroActionLoadingId.value = slide.id;
+
+  try {
+    const played = await player.playTrack(track);
+
+    if (!played) {
+      message.error(player.state.error?.message || '当前歌曲暂时无法播放');
+    }
+  } finally {
+    heroActionLoadingId.value = '';
+  }
+}
+
+function createHeroTrack(slide) {
+  return {
+    id: slide.targetId,
+    name: slide.title,
+    artist: slide.desc,
+    album: slide.tag,
+    rank: '01',
+    type: slide.tone,
+    coverUrl: slide.imageUrl,
+    time: '0:00',
+    duration: '0:00'
+  };
 }
 
 function getPlaylistCarouselPageStarts(itemCount, rows, visibleColumns) {
