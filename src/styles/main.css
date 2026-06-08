@@ -36,6 +36,9 @@
   --scrollbar-thumb: rgba(var(--accent-rgb), 0.46);
   --scrollbar-thumb-hover: rgba(var(--accent-rgb), 0.68);
   --shadow-color: rgba(0, 0, 0, 0.28);
+  --layout-duration: 460ms;
+  --layout-duration-fast: 320ms;
+  --layout-ease: cubic-bezier(0.16, 1, 0.3, 1);
   background: var(--app-bg);
   color: var(--text-main);
 }
@@ -138,12 +141,12 @@ button {
 .icon-button,
 .history-actions button {
   transition:
-    background 360ms ease,
-    background-color 360ms ease,
-    border-color 360ms ease,
-    color 360ms ease,
-    box-shadow 360ms ease,
-    backdrop-filter 360ms ease;
+    background var(--layout-duration-fast) ease,
+    background-color var(--layout-duration-fast) ease,
+    border-color var(--layout-duration-fast) ease,
+    color var(--layout-duration-fast) ease,
+    box-shadow var(--layout-duration-fast) ease,
+    backdrop-filter var(--layout-duration-fast) ease;
 }
 
 .app-shell {
@@ -153,14 +156,12 @@ button {
   width: 100vw;
   height: 100vh;
   background: var(--app-bg);
-  transition:
-    grid-template-columns 360ms cubic-bezier(0.22, 1, 0.36, 1),
-    background-color 360ms ease;
+  transition: background-color var(--layout-duration-fast) ease;
 }
 
 .app-shell--immersive {
   grid-template-columns: 76px minmax(0, 1fr);
-  grid-template-rows: 1fr;
+  grid-template-rows: 1fr 0px;
   background: #080809;
 }
 
@@ -178,10 +179,8 @@ button {
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border-subtle);
   transition:
-    gap 360ms cubic-bezier(0.22, 1, 0.36, 1),
-    padding 360ms cubic-bezier(0.22, 1, 0.36, 1),
-    background-color 360ms ease,
-    border-color 360ms ease;
+    background-color var(--layout-duration-fast) ease,
+    border-color var(--layout-duration-fast) ease;
 }
 
 .app-shell--immersive .sidebar {
@@ -193,6 +192,7 @@ button {
 }
 
 .profile-card {
+  position: relative;
   display: grid;
   grid-template-columns: 46px minmax(0, 1fr) 18px;
   grid-template-rows: auto auto;
@@ -213,10 +213,6 @@ button {
   background: transparent;
   cursor: pointer;
   text-align: left;
-  transition:
-    height 360ms cubic-bezier(0.22, 1, 0.36, 1),
-    padding 360ms cubic-bezier(0.22, 1, 0.36, 1),
-    grid-template-columns 360ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .sidebar--compact .profile-card {
@@ -235,7 +231,7 @@ button {
 .sidebar--compact .profile__text,
 .sidebar--compact .profile > svg {
   position: absolute;
-  width: 0;
+  max-width: 0;
   opacity: 0;
   pointer-events: none;
   transform: translateX(-8px);
@@ -255,6 +251,7 @@ button {
     radial-gradient(circle at 50% 54%, #2b1b16 0 23%, transparent 24%),
     linear-gradient(135deg, #c0865c, #43291e);
   box-shadow: 0 0 0 2px #775a3c;
+  transition: box-shadow var(--layout-duration-fast) ease;
 }
 
 .profile-avatar::after {
@@ -297,12 +294,12 @@ button {
   grid-row: 1;
   align-self: end;
   min-width: 0;
+  max-width: 132px;
   flex-direction: column;
   gap: 3px;
   transition:
-    opacity 240ms ease,
-    transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
-    width 300ms cubic-bezier(0.22, 1, 0.36, 1);
+    opacity 180ms ease,
+    transform 180ms ease;
 }
 
 .profile__text strong {
@@ -321,6 +318,9 @@ button {
   grid-column: 3;
   grid-row: 1 / 3;
   justify-self: end;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
 }
 
 .vip-button.profile-vip-button {
@@ -341,11 +341,12 @@ button {
   font-size: 12px;
   font-weight: 800;
   line-height: 20px;
+  transform-origin: left center;
   transition:
     background-color 220ms ease,
     color 220ms ease,
-    transform 220ms ease,
-    opacity 220ms ease;
+    transform 180ms ease,
+    opacity 180ms ease;
 }
 
 .vip-button.profile-vip-button:hover {
@@ -360,9 +361,15 @@ button {
 }
 
 .sidebar--compact .profile-vip-button {
-  display: none;
+  position: absolute;
+  left: 48px;
+  max-width: 0;
+  height: 20px;
+  overflow: hidden;
+  padding: 0;
   opacity: 0;
   pointer-events: none;
+  transform: translateX(-8px) scale(0.96);
 }
 
 .nav-groups {
@@ -389,9 +396,7 @@ button {
 }
 
 .sidebar--compact .nav-groups {
-  display: grid;
   width: 100%;
-  justify-items: start;
   padding: 0 0 0 6px;
 }
 
@@ -403,10 +408,7 @@ button {
   padding: 0 12px;
   font-size: 13px;
   font-weight: 700;
-  transition:
-    height 300ms cubic-bezier(0.22, 1, 0.36, 1),
-    padding 300ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 220ms ease;
+  transition: opacity 160ms ease;
 }
 
 .sidebar--compact .nav-title {
@@ -441,10 +443,8 @@ button {
   color: var(--text-main);
   font-size: 14px;
   font-weight: 700;
+  width: 100%;
   transition:
-    width 360ms cubic-bezier(0.22, 1, 0.36, 1),
-    height 360ms cubic-bezier(0.22, 1, 0.36, 1),
-    gap 360ms cubic-bezier(0.22, 1, 0.36, 1),
     color 220ms ease,
     background-color 220ms ease,
     background 220ms ease;
@@ -453,13 +453,13 @@ button {
 .nav-item span,
 .nav-item em {
   min-width: 0;
+  max-width: 142px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   transition:
-    opacity 220ms ease,
-    width 300ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
+    opacity 160ms ease,
+    transform 160ms ease;
 }
 
 .nav-item > svg {
@@ -487,7 +487,7 @@ button {
 .sidebar--compact .nav-item span,
 .sidebar--compact .nav-item em {
   flex: 0 0 0;
-  width: 0;
+  max-width: 0;
   margin-left: 0;
   opacity: 0;
   overflow: hidden;
@@ -542,6 +542,7 @@ button {
 }
 
 .main-panel {
+  position: relative;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -552,12 +553,79 @@ button {
 
 .topbar {
   display: flex;
+  flex: 0 0 72px;
   align-items: center;
   gap: 16px;
   height: 72px;
+  min-height: 72px;
+  overflow: hidden;
   padding: 0 32px;
   background: var(--topbar-bg);
   border-bottom: 1px solid var(--border-subtle);
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    background-color var(--layout-duration-fast) ease,
+    border-color var(--layout-duration-fast) ease;
+}
+
+.app-shell--immersive .topbar {
+  flex-basis: 0;
+  height: 0;
+  min-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom-color: transparent;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-18px);
+}
+
+.route-stage {
+  position: relative;
+  isolation: isolate;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: inherit;
+}
+
+.route-stage > .view {
+  width: 100%;
+  height: 100%;
+}
+
+.app-shell > .player {
+  opacity: 1;
+  transform: translateY(0);
+  will-change: opacity, transform;
+  transition: border-color var(--layout-duration-fast) ease;
+}
+
+.app-shell--immersive > .player {
+  height: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top-color: transparent;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(26px);
+}
+
+.app-shell--layout-switching,
+.app-shell--layout-switching .sidebar,
+.app-shell--layout-switching .sidebar *,
+.app-shell--layout-switching .topbar,
+.app-shell--layout-switching > .player {
+  animation-duration: 0ms !important;
+  transition-duration: 0ms !important;
+}
+
+.app-shell--layout-switching .route-stage {
+  will-change: opacity, transform;
 }
 
 .history-actions {
@@ -1068,6 +1136,60 @@ button {
   content: '';
 }
 
+.route-soft-enter-active,
+.route-soft-leave-active,
+.route-from-immersive-enter-active,
+.route-from-immersive-leave-active,
+.route-to-immersive-enter-active,
+.route-to-immersive-leave-active {
+  transition:
+    opacity var(--layout-duration-fast) ease,
+    transform var(--layout-duration) var(--layout-ease);
+}
+
+.route-soft-leave-active,
+.route-from-immersive-leave-active,
+.route-to-immersive-leave-active {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  pointer-events: none;
+}
+
+.route-soft-enter-active,
+.route-from-immersive-enter-active,
+.route-to-immersive-enter-active {
+  position: relative;
+  z-index: 1;
+}
+
+.route-soft-enter-from,
+.route-soft-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.route-from-immersive-enter-from {
+  opacity: 0;
+  transform: translateX(18px) scale(0.992);
+}
+
+.route-from-immersive-leave-to {
+  opacity: 0;
+  transform: translateX(-22px) scale(1.012);
+}
+
+.route-to-immersive-enter-from {
+  opacity: 0;
+  transform: translateX(-18px) scale(1.012);
+}
+
+.route-to-immersive-leave-to {
+  opacity: 0;
+  transform: translateX(22px) scale(0.992);
+}
+
 .theme-overlay {
   position: fixed;
   inset: 0;
@@ -1311,5 +1433,47 @@ button {
   to {
     opacity: 1;
     filter: blur(0);
+  }
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell,
+  .sidebar,
+  .profile-card,
+  .profile__text,
+  .profile-vip-button,
+  .nav-title,
+  .nav-item,
+  .nav-item span,
+  .nav-item em,
+  .main-panel,
+  .topbar,
+  .route-stage,
+  .route-stage > .view,
+  .player,
+  .route-soft-enter-active,
+  .route-soft-leave-active,
+  .route-from-immersive-enter-active,
+  .route-from-immersive-leave-active,
+  .route-to-immersive-enter-active,
+  .route-to-immersive-leave-active {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 1ms !important;
   }
 }

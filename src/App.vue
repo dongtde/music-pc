@@ -5,15 +5,25 @@
         class="app-shell"
         :class="{
           'theme-is-switching': theme.state.animating,
+          'app-shell--layout-switching': isLayoutSwitching,
           'app-shell--immersive': isImmersiveRoute
         }"
       >
         <SidebarNav :compact="isImmersiveRoute" />
         <section class="main-panel">
-          <TopBar v-if="!isImmersiveRoute" />
-          <router-view />
+          <TopBar :inert="isImmersiveRoute" :aria-hidden="isImmersiveRoute" />
+          <div class="route-stage">
+            <router-view v-slot="{ Component, route: viewRoute }">
+              <Transition :name="routeTransitionName" appear>
+                <component
+                  :is="Component"
+                  :key="String(viewRoute.name || viewRoute.path)"
+                />
+              </Transition>
+            </router-view>
+          </div>
         </section>
-        <PlayerBar v-if="!isImmersiveRoute" />
+        <PlayerBar />
         <ThemeTransitionOverlay />
         <LoginModal v-model:show="auth.state.loginModalVisible" />
       </main>
@@ -22,7 +32,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { darkTheme } from 'naive-ui'
 import SidebarNav from './components/SidebarNav.vue'
@@ -41,6 +51,54 @@ auth.initAuth()
 
 const naiveTheme = computed(() => (theme.state.mode === 'dark' ? darkTheme : null))
 const isImmersiveRoute = computed(() => route.name === 'home')
+const routeTransitionName = ref('route-soft')
+const isLayoutSwitching = ref(false)
+let layoutSwitchTimer = 0
+
+function isHomeRoute(routeName) {
+  return routeName === 'home'
+}
+
+function markLayoutSwitching() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.clearTimeout(layoutSwitchTimer)
+  isLayoutSwitching.value = true
+  layoutSwitchTimer = window.setTimeout(() => {
+    isLayoutSwitching.value = false
+  }, 120)
+}
+
+onBeforeUnmount(() => {
+  if (typeof window !== 'undefined') {
+    window.clearTimeout(layoutSwitchTimer)
+  }
+})
+
+watch(
+  () => route.name,
+  (nextName, previousName) => {
+    if (!previousName || nextName === previousName) {
+      return
+    }
+
+    const wasImmersive = isHomeRoute(previousName)
+    const willBeImmersive = isHomeRoute(nextName)
+
+    routeTransitionName.value =
+      wasImmersive === willBeImmersive
+        ? 'route-soft'
+        : willBeImmersive
+          ? 'route-to-immersive'
+          : 'route-from-immersive'
+
+    if (wasImmersive !== willBeImmersive) {
+      markLayoutSwitching()
+    }
+  }
+)
 
 function hexToRgb(color) {
   const value = color.replace('#', '')
