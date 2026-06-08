@@ -151,6 +151,7 @@
           <DanmakuLayer
             v-if="index === activeIndex"
             :key="`danmaku-${song.id}-${songCommentTrackId}`"
+            class="soda-slide__danmaku"
             :enabled="danmakuEnabled"
             :song="song"
             :hot-comments="activeDanmakuHotComments"
@@ -291,9 +292,21 @@ const activeIndex = ref(0)
 const autoPlayAfterGesture = ref(false)
 const likedIds = shallowRef(new Set())
 const songStats = shallowRef(new Map())
-const emptySlideStyle = Object.freeze({ '--soda-cover-image': 'none' })
+const defaultCoverTintRgb = '255, 63, 115'
+const coverTintFallbacks = Object.freeze({
+  sunset: '236, 127, 56',
+  neon: '240, 25, 141',
+  lofi: '139, 186, 213',
+  stage: '183, 218, 233',
+  piano: '246, 212, 142'
+})
+const emptySlideStyle = Object.freeze({
+  '--soda-cover-image': 'none',
+  '--soda-cover-tint-rgb': defaultCoverTintRgb
+})
 const allSongs = shallowRef(prepareQueue(recommendedSingles))
 const recommendationQueue = shallowRef(applyMoodQueue(allSongs.value, activeMood.value))
+const coverTintVersion = ref(0)
 const lyricLines = shallowRef(createLyricPlaceholder('点击播放后显示歌词'))
 const isLyricLoading = ref(false)
 const lyricsScroll = ref(null)
@@ -324,6 +337,8 @@ const recommendationLimit = 36
 const slideHydrateRadius = 2
 const lyricCache = new Map()
 const songStatsLoadingIds = new Set()
+const coverTintCache = new Map()
+const coverTintRequests = new Set()
 let scrollFrame = 0
 let resizeFrame = 0
 let autoPlayTimer = 0
@@ -434,6 +449,7 @@ watch(
     loadActiveLyrics(trackId)
     loadActiveSongStats(trackId)
     preloadActiveSongComments()
+    hydrateVisibleCoverTints()
   },
   { immediate: true }
 )
@@ -459,6 +475,7 @@ onMounted(() => {
   removeTrackEndedListener = player.onTrackEnded(handleTrackEnded)
   window.addEventListener('resize', handleLyricsResize)
   snapFeedToActiveIndex('auto')
+  hydrateVisibleCoverTints()
   loadRecommendations()
 })
 
@@ -483,6 +500,7 @@ async function loadRecommendations() {
     recommendationQueue.value = applyMoodQueue(allSongs.value, activeMood.value)
     restoreActiveTrackPosition()
     syncPlayerQueue()
+    hydrateVisibleCoverTints()
     await snapFeedToActiveIndex('auto')
   } catch (error) {
     console.warn('Failed to load home recommendations:', error)
@@ -532,14 +550,15 @@ function waitForLayoutFrame() {
 function prepareQueue(songs) {
   return songs.map((song, index) => {
     const coverUrl = resizeNeteaseCover(song.coverUrl, 640)
+    const type = song.type ?? getCoverType(index)
 
     return {
       ...song,
       coverUrl,
       id: song.id ?? `home-${index + 1}`,
       rank: String(index + 1).padStart(2, '0'),
-      type: song.type ?? getCoverType(index),
-      slideStyle: createSlideStyle(coverUrl)
+      type,
+      slideStyle: createSlideStyle(coverUrl, getFallbackCoverTintRgb(type))
     }
   })
 }
@@ -598,6 +617,7 @@ function setMood(value) {
   recommendationQueue.value = applyMoodQueue(allSongs.value, value)
   activeIndex.value = 0
   syncPlayerQueue()
+  hydrateVisibleCoverTints()
   nextTick(() => scrollToIndex(0, 'auto'))
 
   if (autoPlayAfterGesture.value) {
@@ -1461,13 +1481,153 @@ function isSlideHydrated(index) {
 }
 
 function getSlideStyle(song, index) {
-  return isSlideHydrated(index) ? song.slideStyle ?? emptySlideStyle : emptySlideStyle
+  coverTintVersion.value
+
+  return isSlideHydrated(index)
+    ? createSlideStyle(song?.coverUrl, getSongCoverTintRgb(song))
+    : emptySlideStyle
 }
 
-function createSlideStyle(coverUrl) {
-  return coverUrl
-    ? Object.freeze({ '--soda-cover-image': `url("${coverUrl}")` })
-    : emptySlideStyle
+function createSlideStyle(coverUrl, tintRgb = defaultCoverTintRgb) {
+  return Object.freeze({
+    '--soda-cover-image': coverUrl ? `url("${coverUrl}")` : 'none',
+    '--soda-cover-tint-rgb': tintRgb
+  })
+}
+
+function hydrateVisibleCoverTints() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const { start, end } = hydratedSlideBounds.value
+  recommendationQueue.value.slice(start, end + 1).forEach(loadCoverTintForSong)
+}
+
+function loadCoverTintForSong(song) {
+  if (!song?.coverUrl || coverTintCache.has(song.coverUrl) || coverTintRequests.has(song.coverUrl)) {
+    return
+  }
+
+  coverTintRequests.add(song.coverUrl)
+  sampleCoverTint(song.coverUrl)
+    .then((tintRgb) => {
+      coverTintCache.set(song.coverUrl, tintRgb)
+      coverTintVersion.value += 1
+    })
+    .catch(() => {
+      coverTintCache.set(song.coverUrl, getFallbackCoverTintRgb(song.type))
+    })
+    .finally(() => {
+      coverTintRequests.delete(song.coverUrl)
+    })
+}
+
+function getSongCoverTintRgb(song) {
+  if (!song?.coverUrl) {
+    return getFallbackCoverTintRgb(song?.type)
+  }
+
+  return coverTintCache.get(song.coverUrl) ?? getFallbackCoverTintRgb(song.type)
+}
+
+function getFallbackCoverTintRgb(type) {
+  return coverTintFallbacks[type] ?? defaultCoverTintRgb
+}
+
+function sampleCoverTint(coverUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+
+    image.crossOrigin = 'anonymous'
+    image.decoding = 'async'
+    image.onload = () => {
+      try {
+        const sampleSize = 28
+        const canvas = document.createElement('canvas')
+        const context = canvas.getContext('2d', { willReadFrequently: true })
+
+        if (!context) {
+          reject(new Error('Canvas context unavailable'))
+          return
+        }
+
+        canvas.width = sampleSize
+        canvas.height = sampleSize
+        context.drawImage(image, 0, 0, sampleSize, sampleSize)
+        resolve(extractCoverTint(context.getImageData(0, 0, sampleSize, sampleSize).data))
+      } catch (error) {
+        reject(error)
+      }
+    }
+    image.onerror = reject
+    image.src = coverUrl
+  })
+}
+
+function extractCoverTint(data) {
+  let red = 0
+  let green = 0
+  let blue = 0
+  let totalWeight = 0
+
+  for (let index = 0; index < data.length; index += 4) {
+    const alpha = data[index + 3]
+
+    if (alpha < 128) {
+      continue
+    }
+
+    const pixelRed = data[index]
+    const pixelGreen = data[index + 1]
+    const pixelBlue = data[index + 2]
+    const max = Math.max(pixelRed, pixelGreen, pixelBlue)
+    const min = Math.min(pixelRed, pixelGreen, pixelBlue)
+    const luma = getLuma(pixelRed, pixelGreen, pixelBlue)
+
+    if (luma < 24 || luma > 238) {
+      continue
+    }
+
+    const saturation = max - min
+    const weight = 1 + saturation / 80 + Math.max(0, 128 - Math.abs(luma - 128)) / 160
+
+    red += pixelRed * weight
+    green += pixelGreen * weight
+    blue += pixelBlue * weight
+    totalWeight += weight
+  }
+
+  if (!totalWeight) {
+    return defaultCoverTintRgb
+  }
+
+  return tuneCoverTint(red / totalWeight, green / totalWeight, blue / totalWeight)
+}
+
+function tuneCoverTint(red, green, blue) {
+  const luma = getLuma(red, green, blue)
+  let next = { red, green, blue }
+
+  if (luma < 74) {
+    next = mixRgb(next, { red: 255, green: 255, blue: 255 }, 0.22)
+  } else if (luma > 190) {
+    next = mixRgb(next, { red: 0, green: 0, blue: 0 }, 0.18)
+  }
+
+  return `${Math.round(next.red)}, ${Math.round(next.green)}, ${Math.round(next.blue)}`
+}
+
+function mixRgb(current, target, ratio) {
+  return {
+    red: current.red + (target.red - current.red) * ratio,
+    green: current.green + (target.green - current.green) * ratio,
+    blue: current.blue + (target.blue - current.blue) * ratio
+  }
+}
+
+function getLuma(red, green, blue) {
+  return red * 0.2126 + green * 0.7152 + blue * 0.0722
 }
 
 function resizeNeteaseCover(url, size) {

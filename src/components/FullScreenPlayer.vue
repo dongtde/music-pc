@@ -48,6 +48,7 @@
               'full-player__qq-lyrics--dragging': lyricsDragging,
               'full-player__qq-lyrics--wheeling': lyricsWheeling,
               'full-player__qq-lyrics--previewing': lyricsInteractionActive,
+              'full-player__qq-lyrics--danmaku': danmakuEnabled,
             }"
           >
             <div

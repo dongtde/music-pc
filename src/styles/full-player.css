@@ -217,9 +217,46 @@
   position: relative;
   min-height: 0;
   flex: 1;
+  isolation: isolate;
+}
+
+.full-player__qq-lyrics::before {
+  position: absolute;
+  inset: 8% -8%;
+  z-index: 0;
+  pointer-events: none;
+  backdrop-filter: blur(4px) saturate(1.08);
+  background:
+    radial-gradient(
+      ellipse at center,
+      color-mix(in srgb, var(--cover-secondary, #8bbad5) 24%, transparent) 0%,
+      color-mix(in srgb, var(--cover-secondary, #8bbad5) 16%, transparent) 38%,
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse at center,
+      color-mix(in srgb, var(--cover-tertiary, #e7a976) 14%, transparent) 0%,
+      transparent 64%
+    ),
+    radial-gradient(
+      ellipse at center,
+      rgba(8, 8, 9, 0.42) 0%,
+      rgba(8, 8, 9, 0.34) 44%,
+      rgba(8, 8, 9, 0) 78%
+    );
+  content: '';
+  mask-image: radial-gradient(ellipse at center, #000 0%, rgba(0, 0, 0, 0.9) 46%, transparent 82%);
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.full-player__qq-lyrics--danmaku::before {
+  opacity: 1;
 }
 
 .full-player__lyrics-scroll {
+  position: relative;
+  z-index: 1;
   height: 100%;
   min-height: 0;
   overflow: auto;

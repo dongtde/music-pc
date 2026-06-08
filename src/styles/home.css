@@ -284,6 +284,10 @@
   opacity: 0.54;
 }
 
+.soda-slide__danmaku.soda-danmaku {
+  inset: 92px 116px 122px 64px;
+}
+
 .soda-lyrics-panel {
   position: relative;
   z-index: 2;
@@ -299,9 +303,35 @@
   padding: 0;
   border-left: 0;
   overflow: hidden;
+  isolation: isolate;
+}
+
+.soda-lyrics-panel::before {
+  position: absolute;
+  inset: 8% -8%;
+  z-index: 0;
+  pointer-events: none;
+  backdrop-filter: blur(4px) saturate(1.08);
+  background:
+    radial-gradient(
+      ellipse at center,
+      rgba(var(--soda-cover-tint-rgb), 0.24) 0%,
+      rgba(var(--soda-cover-tint-rgb), 0.16) 38%,
+      rgba(var(--soda-cover-tint-rgb), 0) 70%
+    ),
+    radial-gradient(
+      ellipse at center,
+      rgba(8, 8, 9, 0.42) 0%,
+      rgba(8, 8, 9, 0.34) 44%,
+      rgba(8, 8, 9, 0) 78%
+    );
+  content: '';
+  mask-image: radial-gradient(ellipse at center, #000 0%, rgba(0, 0, 0, 0.9) 46%, transparent 82%);
 }
 
 .soda-lyrics-list {
+  position: relative;
+  z-index: 1;
   display: grid;
   height: 100%;
   min-height: 0;
@@ -687,6 +717,10 @@
     padding: 84px 128px 22px 72px;
   }
 
+  .soda-slide__danmaku.soda-danmaku {
+    inset: 84px 96px 118px 46px;
+  }
+
   .soda-slide__player {
     width: min(100%, 390px);
   }
@@ -714,6 +748,10 @@
     grid-template-columns: minmax(280px, 340px) minmax(280px, 360px);
     column-gap: 38px;
     padding: 78px 112px 20px 40px;
+  }
+
+  .soda-slide__danmaku.soda-danmaku {
+    inset: 78px 82px 116px 30px;
   }
 
   .soda-slide__player {
