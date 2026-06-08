@@ -177,7 +177,7 @@ button {
   overflow: hidden;
   padding: 24px 10px 16px;
   background: var(--sidebar-bg);
-  border-right: 1px solid var(--border-subtle);
+  border-right: 0;
   transition:
     background-color var(--layout-duration-fast) ease,
     border-color var(--layout-duration-fast) ease;
@@ -1113,7 +1113,7 @@ button {
   align-items: center;
   height: 58px;
   background: var(--app-bg);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 0;
 }
 
 .tabs a {
