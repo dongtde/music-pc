@@ -110,6 +110,10 @@
         :song="track"
         :hot-comments="danmakuHotComments"
         :comments="danmakuComments"
+        :has-more="danmakuHasMore"
+        :loading="danmakuLoading"
+        :prefetch-threshold="danmakuPrefetchThreshold"
+        @need-more="$emit('danmaku-need-more')"
       />
 
       <div class="full-player__spectrum" aria-hidden="true">
@@ -170,9 +174,21 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  danmakuHasMore: {
+    type: Boolean,
+    default: false,
+  },
+  danmakuLoading: {
+    type: Boolean,
+    default: false,
+  },
+  danmakuPrefetchThreshold: {
+    type: Number,
+    default: 8,
+  },
 });
 
-const emit = defineEmits(['close', 'cover-flight-end']);
+const emit = defineEmits(['close', 'cover-flight-end', 'danmaku-need-more']);
 const player = usePlayerStore();
 
 const coverLabel = ref(null);

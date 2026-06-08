@@ -1,8 +1,13 @@
 <template>
   <section
-    v-if="enabled && danmakuItems.length"
+    v-if="danmakuItems.length"
     class="soda-danmaku"
+    :class="{
+      'soda-danmaku--disabled': !enabled,
+      'soda-danmaku--paused': paused || !enabled
+    }"
     aria-label="歌曲评论弹幕"
+    :aria-hidden="!enabled"
     aria-live="off"
   >
     <span
@@ -11,11 +16,12 @@
       class="soda-danmaku__item"
       :class="{
         'soda-danmaku__item--hot': item.hot,
-        'soda-danmaku__item--fallback': item.fallback
+        'soda-danmaku__item--fallback': item.fallback,
+        'soda-danmaku__item--empty': item.empty
       }"
       :style="item.style"
     >
-      <span class="soda-danmaku__avatar" aria-hidden="true">
+      <span v-if="!item.empty" class="soda-danmaku__avatar" aria-hidden="true">
         <img
           v-if="item.avatarUrl"
           :src="item.avatarUrl"
@@ -25,19 +31,25 @@
         />
         <template v-else>{{ item.avatarText }}</template>
       </span>
-      <span class="soda-danmaku__text">{{ item.content }}</span>
+      <span v-if="!item.empty" class="soda-danmaku__text">{{ item.content }}</span>
     </span>
   </section>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import '../styles/danmaku.css'
+
+const emit = defineEmits(['needMore'])
 
 const props = defineProps({
   enabled: {
     type: Boolean,
     default: true
+  },
+  paused: {
+    type: Boolean,
+    default: false
   },
   song: {
     type: Object,
@@ -50,11 +62,26 @@ const props = defineProps({
   comments: {
     type: Array,
     default: () => []
+  },
+  maxItems: {
+    type: Number,
+    default: 48
+  },
+  hasMore: {
+    type: Boolean,
+    default: false
+  },
+  loading: {
+    type: Boolean,
+    default: false
+  },
+  prefetchThreshold: {
+    type: Number,
+    default: 8
   }
 })
 
-const laneCount = 5
-const maxDanmakuItems = 18
+const laneCount = 7
 const fallbackNames = ['云听友', '耳机党', '夜航线', '旋律控', '今日循环']
 const fallbackTexts = [
   '这段前奏一响就有画面了',
@@ -69,7 +96,7 @@ const fallbackTexts = [
   '突然想把音量调大一点'
 ]
 
-const danmakuItems = computed(() => {
+const sourceComments = computed(() => {
   const hotComments = props.hotComments.map((comment, index) =>
     normalizeComment(comment, `hot-${index}`, true)
   )
@@ -77,9 +104,61 @@ const danmakuItems = computed(() => {
     normalizeComment(comment, `comment-${index}`, false)
   )
   const sourceComments = dedupeComments([...hotComments, ...regularComments])
-  const comments = sourceComments.length ? sourceComments : createFallbackComments()
 
-  return comments.slice(0, maxDanmakuItems).map(createDanmakuItem)
+  return sourceComments
+})
+
+const maxVisibleItems = computed(() => {
+  const value = Math.floor(Number(props.maxItems))
+
+  return Number.isFinite(value) && value > 0 ? value : 48
+})
+const danmakuItems = ref([])
+const pendingComments = ref([])
+let seenCommentKeys = new Set()
+let showingFallback = false
+const slotTimers = new Map()
+
+watch(
+  () => props.song?.id,
+  () => {
+    resetDanmakuStream()
+    syncSourceComments()
+  },
+  { immediate: true }
+)
+
+watch(sourceComments, () => {
+  syncSourceComments()
+})
+
+watch(maxVisibleItems, () => {
+  if (showingFallback) {
+    showFallbackComments()
+    return
+  }
+
+  danmakuItems.value = danmakuItems.value.slice(0, maxVisibleItems.value)
+  clearOverflowSlotTimers()
+  fillDanmakuSlots()
+  requestMoreIfNeeded()
+})
+
+watch(
+  () => [props.enabled, props.paused, props.hasMore, props.loading],
+  ([enabled, paused]) => {
+    if (enabled && !paused) {
+      scheduleVisibleItems()
+    } else {
+      clearSlotTimers()
+    }
+
+    requestMoreIfNeeded()
+  }
+)
+
+onUnmounted(() => {
+  clearSlotTimers()
 })
 
 function normalizeComment(comment, fallbackId, hot) {
@@ -125,26 +204,226 @@ function createFallbackComments() {
   }))
 }
 
+function resetDanmakuStream() {
+  clearSlotTimers()
+  danmakuItems.value = []
+  pendingComments.value = []
+  seenCommentKeys = new Set()
+  showingFallback = false
+}
+
+function syncSourceComments() {
+  const comments = sourceComments.value
+
+  if (!comments.length) {
+    if (!danmakuItems.value.length || showingFallback) {
+      showFallbackComments()
+    }
+
+    requestMoreIfNeeded()
+    return
+  }
+
+  if (showingFallback) {
+    danmakuItems.value = []
+    pendingComments.value = []
+    seenCommentKeys = new Set()
+    showingFallback = false
+  }
+
+  enqueueComments(comments)
+  fillDanmakuSlots()
+  requestMoreIfNeeded()
+}
+
+function showFallbackComments() {
+  const comments = createFallbackComments()
+  const count = Math.min(comments.length, maxVisibleItems.value)
+
+  showingFallback = true
+  pendingComments.value = []
+  danmakuItems.value = comments.slice(0, count).map(createDanmakuItem)
+  scheduleVisibleItems()
+}
+
+function enqueueComments(comments) {
+  const nextComments = []
+
+  comments.forEach((comment) => {
+    const key = getCommentKey(comment)
+
+    if (!key || seenCommentKeys.has(key)) {
+      return
+    }
+
+    seenCommentKeys.add(key)
+    nextComments.push(comment)
+  })
+
+  if (nextComments.length) {
+    pendingComments.value = [...pendingComments.value, ...nextComments]
+  }
+}
+
+function fillDanmakuSlots() {
+  if (showingFallback || !pendingComments.value.length) {
+    return
+  }
+
+  const items = [...danmakuItems.value].slice(0, maxVisibleItems.value)
+
+  for (let index = 0; index < maxVisibleItems.value && pendingComments.value.length; index += 1) {
+    if (items[index] && !items[index].empty) {
+      continue
+    }
+
+    items[index] = createDanmakuItem(pendingComments.value.shift(), index)
+    scheduleSlot(index, items[index].timing.firstCycleMs)
+  }
+
+  danmakuItems.value = items
+}
+
+function cycleDanmakuItem(index) {
+  if (showingFallback) {
+    return
+  }
+
+  const nextComment = pendingComments.value.shift()
+  danmakuItems.value[index] = nextComment
+    ? createDanmakuItem(nextComment, index)
+    : createEmptyDanmakuItem(index)
+
+  if (nextComment) {
+    scheduleSlot(index, danmakuItems.value[index].timing.durationMs)
+  } else {
+    clearSlotTimer(index)
+  }
+
+  requestMoreIfNeeded()
+}
+
+function requestMoreIfNeeded() {
+  if (!props.enabled || props.paused || props.loading || !props.hasMore) {
+    return
+  }
+
+  const threshold = Math.max(0, Number(props.prefetchThreshold) || 0)
+
+  if (pendingComments.value.length <= threshold) {
+    emit('needMore')
+  }
+}
+
 function createDanmakuItem(comment, index) {
-  const lane = index % laneCount
-  const row = Math.floor(index / laneCount)
-  const duration = 18 + (index % 4) * 2 + Math.min(5, comment.content.length / 8)
-  const delay = -((index * 2.45 + lane * 0.7) % duration)
-  const top = 8 + lane * 17 + (row % 2) * 3
   const isHot = comment.hot || comment.likedCount >= 500
+  const timing = createDanmakuTiming(comment.content, index)
 
   return {
     ...comment,
-    key: `${props.song?.id ?? 'song'}-${comment.id}-${index}`,
+    key: `${props.song?.id ?? 'song'}-${index}`,
     hot: isHot,
-    style: {
-      '--danmaku-top': `${top}%`,
-      '--danmaku-duration': `${duration.toFixed(2)}s`,
-      '--danmaku-delay': `${delay.toFixed(2)}s`,
-      '--danmaku-scale': isHot ? 1.04 : 1,
-      '--danmaku-lane': lane
-    }
+    timing,
+    style: createDanmakuStyle(timing, isHot)
   }
+}
+
+function createEmptyDanmakuItem(index) {
+  const timing = createDanmakuTiming('', index)
+
+  return {
+    id: `empty-${index}`,
+    key: `${props.song?.id ?? 'song'}-${index}`,
+    content: '',
+    hot: false,
+    empty: true,
+    timing,
+    style: createDanmakuStyle(timing, false)
+  }
+}
+
+function scheduleVisibleItems() {
+  if (!props.enabled || showingFallback) {
+    return
+  }
+
+  danmakuItems.value.forEach((item, index) => {
+    if (!item?.empty && !slotTimers.has(index)) {
+      scheduleSlot(index, item.timing?.firstCycleMs ?? item.timing?.durationMs)
+    }
+  })
+}
+
+function scheduleSlot(index, delayMs) {
+  if (!props.enabled || props.paused || showingFallback) {
+    return
+  }
+
+  clearSlotTimer(index)
+  const timeout = Math.max(250, Number(delayMs) || 1000)
+  const timer = window.setTimeout(() => {
+    slotTimers.delete(index)
+    cycleDanmakuItem(index)
+  }, timeout)
+
+  slotTimers.set(index, timer)
+}
+
+function clearSlotTimer(index) {
+  const timer = slotTimers.get(index)
+
+  if (timer) {
+    window.clearTimeout(timer)
+    slotTimers.delete(index)
+  }
+}
+
+function clearSlotTimers() {
+  slotTimers.forEach((timer) => {
+    window.clearTimeout(timer)
+  })
+  slotTimers.clear()
+}
+
+function clearOverflowSlotTimers() {
+  slotTimers.forEach((timer, index) => {
+    if (index >= maxVisibleItems.value) {
+      window.clearTimeout(timer)
+      slotTimers.delete(index)
+    }
+  })
+}
+
+function createDanmakuTiming(content, index) {
+  const lane = index % laneCount
+  const row = Math.floor(index / laneCount)
+  const duration = 20 + (index % 5) * 2 + Math.min(6, content.length / 8)
+  const phase = (index * 1.65 + lane * 0.55) % duration
+  const delay = -phase
+  const top = 6 + lane * 12 + (row % 2) * 2
+
+  return {
+    lane,
+    top,
+    delay,
+    duration,
+    durationMs: duration * 1000,
+    firstCycleMs: Math.max(600, (duration - phase) * 1000)
+  }
+}
+
+function createDanmakuStyle(timing, isHot) {
+  return {
+    '--danmaku-top': `${timing.top}%`,
+    '--danmaku-duration': `${timing.duration.toFixed(2)}s`,
+    '--danmaku-delay': `${timing.delay.toFixed(2)}s`,
+    '--danmaku-scale': isHot ? 1.04 : 1,
+    '--danmaku-lane': timing.lane
+  }
+}
+
+function getCommentKey(comment) {
+  return String(comment?.id ?? comment?.content ?? '').trim()
 }
 
 function clampCommentText(value) {

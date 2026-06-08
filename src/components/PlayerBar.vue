@@ -4,8 +4,12 @@
     :track="currentTrack"
     :source-rect="fullPlayerCoverRect"
     :danmaku-enabled="danmakuEnabled"
-    :danmaku-hot-comments="activeDanmakuHotComments"
-    :danmaku-comments="activeDanmakuComments"
+    :danmaku-hot-comments="fullPlayerDanmakuState.hotComments"
+    :danmaku-comments="fullPlayerDanmakuState.comments"
+    :danmaku-has-more="fullPlayerDanmakuState.more"
+    :danmaku-loading="fullPlayerDanmakuState.loading"
+    :danmaku-prefetch-threshold="fullPlayerDanmakuPrefetchThreshold"
+    @danmaku-need-more="loadMoreFullPlayerDanmaku"
     @close="closeFullPlayer"
     @cover-flight-end="handleCoverFlightEnd"
   />
@@ -230,7 +234,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { Ellipsis, Heart, ListMusic, Loader2, Maximize2, MessageCircleMore, Mic2, Minimize2, Pause, Play, Plus, Radio, Repeat, Repeat1, Repeat2, Shuffle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import CommentModal from './CommentModal.vue'
@@ -238,7 +242,7 @@ import FullScreenPlayer from './FullScreenPlayer.vue'
 import SongListRow from './SongListRow.vue'
 import { useThemeStore } from '../stores/theme'
 import { usePlayerStore } from '../stores/player'
-import { getTrackLyricData } from '../services/netease'
+import { getSongCommentsData, getTrackLyricData } from '../services/netease'
 import { useSongComments } from '../composables/useSongComments'
 import '../styles/player.css'
 
@@ -265,7 +269,20 @@ const pendingProgressTime = ref(0)
 const progressLyricLines = ref([])
 const danmakuEnabled = ref(true)
 const songCommentsModalVisible = ref(false)
+const fullPlayerDanmakuState = reactive({
+  trackId: '',
+  loading: false,
+  error: '',
+  hotComments: [],
+  comments: [],
+  total: 0,
+  more: false,
+  offset: 0
+})
+const fullPlayerDanmakuCommentLimit = 80
+const fullPlayerDanmakuPrefetchThreshold = 12
 let progressLyricRequestId = 0
+let fullPlayerDanmakuRequestId = 0
 let removeTrackEndedListener = null
 
 const fallbackCoverPalette = {
@@ -298,8 +315,6 @@ const songCommentsHasMore = songCommentState.hasMore
 const songCommentsLoading = songCommentState.loading
 const songCommentsError = songCommentState.error
 const displaySongCommentTotal = songCommentState.displayTotal
-const activeDanmakuHotComments = songCommentState.activeHotComments
-const activeDanmakuComments = songCommentState.activeComments
 const currentVolumeIcon = computed(() => Number(volume.value) > 0 ? Volume2 : VolumeX)
 const currentTrackCoverStyle = computed(() => {
   const palette = currentTrack.value.coverPalette ?? fallbackCoverPalette
@@ -363,6 +378,11 @@ watch(
   (trackId) => {
     loadProgressLyrics(trackId)
     songCommentState.preload(currentTrack.value)
+    resetFullPlayerDanmakuStream(currentTrack.value)
+
+    if (fullPlayerOpen.value && danmakuEnabled.value) {
+      loadMoreFullPlayerDanmaku()
+    }
   },
   { immediate: true }
 )
@@ -370,6 +390,7 @@ watch(
 watch(fullPlayerOpen, (open) => {
   if (open && danmakuEnabled.value) {
     songCommentState.preload(currentTrack.value)
+    loadMoreFullPlayerDanmaku()
   }
 })
 
@@ -495,11 +516,71 @@ function loadMoreSongComments() {
   songCommentState.loadMore(currentTrack.value)
 }
 
+function resetFullPlayerDanmakuStream(track = currentTrack.value) {
+  fullPlayerDanmakuRequestId += 1
+  fullPlayerDanmakuState.trackId = String(track?.id ?? '')
+  fullPlayerDanmakuState.loading = false
+  fullPlayerDanmakuState.error = ''
+  fullPlayerDanmakuState.hotComments = []
+  fullPlayerDanmakuState.comments = []
+  fullPlayerDanmakuState.total = 0
+  fullPlayerDanmakuState.offset = 0
+  fullPlayerDanmakuState.more = Boolean(isNeteaseTrackId(fullPlayerDanmakuState.trackId))
+}
+
+async function loadMoreFullPlayerDanmaku(track = currentTrack.value) {
+  const id = String(track?.id ?? fullPlayerDanmakuState.trackId ?? '')
+
+  if (
+    !fullPlayerOpen.value ||
+    !danmakuEnabled.value ||
+    !isNeteaseTrackId(id) ||
+    fullPlayerDanmakuState.loading ||
+    !fullPlayerDanmakuState.more
+  ) {
+    return
+  }
+
+  const requestId = ++fullPlayerDanmakuRequestId
+  fullPlayerDanmakuState.loading = true
+  fullPlayerDanmakuState.error = ''
+
+  try {
+    const data = await getSongCommentsData({
+      id,
+      limit: fullPlayerDanmakuCommentLimit,
+      offset: fullPlayerDanmakuState.offset
+    })
+
+    if (requestId !== fullPlayerDanmakuRequestId || id !== String(currentTrack.value.id ?? '')) {
+      return
+    }
+
+    fullPlayerDanmakuState.trackId = id
+    fullPlayerDanmakuState.hotComments = fullPlayerDanmakuState.offset === 0 ? data.hotComments : []
+    fullPlayerDanmakuState.comments = data.comments
+    fullPlayerDanmakuState.total = data.total
+    fullPlayerDanmakuState.offset += data.comments.length
+    fullPlayerDanmakuState.more = Boolean(data.more && data.comments.length)
+    currentTrack.value.commentCount = data.total
+  } catch (error) {
+    if (requestId === fullPlayerDanmakuRequestId) {
+      console.warn('Failed to load full player danmaku comments:', error)
+      fullPlayerDanmakuState.error = error?.message || '弹幕评论加载失败'
+      fullPlayerDanmakuState.more = false
+    }
+  } finally {
+    if (requestId === fullPlayerDanmakuRequestId) {
+      fullPlayerDanmakuState.loading = false
+    }
+  }
+}
+
 function toggleDanmaku() {
   danmakuEnabled.value = !danmakuEnabled.value
 
   if (danmakuEnabled.value) {
-    songCommentState.preload(currentTrack.value)
+    loadMoreFullPlayerDanmaku()
   }
 }
 

@@ -205,7 +205,7 @@ export async function getVideoCenterData({
   const recommended = (recommendedResponse.result ?? []).map(mapVideoMv)
   const first = getMvListPayload(firstResponse).map(mapVideoMv)
   const exclusive = getMvListPayload(exclusiveResponse).map(mapVideoMv)
-  const top = getMvListPayload(topResponse).map(mapVideoMv)
+  const top = await hydrateMissingMvCards(getMvListPayload(topResponse).map(mapVideoMv))
   const all = getMvListPayload(allResponse).map(mapVideoMv)
   const subscribed = getMvListPayload(subscribedResponse).map(mapVideoMv)
   const followArtistNew = getMvListPayload(followNewResponse).map(mapVideoMv)
@@ -1306,7 +1306,19 @@ function mapMv(mv, index) {
 function mapVideoMv(mv = {}, index = 0) {
   const artists = Array.isArray(mv.artists) ? mv.artists : []
   const artistName = mv.artistName || mv.creatorName || getArtistNames(artists) || mv.artist?.name || '未知艺人'
-  const id = mv.id ?? mv.mvid ?? mv.vid
+  const id = mv.id ?? mv.mvid ?? mv.mvId ?? mv.vid ?? mv.videoId
+  const coverUrl =
+    mv.cover ||
+    mv.coverUrl ||
+    mv.picUrl ||
+    mv.imgurl ||
+    mv.imgurl16v9 ||
+    mv.coverImgUrl ||
+    mv.imgUrl ||
+    mv.imageUrl ||
+    mv.picurl
+  const playCount = mv.playCount ?? mv.playTime ?? mv.plays ?? mv.playcount ?? mv.play_count ?? mv.playCnt ?? mv.views ?? 0
+  const duration = mv.duration ?? mv.durationms ?? mv.durationMs ?? mv.durationMillis ?? 0
 
   return {
     id,
@@ -1315,10 +1327,10 @@ function mapVideoMv(mv = {}, index = 0) {
     artist: artistName,
     artistId: mv.artistId ?? mv.artist?.id ?? artists[0]?.id ?? '',
     desc: mv.copywriter || mv.briefDesc || mv.desc || mv.description || '',
-    coverUrl: resizeNeteaseImage(mv.cover || mv.coverUrl || mv.picUrl || mv.imgurl || mv.imgurl16v9, 640),
-    playCount: formatPlayCount(mv.playCount ?? mv.playTime ?? mv.plays ?? 0),
-    playCountRaw: Number(mv.playCount ?? mv.playTime ?? mv.plays ?? 0) || 0,
-    duration: formatDuration(mv.duration ?? mv.durationms ?? 0),
+    coverUrl: resizeNeteaseImage(coverUrl, 640),
+    playCount: formatPlayCount(playCount),
+    playCountRaw: Number(playCount) || 0,
+    duration: formatDuration(duration),
     publishTime: formatPlainDate(mv.publishTime ?? mv.publishTimeStr),
     type: coverType(index || Number(id) || 0),
     score: mv.score ?? mv.lastRank ?? '',
@@ -1367,7 +1379,9 @@ function getMvListPayload(response = {}) {
     response.list,
     response.data?.list,
     response.data?.mvs,
+    response.data?.mvList,
     response.data?.records,
+    response.mvList,
     response.newWorks,
     response.works
   ]
@@ -1375,7 +1389,50 @@ function getMvListPayload(response = {}) {
 
   return items
     .map((item) => item.mv ?? item.resource?.mv ?? item.resource ?? item)
-    .filter((item) => item?.id || item?.mvid || item?.vid)
+    .filter((item) => item?.id || item?.mvid || item?.mvId || item?.vid || item?.videoId)
+}
+
+async function hydrateMissingMvCards(mvs = []) {
+  const targets = mvs.filter((mv) => mv?.id && (!mv.coverUrl || !mv.playCountRaw))
+
+  if (!targets.length) {
+    return mvs
+  }
+
+  const detailResponses = await Promise.all(
+    targets.map((mv) => getMvDetail({ mvid: mv.id }).catch(() => null))
+  )
+  const detailsById = new Map()
+
+  detailResponses.forEach((response, index) => {
+    const detail = response?.data ?? response?.mv
+
+    if (detail) {
+      detailsById.set(String(targets[index].id), mapVideoMv(detail, index))
+    }
+  })
+
+  return mvs.map((mv) => {
+    const detail = detailsById.get(String(mv.id))
+
+    if (!detail) {
+      return mv
+    }
+
+    return {
+      ...mv,
+      title: mv.title && mv.title !== '未命名 MV' ? mv.title : detail.title,
+      name: mv.name && mv.name !== '未命名 MV' ? mv.name : detail.name,
+      artist: mv.artist && mv.artist !== '未知艺人' ? mv.artist : detail.artist,
+      artistId: mv.artistId || detail.artistId,
+      desc: mv.desc || detail.desc,
+      coverUrl: mv.coverUrl || detail.coverUrl,
+      playCount: mv.playCountRaw ? mv.playCount : detail.playCount,
+      playCountRaw: mv.playCountRaw || detail.playCountRaw,
+      duration: mv.duration && mv.duration !== '0:00' ? mv.duration : detail.duration,
+      publishTime: mv.publishTime || detail.publishTime
+    }
+  })
 }
 
 function getMvPlaybackUrl({ urlResponse = {}, brs, detail = {}, ugcResponse = {}, quality = 1080 } = {}) {

@@ -151,12 +151,17 @@
 
           <DanmakuLayer
             v-if="index === activeIndex"
-            :key="`danmaku-${song.id}-${songCommentTrackId}`"
+            :key="`danmaku-${song.id}`"
             class="soda-slide__danmaku"
             :enabled="danmakuEnabled"
             :song="song"
-            :hot-comments="activeDanmakuHotComments"
-            :comments="activeDanmakuComments"
+            :hot-comments="songDanmakuState.hotComments"
+            :comments="songDanmakuState.comments"
+            :max-items="homeDanmakuMaxItems"
+            :has-more="songDanmakuState.more"
+            :loading="songDanmakuState.loading"
+            :prefetch-threshold="homeDanmakuPrefetchThreshold"
+            @need-more="loadMoreSongDanmaku"
           />
 
           <aside class="soda-action-rail" aria-label="歌曲操作">
@@ -329,12 +334,17 @@
 
           <DanmakuLayer
             v-if="index === activeMvIndex"
-            :key="`home-mv-danmaku-${mv.id}-${homeMvCommentState.trackId}`"
+            :key="`home-mv-danmaku-${mv.id}`"
             class="soda-mv-slide__danmaku"
-            :enabled="homeMvDanmakuEnabled && isActiveMvPlaying(mv)"
+            :enabled="homeMvDanmakuEnabled"
             :song="{ id: mv.id, name: mv.title }"
-            :hot-comments="homeMvCommentState.hotComments"
-            :comments="homeMvCommentState.comments"
+            :hot-comments="homeMvDanmakuState.hotComments"
+            :comments="homeMvDanmakuState.comments"
+            :max-items="homeDanmakuMaxItems"
+            :has-more="homeMvDanmakuState.more"
+            :loading="homeMvDanmakuState.loading"
+            :prefetch-threshold="homeDanmakuPrefetchThreshold"
+            @need-more="loadMoreHomeMvDanmaku"
           />
 
           <aside class="soda-action-rail soda-mv-action-rail" aria-label="MV 操作">
@@ -452,6 +462,7 @@ import {
   getMusicFeedData,
   getMvCommentsData,
   getMvPlaybackData,
+  getSongCommentsData,
   getSongInteractionStatsData,
   getTrackLyricData,
   getVideoCenterData
@@ -488,6 +499,26 @@ const homeMvState = reactive({
   error: ''
 })
 const homeMvCommentState = reactive({
+  trackId: '',
+  loading: false,
+  error: '',
+  hotComments: [],
+  comments: [],
+  total: 0,
+  more: false,
+  offset: 0
+})
+const homeMvDanmakuState = reactive({
+  trackId: '',
+  loading: false,
+  error: '',
+  hotComments: [],
+  comments: [],
+  total: 0,
+  more: false,
+  offset: 0
+})
+const songDanmakuState = reactive({
   trackId: '',
   loading: false,
   error: '',
@@ -547,6 +578,9 @@ const lyricsWheelScrollSpeed = 1.2
 const lyricsLoadTimeoutMs = 12000
 const recommendationLimit = 36
 const mvRecommendationLimit = 36
+const homeDanmakuCommentLimit = 80
+const homeDanmakuMaxItems = 48
+const homeDanmakuPrefetchThreshold = 12
 const slideHydrateRadius = 2
 const lyricCache = new Map()
 const songStatsLoadingIds = new Set()
@@ -563,6 +597,8 @@ let mvAutoPlayTimer = 0
 let sectionSwitchSnapTimer = 0
 let removeTrackEndedListener = null
 let lyricRequestId = 0
+let songDanmakuRequestId = 0
+let homeMvDanmakuRequestId = 0
 let mvPlaybackRequestId = 0
 let mvQueueLoaded = false
 let feedScrollLocked = false
@@ -643,10 +679,7 @@ const songComments = songCommentState.comments
 const songCommentsHasMore = songCommentState.hasMore
 const songCommentsLoading = songCommentState.loading
 const songCommentsError = songCommentState.error
-const songCommentTrackId = songCommentState.trackId
 const displaySongCommentTotal = songCommentState.displayTotal
-const activeDanmakuHotComments = songCommentState.activeHotComments
-const activeDanmakuComments = songCommentState.activeComments
 const songCommentSubtitle = computed(() => {
   const song = songCommentSong.value
 
@@ -680,7 +713,8 @@ watch(
   (trackId) => {
     loadActiveLyrics(trackId)
     loadActiveSongStats(trackId)
-    preloadActiveSongComments()
+    resetSongDanmakuStream()
+    loadMoreSongDanmaku()
     hydrateVisibleCoverTints()
   },
   { immediate: true }
@@ -688,7 +722,7 @@ watch(
 
 watch(danmakuEnabled, (enabled) => {
   if (enabled) {
-    preloadActiveSongComments()
+    loadMoreSongDanmaku()
   }
 })
 
@@ -722,6 +756,7 @@ watch(
     pauseHomeMv()
     resetHomeMvState()
     restoreHomeMvComments(id)
+    resetHomeMvDanmakuStream(id)
     loadActiveMvPlayback(id, { autoplay: mvAutoPlayAfterGesture.value })
   }
 )
@@ -1023,6 +1058,8 @@ function rememberHomeMvPayload(payload) {
 
   if (String(mv.id) === activeMvId.value && payload.comments) {
     applyHomeMvComments(mv.id, payload.comments)
+    resetHomeMvDanmakuStream(mv.id, payload.comments)
+    loadMoreHomeMvDanmaku(mv.id)
   }
 }
 
@@ -1116,7 +1153,7 @@ async function loadHomeMvComments(trackId, { reset = false } = {}) {
   try {
     const data = await getMvCommentsData({
       id,
-      limit: 20,
+      limit: homeDanmakuCommentLimit,
       offset: reset ? 0 : homeMvCommentState.offset
     })
     const nextData = {
@@ -1149,6 +1186,70 @@ function loadMoreHomeMvComments() {
 
 function toggleHomeMvDanmaku() {
   homeMvDanmakuEnabled.value = !homeMvDanmakuEnabled.value
+
+  if (homeMvDanmakuEnabled.value) {
+    loadMoreHomeMvDanmaku()
+  }
+}
+
+function resetHomeMvDanmakuStream(trackId = activeMv.value?.id, data = null) {
+  const id = String(trackId ?? '')
+  homeMvDanmakuRequestId += 1
+  homeMvDanmakuState.trackId = id
+  homeMvDanmakuState.loading = false
+  homeMvDanmakuState.error = ''
+  homeMvDanmakuState.hotComments = data?.hotComments ?? []
+  homeMvDanmakuState.comments = data?.comments ?? []
+  homeMvDanmakuState.total = data?.total ?? 0
+  homeMvDanmakuState.offset = data?.offset ?? data?.comments?.length ?? 0
+  homeMvDanmakuState.more = Boolean(isNeteaseTrackId(id) && (data?.more ?? true))
+}
+
+async function loadMoreHomeMvDanmaku(trackId = activeMv.value?.id) {
+  const id = String(trackId ?? homeMvDanmakuState.trackId ?? '')
+
+  if (
+    !id ||
+    !homeMvDanmakuEnabled.value ||
+    !isNeteaseTrackId(id) ||
+    homeMvDanmakuState.loading ||
+    !homeMvDanmakuState.more ||
+    String(homeMvDanmakuState.trackId) !== id
+  ) {
+    return
+  }
+
+  const requestId = ++homeMvDanmakuRequestId
+  homeMvDanmakuState.loading = true
+  homeMvDanmakuState.error = ''
+
+  try {
+    const data = await getMvCommentsData({
+      id,
+      limit: homeDanmakuCommentLimit,
+      offset: homeMvDanmakuState.offset
+    })
+
+    if (requestId !== homeMvDanmakuRequestId || id !== String(activeMv.value?.id ?? '')) {
+      return
+    }
+
+    homeMvDanmakuState.hotComments = homeMvDanmakuState.offset === 0 ? data.hotComments : []
+    homeMvDanmakuState.comments = data.comments
+    homeMvDanmakuState.total = data.total
+    homeMvDanmakuState.offset += data.comments.length
+    homeMvDanmakuState.more = Boolean(data.more && data.comments.length)
+  } catch (error) {
+    if (requestId === homeMvDanmakuRequestId) {
+      console.warn('Failed to load home MV danmaku comments:', error)
+      homeMvDanmakuState.error = error?.message || 'MV 弹幕评论加载失败'
+      homeMvDanmakuState.more = false
+    }
+  } finally {
+    if (requestId === homeMvDanmakuRequestId) {
+      homeMvDanmakuState.loading = false
+    }
+  }
 }
 
 async function snapMvToActiveIndex(behavior = 'auto') {
@@ -1347,6 +1448,11 @@ async function playMvFromGesture(index) {
 
   if (shouldScroll) {
     scrollToMvIndex(index, 'smooth')
+  }
+
+  if (!shouldScroll && getHomeMvVideoUrl(activeMv.value)) {
+    await playCurrentHomeMv({ skipLoad: true })
+    return
   }
 
   await loadActiveMvPlayback(activeMv.value?.id, { autoplay: true })
@@ -2029,8 +2135,67 @@ function toggleDanmaku() {
   danmakuEnabled.value = !danmakuEnabled.value
 }
 
-async function preloadActiveSongComments(song = activeSong.value) {
-  await songCommentState.preload(song, { enabled: danmakuEnabled.value })
+function resetSongDanmakuStream(song = activeSong.value) {
+  songDanmakuRequestId += 1
+  songDanmakuState.trackId = String(song?.id ?? '')
+  songDanmakuState.loading = false
+  songDanmakuState.error = ''
+  songDanmakuState.hotComments = []
+  songDanmakuState.comments = []
+  songDanmakuState.total = 0
+  songDanmakuState.offset = 0
+  songDanmakuState.more = Boolean(isNeteaseTrackId(songDanmakuState.trackId))
+}
+
+async function loadMoreSongDanmaku(song = activeSong.value) {
+  const id = String(song?.id ?? songDanmakuState.trackId ?? '')
+
+  if (
+    !danmakuEnabled.value ||
+    !isNeteaseTrackId(id) ||
+    songDanmakuState.loading ||
+    !songDanmakuState.more
+  ) {
+    return
+  }
+
+  const requestId = ++songDanmakuRequestId
+  songDanmakuState.loading = true
+  songDanmakuState.error = ''
+
+  try {
+    const data = await getSongCommentsData({
+      id,
+      limit: homeDanmakuCommentLimit,
+      offset: songDanmakuState.offset
+    })
+
+    if (requestId !== songDanmakuRequestId || id !== String(activeSong.value?.id ?? '')) {
+      return
+    }
+
+    songDanmakuState.trackId = id
+    songDanmakuState.hotComments = songDanmakuState.offset === 0 ? data.hotComments : []
+    songDanmakuState.comments = data.comments
+    songDanmakuState.total = data.total
+    songDanmakuState.offset += data.comments.length
+    songDanmakuState.more = Boolean(data.more && data.comments.length)
+
+    updateSongStats(id, {
+      commentCount: data.total,
+      commentCountLabel: formatActionCount(data.total)
+    })
+  } catch (error) {
+    if (requestId === songDanmakuRequestId) {
+      console.warn('Failed to load song danmaku comments:', error)
+      songDanmakuState.error = error?.message || '弹幕评论加载失败'
+      songDanmakuState.more = false
+    }
+  } finally {
+    if (requestId === songDanmakuRequestId) {
+      songDanmakuState.loading = false
+    }
+  }
 }
 
 function loadMoreSongComments() {

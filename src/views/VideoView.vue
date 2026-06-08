@@ -1,5 +1,10 @@
 <template>
-  <div class="view mv-view" :class="{ 'mv-view--watch': isWatchMode }">
+  <div
+    ref="viewRoot"
+    class="view mv-view"
+    :class="{ 'mv-view--watch': isWatchMode }"
+    @scroll.passive="handleBrowseScroll"
+  >
     <template v-if="isWatchMode">
       <section ref="playerSection" class="mv-watch">
         <div ref="playerStage" class="mv-watch__stage" @mousemove="showControls" @mouseleave="hideControlsSoon">
@@ -53,10 +58,13 @@
 
           <DanmakuLayer
             class="mv-watch__danmaku"
-            :enabled="danmakuEnabled && isVideoPlaying"
+            :enabled="danmakuEnabled"
             :song="{ id: activeMv?.id, name: activeMv?.title }"
-            :hot-comments="commentState.hotComments"
-            :comments="commentState.comments"
+            :hot-comments="danmakuCommentState.hotComments"
+            :comments="danmakuCommentState.comments"
+            :has-more="danmakuCommentState.more"
+            :loading="danmakuCommentState.loading"
+            @need-more="loadMoreDanmakuComments"
           />
 
           <div class="mv-watch__top">
@@ -218,95 +226,82 @@
         </nav>
       </header>
 
-      <section v-if="activeBrowseTab === 'recommend'" class="mv-hero-carousel">
-        <button
-          v-for="mv in heroMvs"
-          :key="`hero-${mv.id}`"
-          class="mv-hero-card"
-          type="button"
-          @click="selectMv(mv, { autoplay: true })"
-        >
-          <img v-if="mv.coverUrl" :src="mv.coverUrl" :alt="mv.title" loading="lazy" decoding="async" />
-          <span class="mv-hero-card__shade" />
-          <span class="mv-hero-card__label">视频</span>
-          <span class="mv-hero-card__caption">
-            <strong>{{ mv.title }}</strong>
-            <small>{{ mv.artist }}</small>
-          </span>
-        </button>
-        <div class="mv-carousel-dots" aria-hidden="true">
-          <span v-for="item in 2" :key="item" :class="{ active: item === 1 }" />
+      <section
+        v-if="browseSkeletonVisible"
+        class="mv-skeleton"
+        aria-busy="true"
+        aria-label="正在加载视频内容"
+      >
+        <div class="mv-skeleton__hero-row">
+          <article v-for="item in 3" :key="`mv-hero-skeleton-${item}`" class="mv-skeleton__hero-card">
+            <span class="mv-skeleton__pill" />
+            <span class="mv-skeleton__line mv-skeleton__line--hero-title" />
+            <span class="mv-skeleton__line mv-skeleton__line--hero-meta" />
+          </article>
         </div>
-      </section>
 
-      <section v-if="errorMessage" class="mv-state mv-state--error">{{ errorMessage }}</section>
-
-      <template v-if="activeBrowseTab === 'recommend'">
-        <section v-for="section in browseSections" :key="section.id" class="mv-browse-section">
-          <header class="mv-section-head">
-            <h2>{{ section.title }}</h2>
-            <button type="button" @click="openMore(section.id)">更多 <ChevronRight :size="15" /></button>
-          </header>
+        <section v-for="section in 3" :key="`mv-section-skeleton-${section}`" class="mv-skeleton__section">
+          <span class="mv-skeleton__title" />
           <div class="mv-card-row">
-            <button
-              v-for="mv in section.items"
-              :key="`${section.id}-${mv.id}`"
-              class="mv-video-card"
-              type="button"
-              @click="selectMv(mv, { autoplay: true })"
-            >
-              <span class="mv-video-card__cover">
-                <img v-if="mv.coverUrl" :src="mv.coverUrl" :alt="mv.title" loading="lazy" decoding="async" />
-                <span class="mv-video-card__count"><Video :size="12" />{{ mv.playCount }}</span>
-                <span class="mv-video-card__play"><Play :size="17" fill="currentColor" /></span>
-              </span>
-              <strong>{{ mv.title }}</strong>
-              <small>{{ mv.artist }}</small>
-            </button>
+            <article v-for="item in 5" :key="`mv-card-skeleton-${section}-${item}`" class="mv-skeleton__card">
+              <span class="mv-skeleton__cover" />
+              <span class="mv-skeleton__line" />
+              <span class="mv-skeleton__line mv-skeleton__line--short" />
+            </article>
           </div>
         </section>
-      </template>
-
-      <section v-else-if="activeBrowseTab === 'rank'" class="mv-rank-page">
-        <aside class="mv-rank-list">
-          <header>
-            <strong>排行榜</strong>
-            <small>{{ topMvs.length }} 条</small>
-          </header>
-          <button
-            v-for="(mv, index) in topMvs"
-            :key="`rank-list-${mv.id}`"
-            class="mv-rank-row"
-            type="button"
-            @click="selectMv(mv, { autoplay: true })"
-          >
-            <span>{{ String(index + 1).padStart(2, '0') }}</span>
-            <img v-if="mv.coverUrl" :src="mv.coverUrl" :alt="mv.title" loading="lazy" decoding="async" />
-            <div>
-              <strong>{{ mv.title }}</strong>
-              <small>{{ mv.artist }} · {{ mv.playCount }} 播放</small>
-            </div>
-          </button>
-        </aside>
-        <div class="mv-rank-grid">
-          <button
-            v-for="mv in topMvs"
-            :key="`rank-card-${mv.id}`"
-            class="mv-video-card"
-            type="button"
-            @click="selectMv(mv, { autoplay: true })"
-          >
-            <span class="mv-video-card__cover">
-              <img v-if="mv.coverUrl" :src="mv.coverUrl" :alt="mv.title" loading="lazy" decoding="async" />
-              <span class="mv-video-card__play"><Play :size="17" fill="currentColor" /></span>
-            </span>
-            <strong>{{ mv.title }}</strong>
-            <small>{{ mv.artist }}</small>
-          </button>
-        </div>
       </section>
 
-      <section v-else class="mv-library">
+      <template v-else>
+        <section v-if="activeBrowseTab === 'recommend'" class="mv-hero-carousel">
+          <button
+            v-for="mv in heroMvs"
+            :key="`hero-${mv.id}`"
+            class="mv-hero-card"
+            type="button"
+            @click="selectMv(mv, { autoplay: true })"
+          >
+            <img v-if="mv.coverUrl" :src="mv.coverUrl" :alt="mv.title" loading="lazy" decoding="async" />
+            <span class="mv-hero-card__shade" />
+            <span class="mv-hero-card__label">视频</span>
+            <span class="mv-hero-card__caption">
+              <strong>{{ mv.title }}</strong>
+              <small>{{ mv.artist }}</small>
+            </span>
+          </button>
+        </section>
+
+        <section v-if="errorMessage" class="mv-state mv-state--error">{{ errorMessage }}</section>
+
+        <template v-if="activeBrowseTab === 'recommend'">
+          <section v-for="section in browseSections" :key="section.id" class="mv-browse-section">
+            <header class="mv-section-head">
+              <h2>{{ section.title }}</h2>
+              <button v-if="section.moreTarget" type="button" @click="openMore(section.moreTarget)">
+                更多 <ChevronRight :size="15" />
+              </button>
+            </header>
+            <div class="mv-card-row">
+              <button
+                v-for="mv in section.items"
+                :key="`${section.id}-${mv.id}`"
+                class="mv-video-card"
+                type="button"
+                @click="selectMv(mv, { autoplay: true })"
+              >
+                <span class="mv-video-card__cover">
+                  <img v-if="mv.coverUrl" :src="mv.coverUrl" :alt="mv.title" loading="lazy" decoding="async" />
+                  <span class="mv-video-card__count"><Video :size="12" />{{ mv.playCount }}</span>
+                  <span class="mv-video-card__play"><Play :size="17" fill="currentColor" /></span>
+                </span>
+                <strong>{{ mv.title }}</strong>
+                <small>{{ mv.artist }}</small>
+              </button>
+            </div>
+          </section>
+        </template>
+
+        <section v-else class="mv-library">
         <div class="mv-filter-panel">
           <div class="mv-filter-group">
             <span>地区</span>
@@ -350,12 +345,13 @@
         </div>
         <div v-else class="mv-state">暂无 MV 数据，换个筛选条件试试。</div>
 
-        <button v-if="filteredMore" class="mv-load-more" type="button" :disabled="filteredLoading" @click="loadMoreFiltered">
-          <LoaderCircle v-if="filteredLoading" :size="17" class="mv-spin" />
-          <Plus v-else :size="17" />
-          <span>{{ filteredLoading ? '加载中' : '加载更多' }}</span>
-        </button>
-      </section>
+        <div v-if="filteredLoading && filteredMvs.length" class="mv-library__loading" role="status" aria-live="polite">
+          <LoaderCircle :size="17" class="mv-spin" />
+          <span>加载中</span>
+        </div>
+        <div v-else-if="filteredMore" class="mv-library__sentinel" aria-hidden="true" />
+        </section>
+      </template>
     </template>
 
     <CommentModal
@@ -389,7 +385,6 @@ import {
   Pause,
   PictureInPicture2,
   Play,
-  Plus,
   RefreshCw,
   Share2,
   SkipBack,
@@ -419,7 +414,6 @@ const types = ['全部', '官方版', '原生', '现场版', '网易出品']
 const orders = ['上升最快', '最热', '最新']
 const browseTabs = [
   { label: '推荐', value: 'recommend' },
-  { label: '排行榜', value: 'rank' },
   { label: '视频库', value: 'library' }
 ]
 
@@ -428,6 +422,7 @@ const router = useRouter()
 const auth = useAuthStore()
 const player = usePlayerStore()
 const message = useMessage()
+const viewRoot = ref(null)
 const playerSection = ref(null)
 const playerStage = ref(null)
 const videoElement = ref(null)
@@ -479,8 +474,20 @@ const commentState = reactive({
   more: false,
   offset: 0
 })
+const danmakuCommentState = reactive({
+  trackId: '',
+  loading: false,
+  error: '',
+  hotComments: [],
+  comments: [],
+  total: 0,
+  more: false,
+  offset: 0
+})
 
 let controlsTimer = null
+let danmakuCommentRequestId = 0
+const danmakuCommentLimit = 80
 
 const activeMv = computed(() => activePayload.value?.mv ?? null)
 const activeVideoUrl = computed(() => normalizePlayableUrl(activeMv.value?.url))
@@ -494,11 +501,18 @@ const heroMvs = computed(() =>
   uniqueMvs([...recommendedMvs.value, ...topMvs.value, ...firstMvs.value, ...exclusiveMvs.value]).slice(0, 3)
 )
 const browseSections = computed(() => [
-  { id: 'latest', title: '最新', items: firstMvs.value.slice(0, 5) },
-  { id: 'hot', title: '热门', items: topMvs.value.slice(0, 5) },
-  { id: 'collection', title: '合集', items: exclusiveMvs.value.slice(0, 5) },
-  { id: 'recommend', title: '推荐', items: recommendedMvs.value.slice(0, 5) }
+  { id: 'rank', title: '排行榜', items: topMvs.value },
+  { id: 'latest', title: '最新', items: firstMvs.value.slice(0, 5), moreTarget: 'library' },
+  { id: 'collection', title: '合集', items: exclusiveMvs.value.slice(0, 5), moreTarget: 'library' },
+  { id: 'recommend', title: '推荐', items: recommendedMvs.value.slice(0, 5), moreTarget: 'library' }
 ].filter((section) => section.items.length))
+const browseSkeletonVisible = computed(() =>
+  !isWatchMode.value &&
+  loading.value &&
+  !heroMvs.value.length &&
+  !browseSections.value.length &&
+  !filteredMvs.value.length
+)
 const watchRelatedSections = computed(() => [
   ...similarMvs.value,
   ...artistMvs.value,
@@ -569,6 +583,15 @@ watch(
   }
 )
 
+watch(activeBrowseTab, async (tab) => {
+  if (tab !== 'library') {
+    return
+  }
+
+  await nextTick()
+  maybeLoadMoreFiltered()
+})
+
 async function loadBootData() {
   loading.value = true
   errorMessage.value = ''
@@ -617,18 +640,14 @@ async function setFilter(key, value) {
   await reloadFiltered()
 }
 
-function openMore(sectionId) {
-  activeBrowseTab.value = sectionId === 'hot' ? 'rank' : 'library'
+function openMore(tab) {
+  activeBrowseTab.value = tab
 }
 
 async function reloadFiltered() {
   filteredOffset.value = 0
   filteredMvs.value = []
   await loadFiltered({ reset: true })
-}
-
-async function loadMoreFiltered() {
-  await loadFiltered()
 }
 
 async function loadFiltered({ reset = false } = {}) {
@@ -646,15 +665,40 @@ async function loadFiltered({ reset = false } = {}) {
       limit: PAGE_SIZE,
       offset: reset ? 0 : filteredOffset.value
     })
+    const requestOffset = reset ? 0 : filteredOffset.value
     filteredMvs.value = reset ? data.items : uniqueMvs([...filteredMvs.value, ...data.items])
     filteredTotal.value = data.total
-    filteredMore.value = data.more
-    filteredOffset.value = filteredMvs.value.length
+    filteredMore.value = Boolean(data.more && data.items.length)
+    filteredOffset.value = requestOffset + data.items.length
   } catch (error) {
     console.warn('Failed to load filtered MVs:', error)
     message.error(error?.message || '筛选 MV 加载失败')
   } finally {
     filteredLoading.value = false
+  }
+
+  if (activeBrowseTab.value === 'library') {
+    await nextTick()
+    maybeLoadMoreFiltered()
+  }
+}
+
+function handleBrowseScroll(event) {
+  if (activeBrowseTab.value !== 'library' || isWatchMode.value) {
+    return
+  }
+
+  maybeLoadMoreFiltered(event.currentTarget)
+}
+
+function maybeLoadMoreFiltered(container = viewRoot.value) {
+  if (!container || filteredLoading.value || !filteredMore.value) {
+    return
+  }
+
+  const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+  if (distanceToBottom <= 280) {
+    loadFiltered()
   }
 }
 
@@ -703,6 +747,7 @@ function setActivePayload(data) {
   commentState.more = data.comments?.more ?? false
   commentState.offset = commentState.comments.length
   commentState.error = ''
+  resetDanmakuCommentStream(data.mv?.id, data.comments)
 }
 
 async function toggleActivePlayback() {
@@ -877,6 +922,10 @@ function applyVideoVolume() {
 
 function toggleDanmaku() {
   danmakuEnabled.value = !danmakuEnabled.value
+
+  if (danmakuEnabled.value) {
+    loadMoreDanmakuComments()
+  }
 }
 
 async function togglePictureInPicture() {
@@ -1062,6 +1111,66 @@ async function loadMoreComments() {
     commentState.error = error?.message || '评论加载失败'
   } finally {
     commentState.loading = false
+  }
+}
+
+function resetDanmakuCommentStream(trackId = activeMv.value?.id, data = null) {
+  const id = String(trackId ?? '')
+
+  danmakuCommentRequestId += 1
+  danmakuCommentState.trackId = id
+  danmakuCommentState.loading = false
+  danmakuCommentState.error = ''
+  danmakuCommentState.hotComments = data?.hotComments ?? []
+  danmakuCommentState.comments = data?.comments ?? []
+  danmakuCommentState.total = data?.total ?? 0
+  danmakuCommentState.offset = data?.comments?.length ?? 0
+  danmakuCommentState.more = Boolean(id && (data?.more ?? true))
+}
+
+async function loadMoreDanmakuComments() {
+  const id = String(activeMv.value?.id ?? danmakuCommentState.trackId ?? '')
+
+  if (
+    !id ||
+    !danmakuEnabled.value ||
+    danmakuCommentState.loading ||
+    !danmakuCommentState.more ||
+    String(danmakuCommentState.trackId) !== id
+  ) {
+    return
+  }
+
+  const requestId = ++danmakuCommentRequestId
+  danmakuCommentState.loading = true
+  danmakuCommentState.error = ''
+
+  try {
+    const data = await getMvCommentsData({
+      id,
+      limit: danmakuCommentLimit,
+      offset: danmakuCommentState.offset
+    })
+
+    if (requestId !== danmakuCommentRequestId || id !== String(activeMv.value?.id ?? '')) {
+      return
+    }
+
+    danmakuCommentState.hotComments = danmakuCommentState.offset === 0 ? data.hotComments : []
+    danmakuCommentState.comments = data.comments
+    danmakuCommentState.total = data.total
+    danmakuCommentState.offset += data.comments.length
+    danmakuCommentState.more = Boolean(data.more && data.comments.length)
+  } catch (error) {
+    if (requestId === danmakuCommentRequestId) {
+      console.warn('Failed to load MV danmaku comments:', error)
+      danmakuCommentState.error = error?.message || '弹幕评论加载失败'
+      danmakuCommentState.more = false
+    }
+  } finally {
+    if (requestId === danmakuCommentRequestId) {
+      danmakuCommentState.loading = false
+    }
   }
 }
 
