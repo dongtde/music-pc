@@ -16,7 +16,7 @@ initialTrack.elapsed = formatTime(initialCurrentTime)
 
 const state = reactive({
   currentTrack: initialTrack,
-  queue: newSongs.slice(0, 8).map((song, index) => ({
+  queue: newSongs.map((song, index) => ({
     ...song,
     id: song.id ?? `queue-${song.rank}`,
     rank: String(index + 1).padStart(2, '0')

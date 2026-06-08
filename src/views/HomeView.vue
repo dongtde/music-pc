@@ -241,7 +241,6 @@
       </div>
 
     </section>
-  </div>
 
   <CommentModal
     v-model:show="songCommentsModalVisible"
@@ -255,6 +254,7 @@
     :has-more="songCommentsHasMore"
     @load-more="loadMoreSongComments"
   />
+  </div>
 </template>
 
 <script setup>

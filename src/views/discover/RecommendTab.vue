@@ -85,7 +85,7 @@
         </div>
         <div class="song-list song-list--recommend">
           <article
-            v-for="item in 9"
+            v-for="item in 12"
             :key="`song-skeleton-${item}`"
             class="skeleton-song-row"
           >
@@ -305,48 +305,15 @@
     <section class="latest-section">
       <div class="section-head">
         <SectionTitle title="推荐单曲" compact />
-        <div class="genre-tabs">
-          <button type="button">华语</button>
-          <button type="button">欧美</button>
-          <button type="button">日韩</button>
-          <button type="button">摇滚</button>
-        </div>
       </div>
       <div class="song-list song-list--recommend">
-        <button
-          v-for="song in homeRecommendedSingles"
-          :key="song.rank"
-          type="button"
-          class="song-row song-row--recommend"
-          :class="{ 'is-playing': isCurrentSong(song) }"
-          @click="playRecommendedSong(song)"
-        >
-          <div class="song-thumb" :class="`cover--${song.type}`">
-            <img
-              v-if="song.coverUrl"
-              class="song-thumb__image"
-              :src="song.coverUrl"
-              :alt="song.name"
-              loading="lazy"
-              decoding="async"
-            />
-            <span
-              class="song-thumb-play"
-              :class="{ 'song-thumb-play--playing': isCurrentSong(song) }"
-              aria-label="播放单曲"
-            >
-              <AudioLines v-if="isCurrentSong(song)" :size="16" />
-              <Play v-else :size="15" fill="currentColor" />
-            </span>
-          </div>
-          <span class="song-main">
-            <strong>{{ song.name }}</strong>
-            <small>{{ song.artist }}</small>
-          </span>
-          <span class="song-meta">
-            <small class="song-duration">{{ song.time }}</small>
-          </span>
-        </button>
+        <SongListRow
+          v-for="song in visibleRecommendedSingles"
+          :key="song.id ?? song.rank"
+          :track="song"
+          compact
+          @play="playRecommendedSong"
+        />
       </div>
     </section>
 
@@ -375,7 +342,6 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import {
-  AudioLines,
   ChevronLeft,
   ChevronRight,
   Play,
@@ -383,6 +349,7 @@ import {
 } from 'lucide-vue-next';
 import PlaylistCard from '../../components/PlaylistCard.vue';
 import SectionTitle from '../../components/SectionTitle.vue';
+import SongListRow from '../../components/SongListRow.vue';
 import {
   curatedPlaylists,
   playlists,
@@ -394,6 +361,7 @@ import { getHomeDiscoverData } from '../../services/netease';
 import { usePlayerStore } from '../../stores/player';
 
 const HOME_SKELETON_MIN_MS = 360;
+const RECOMMENDED_SINGLE_DISPLAY_LIMIT = 12;
 const RECOMMEND_CAROUSEL_ROWS = 2;
 const LATEST_CAROUSEL_ROWS = 1;
 const PLAYLIST_CAROUSEL_SMALL_QUERY = '(max-width: 1400px)';
@@ -407,6 +375,9 @@ const fallbackLatestPlaylistCards = curatedPlaylists.slice(-6);
 const recommendPlaylists = ref(fallbackRecommendPlaylists);
 const latestPlaylistCards = ref(fallbackLatestPlaylistCards);
 const homeRecommendedSingles = ref(recommendedSingles);
+const visibleRecommendedSingles = computed(() =>
+  homeRecommendedSingles.value.slice(0, RECOMMENDED_SINGLE_DISPLAY_LIMIT)
+);
 const homeRecommendedMvs = ref(recommendedMvs);
 const isHomeLoading = ref(true);
 const playlistCarouselColumns = ref(6);
@@ -687,16 +658,14 @@ function waitForSkeleton(startedAt) {
 }
 
 function playRecommendedSong(song) {
+  player.setQueue(homeRecommendedSingles.value);
+
   if (player.state.currentTrack.id === song.id) {
     player.togglePlay();
     return;
   }
 
   player.playTrack(song);
-}
-
-function isCurrentSong(song) {
-  return player.state.currentTrack.id === song.id && player.state.isPlaying;
 }
 
 onMounted(() => {

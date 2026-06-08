@@ -63,7 +63,7 @@ export async function getHomeDiscoverData() {
   const [bannerResponse, playlistResponse, newsongResponse, mvResponse] = await Promise.all([
     getBanners({ type: 0 }),
     getPersonalizedPlaylists({ limit: 18 }),
-    getPersonalizedNewSongs({ limit: 9 }),
+    getPersonalizedNewSongs({ limit: 100 }),
     getPersonalizedMvs()
   ])
 
