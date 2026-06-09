@@ -10,6 +10,8 @@
     :danmaku-has-more="fullPlayerDanmakuState.more"
     :danmaku-loading="fullPlayerDanmakuState.loading"
     :danmaku-prefetch-threshold="fullPlayerDanmakuPrefetchThreshold"
+    :danmaku-max-items="fullPlayerDanmakuMaxItems"
+    :danmaku-activation-delay="fullPlayerDanmakuActivationDelay"
     @danmaku-need-more="loadMoreFullPlayerDanmaku"
     @close="closeFullPlayer"
     @cover-flight-end="handleCoverFlightEnd"
@@ -285,10 +287,14 @@ const fullPlayerDanmakuState = reactive({
 })
 const fullPlayerDanmakuCommentLimit = 80
 const fullPlayerDanmakuPrefetchThreshold = 12
+const fullPlayerDanmakuMaxItems = 36
+const fullPlayerDanmakuActivationDelay = 520
+const fullPlayerDanmakuLoadDelay = 560
 let progressLyricRequestId = 0
 let progressLyricLoadedTrackId = ''
 let progressLyricLoadingTrackId = ''
 let fullPlayerDanmakuRequestId = 0
+let fullPlayerDanmakuLoadTimer = 0
 let removeTrackEndedListener = null
 
 const fallbackCoverPalette = {
@@ -386,7 +392,7 @@ watch(
     resetFullPlayerDanmakuStream(currentTrack.value)
 
     if (fullPlayerOpen.value && danmakuEnabled.value) {
-      loadMoreFullPlayerDanmaku()
+      scheduleFullPlayerDanmakuLoad()
     }
   },
   { immediate: true }
@@ -395,8 +401,11 @@ watch(
 watch(fullPlayerOpen, (open) => {
   if (open && danmakuEnabled.value) {
     songCommentState.preload(currentTrack.value)
-    loadMoreFullPlayerDanmaku()
+    scheduleFullPlayerDanmakuLoad()
+    return
   }
+
+  clearFullPlayerDanmakuLoadTimer()
 })
 
 function toggleModeMenu() {
@@ -565,7 +574,29 @@ function resetFullPlayerDanmakuStream(track = currentTrack.value) {
   fullPlayerDanmakuState.more = Boolean(isNeteaseTrackId(fullPlayerDanmakuState.trackId))
 }
 
+function scheduleFullPlayerDanmakuLoad(delay = fullPlayerDanmakuLoadDelay) {
+  clearFullPlayerDanmakuLoadTimer()
+
+  if (!fullPlayerOpen.value || !danmakuEnabled.value) {
+    return
+  }
+
+  fullPlayerDanmakuLoadTimer = window.setTimeout(() => {
+    fullPlayerDanmakuLoadTimer = 0
+    loadMoreFullPlayerDanmaku()
+  }, Math.max(0, Number(delay) || 0))
+}
+
+function clearFullPlayerDanmakuLoadTimer() {
+  if (fullPlayerDanmakuLoadTimer) {
+    window.clearTimeout(fullPlayerDanmakuLoadTimer)
+    fullPlayerDanmakuLoadTimer = 0
+  }
+}
+
 async function loadMoreFullPlayerDanmaku(track = currentTrack.value) {
+  clearFullPlayerDanmakuLoadTimer()
+
   const id = String(track?.id ?? fullPlayerDanmakuState.trackId ?? '')
 
   if (
@@ -617,8 +648,11 @@ function toggleDanmaku() {
   danmakuEnabled.value = !danmakuEnabled.value
 
   if (danmakuEnabled.value) {
-    loadMoreFullPlayerDanmaku()
+    scheduleFullPlayerDanmakuLoad(180)
+    return
   }
+
+  clearFullPlayerDanmakuLoadTimer()
 }
 
 function formatCommentBadge(value = 0) {
@@ -899,6 +933,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('pointerdown', handleOutsideClick)
+  clearFullPlayerDanmakuLoadTimer()
   removeTrackEndedListener?.()
   removeTrackEndedListener = null
 })

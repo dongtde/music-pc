@@ -3,11 +3,11 @@
     v-if="danmakuItems.length"
     class="soda-danmaku"
     :class="{
-      'soda-danmaku--disabled': !enabled,
-      'soda-danmaku--paused': paused || !enabled
+      'soda-danmaku--disabled': !layerVisible,
+      'soda-danmaku--paused': layerPaused
     }"
     aria-label="歌曲评论弹幕"
-    :aria-hidden="!enabled"
+    :aria-hidden="!layerVisible"
     aria-live="off"
   >
     <span
@@ -37,7 +37,7 @@
 </template>
 
 <script setup>
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
 import '../styles/danmaku.css'
 
 const emit = defineEmits(['needMore'])
@@ -96,41 +96,45 @@ const fallbackTexts = [
   '突然想把音量调大一点'
 ]
 
-const sourceComments = computed(() => {
-  const hotComments = props.hotComments.map((comment, index) =>
-    normalizeComment(comment, `hot-${index}`, true)
-  )
-  const regularComments = props.comments.map((comment, index) =>
-    normalizeComment(comment, `comment-${index}`, false)
-  )
-  const sourceComments = dedupeComments([...hotComments, ...regularComments])
-
-  return sourceComments
-})
-
 const maxVisibleItems = computed(() => {
   const value = Math.floor(Number(props.maxItems))
 
   return Number.isFinite(value) && value > 0 ? value : 48
 })
-const danmakuItems = ref([])
-const pendingComments = ref([])
+const launchBatchSize = computed(() => (danmakuItems.value.length ? 1 : 2))
+const launchIntervalMs = computed(() => {
+  const value = Math.floor(Number(props.maxItems))
+
+  return value > 36 ? 460 : 560
+})
+const layerVisible = ref(false)
+const layerPaused = computed(() => props.paused || !layerVisible.value)
+const danmakuItems = shallowRef([])
+const pendingComments = shallowRef([])
 let seenCommentKeys = new Set()
 let showingFallback = false
 const slotTimers = new Map()
+let sourceSyncTimer = 0
+let fillTimer = 0
+let resumeFrame = 0
+let streamClockMs = 0
+let streamStartedAt = 0
 
 watch(
   () => props.song?.id,
   () => {
     resetDanmakuStream()
-    syncSourceComments()
+    scheduleSourceCommentsSync()
   },
   { immediate: true }
 )
 
-watch(sourceComments, () => {
-  syncSourceComments()
-})
+watch(
+  () => [props.hotComments, props.comments],
+  () => {
+    scheduleSourceCommentsSync()
+  }
+)
 
 watch(maxVisibleItems, () => {
   if (showingFallback) {
@@ -140,6 +144,7 @@ watch(maxVisibleItems, () => {
 
   danmakuItems.value = danmakuItems.value.slice(0, maxVisibleItems.value)
   clearOverflowSlotTimers()
+  clearFillTimer()
   fillDanmakuSlots()
   requestMoreIfNeeded()
 })
@@ -147,19 +152,45 @@ watch(maxVisibleItems, () => {
 watch(
   () => [props.enabled, props.paused, props.hasMore, props.loading],
   ([enabled, paused]) => {
+    clearResumeFrame()
+
     if (enabled && !paused) {
-      scheduleVisibleItems()
+      if (layerVisible.value) {
+        scheduleSourceCommentsSync()
+        scheduleVisibleItems()
+      } else {
+        prepareStreamResume()
+      }
     } else {
+      pauseStreamClock()
+      layerVisible.value = false
+      clearFillTimer()
       clearSlotTimers()
     }
 
     requestMoreIfNeeded()
-  }
+  },
+  { immediate: true }
 )
 
 onUnmounted(() => {
+  clearSourceSyncTimer()
+  clearFillTimer()
+  clearResumeFrame()
   clearSlotTimers()
 })
+
+function getSourceComments() {
+  const hotComments = props.hotComments.map((comment, index) =>
+    normalizeComment(comment, `hot-${index}`, true)
+  )
+  const regularComments = props.comments.map((comment, index) =>
+    normalizeComment(comment, `comment-${index}`, false)
+  )
+  const sourceComments = dedupeComments([...hotComments, ...regularComments])
+
+  return sourceComments
+}
 
 function normalizeComment(comment, fallbackId, hot) {
   const user = comment?.user ?? {}
@@ -205,15 +236,116 @@ function createFallbackComments() {
 }
 
 function resetDanmakuStream() {
+  clearSourceSyncTimer()
+  clearFillTimer()
+  clearResumeFrame()
   clearSlotTimers()
+  resetStreamClock()
   danmakuItems.value = []
   pendingComments.value = []
   seenCommentKeys = new Set()
   showingFallback = false
 }
 
+function resetStreamClock() {
+  streamClockMs = 0
+  streamStartedAt = props.enabled && !props.paused && layerVisible.value
+    ? performance.now()
+    : 0
+}
+
+function prepareStreamResume() {
+  refreshDanmakuItemStyles(streamClockMs)
+  scheduleSourceCommentsSync()
+
+  resumeFrame = window.requestAnimationFrame(() => {
+    resumeFrame = 0
+
+    if (!props.enabled || props.paused) {
+      return
+    }
+
+    layerVisible.value = true
+    startStreamClock()
+    scheduleVisibleItems()
+    requestMoreIfNeeded()
+  })
+}
+
+function clearResumeFrame() {
+  if (resumeFrame) {
+    window.cancelAnimationFrame(resumeFrame)
+    resumeFrame = 0
+  }
+}
+
+function startStreamClock() {
+  if (!streamStartedAt) {
+    streamStartedAt = performance.now()
+  }
+}
+
+function pauseStreamClock() {
+  if (!streamStartedAt) {
+    return
+  }
+
+  streamClockMs += performance.now() - streamStartedAt
+  streamStartedAt = 0
+  refreshDanmakuItemStyles(streamClockMs)
+}
+
+function getStreamClockMs() {
+  if (!streamStartedAt) {
+    return streamClockMs
+  }
+
+  return streamClockMs + performance.now() - streamStartedAt
+}
+
+function refreshDanmakuItemStyles(clockMs = getStreamClockMs()) {
+  if (!danmakuItems.value.length) {
+    return
+  }
+
+  danmakuItems.value = danmakuItems.value.map((item) => {
+    if (!item?.timing) {
+      return item
+    }
+
+    return {
+      ...item,
+      style: createDanmakuStyle(item.timing, item.hot, clockMs)
+    }
+  })
+}
+
+function scheduleSourceCommentsSync() {
+  clearSourceSyncTimer()
+
+  if (!props.enabled || props.paused) {
+    return
+  }
+
+  sourceSyncTimer = window.setTimeout(() => {
+    sourceSyncTimer = 0
+    syncSourceComments()
+  }, 0)
+}
+
+function clearSourceSyncTimer() {
+  if (sourceSyncTimer) {
+    window.clearTimeout(sourceSyncTimer)
+    sourceSyncTimer = 0
+  }
+}
+
 function syncSourceComments() {
-  const comments = sourceComments.value
+  if (!props.enabled || props.paused) {
+    return
+  }
+
+  const comments = getSourceComments()
 
   if (!comments.length) {
     if (!danmakuItems.value.length || showingFallback) {
@@ -271,6 +403,7 @@ function fillDanmakuSlots() {
   }
 
   const items = [...danmakuItems.value].slice(0, maxVisibleItems.value)
+  let filledCount = 0
 
   for (let index = 0; index < maxVisibleItems.value && pendingComments.value.length; index += 1) {
     if (items[index] && !items[index].empty) {
@@ -278,10 +411,50 @@ function fillDanmakuSlots() {
     }
 
     items[index] = createDanmakuItem(pendingComments.value.shift(), index)
-    scheduleSlot(index, items[index].timing.firstCycleMs)
+    scheduleSlot(index, getRemainingCycleMs(items[index].timing))
+    filledCount += 1
+
+    if (filledCount >= launchBatchSize.value) {
+      break
+    }
   }
 
   danmakuItems.value = items
+
+  if (pendingComments.value.length && hasAvailableSlot(items)) {
+    scheduleFillDanmakuSlots()
+  }
+}
+
+function scheduleFillDanmakuSlots() {
+  if (fillTimer || !props.enabled || props.paused) {
+    return
+  }
+
+  fillTimer = window.setTimeout(() => {
+    fillTimer = 0
+
+    if (!props.enabled || props.paused) {
+      return
+    }
+
+    fillDanmakuSlots()
+  }, launchIntervalMs.value)
+}
+
+function clearFillTimer() {
+  if (fillTimer) {
+    window.clearTimeout(fillTimer)
+    fillTimer = 0
+  }
+}
+
+function hasAvailableSlot(items = danmakuItems.value) {
+  if (items.length < maxVisibleItems.value) {
+    return true
+  }
+
+  return items.some((item) => !item || item.empty)
 }
 
 function cycleDanmakuItem(index) {
@@ -290,12 +463,15 @@ function cycleDanmakuItem(index) {
   }
 
   const nextComment = pendingComments.value.shift()
-  danmakuItems.value[index] = nextComment
+  const nextItems = danmakuItems.value.slice()
+
+  nextItems[index] = nextComment
     ? createDanmakuItem(nextComment, index)
     : createEmptyDanmakuItem(index)
+  danmakuItems.value = nextItems
 
   if (nextComment) {
-    scheduleSlot(index, danmakuItems.value[index].timing.durationMs)
+    scheduleSlot(index, getRemainingCycleMs(nextItems[index].timing))
   } else {
     clearSlotTimer(index)
   }
@@ -317,19 +493,25 @@ function requestMoreIfNeeded() {
 
 function createDanmakuItem(comment, index) {
   const isHot = comment.hot || comment.likedCount >= 500
-  const timing = createDanmakuTiming(comment.content, index)
+  const timing = {
+    ...createDanmakuTiming(comment.content, index),
+    startedAtMs: getStreamClockMs()
+  }
 
   return {
     ...comment,
     key: `${props.song?.id ?? 'song'}-${index}`,
     hot: isHot,
     timing,
-    style: createDanmakuStyle(timing, isHot)
+    style: createDanmakuStyle(timing, isHot, getStreamClockMs())
   }
 }
 
 function createEmptyDanmakuItem(index) {
-  const timing = createDanmakuTiming('', index)
+  const timing = {
+    ...createDanmakuTiming('', index),
+    startedAtMs: getStreamClockMs()
+  }
 
   return {
     id: `empty-${index}`,
@@ -338,24 +520,24 @@ function createEmptyDanmakuItem(index) {
     hot: false,
     empty: true,
     timing,
-    style: createDanmakuStyle(timing, false)
+    style: createDanmakuStyle(timing, false, getStreamClockMs())
   }
 }
 
 function scheduleVisibleItems() {
-  if (!props.enabled || showingFallback) {
+  if (!isLayerRunning() || showingFallback) {
     return
   }
 
   danmakuItems.value.forEach((item, index) => {
     if (!item?.empty && !slotTimers.has(index)) {
-      scheduleSlot(index, item.timing?.firstCycleMs ?? item.timing?.durationMs)
+      scheduleSlot(index, getRemainingCycleMs(item.timing))
     }
   })
 }
 
 function scheduleSlot(index, delayMs) {
-  if (!props.enabled || props.paused || showingFallback) {
+  if (!isLayerRunning() || showingFallback) {
     return
   }
 
@@ -394,32 +576,71 @@ function clearOverflowSlotTimers() {
   })
 }
 
+function isLayerRunning() {
+  return Boolean(props.enabled && !props.paused && layerVisible.value)
+}
+
 function createDanmakuTiming(content, index) {
   const lane = index % laneCount
   const row = Math.floor(index / laneCount)
   const duration = 20 + (index % 5) * 2 + Math.min(6, content.length / 8)
-  const phase = (index * 1.65 + lane * 0.55) % duration
-  const delay = -phase
   const top = 6 + lane * 12 + (row % 2) * 2
 
   return {
     lane,
     top,
-    delay,
+    delay: 0,
     duration,
+    phaseMs: 0,
     durationMs: duration * 1000,
-    firstCycleMs: Math.max(600, (duration - phase) * 1000)
+    firstCycleMs: duration * 1000
   }
 }
 
-function createDanmakuStyle(timing, isHot) {
+function createDanmakuStyle(timing, isHot, clockMs = 0) {
+  const phaseMs = getDanmakuPhaseMs(timing, clockMs)
+
   return {
     '--danmaku-top': `${timing.top}%`,
     '--danmaku-duration': `${timing.duration.toFixed(2)}s`,
-    '--danmaku-delay': `${timing.delay.toFixed(2)}s`,
+    '--danmaku-delay': `${(-phaseMs / 1000).toFixed(2)}s`,
     '--danmaku-scale': isHot ? 1.04 : 1,
     '--danmaku-lane': timing.lane
   }
+}
+
+function getRemainingCycleMs(timing) {
+  if (!timing) {
+    return 1000
+  }
+
+  const durationMs = getTimingDurationMs(timing)
+  const phaseMs = getDanmakuPhaseMs(timing, getStreamClockMs())
+  const remainingMs = durationMs - phaseMs
+
+  return Math.max(250, remainingMs || durationMs)
+}
+
+function getDanmakuPhaseMs(timing, clockMs = 0) {
+  const durationMs = getTimingDurationMs(timing)
+  const currentClockMs = Math.max(0, Number(clockMs) || 0)
+
+  if (Number.isFinite(timing?.startedAtMs)) {
+    return Math.max(0, currentClockMs - timing.startedAtMs) % durationMs
+  }
+
+  const basePhaseMs = Number.isFinite(timing?.phaseMs)
+    ? timing.phaseMs
+    : Math.abs(Number(timing?.delay) || 0) * 1000
+  const phaseMs = (basePhaseMs + currentClockMs) % durationMs
+
+  return phaseMs < 0 ? phaseMs + durationMs : phaseMs
+}
+
+function getTimingDurationMs(timing) {
+  const durationMs = Number(timing?.durationMs) || Number(timing?.duration) * 1000
+
+  return Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 1000
 }
 
 function getCommentKey(comment) {

@@ -48,7 +48,7 @@
               'full-player__qq-lyrics--dragging': lyricsDragging,
               'full-player__qq-lyrics--wheeling': lyricsWheeling,
               'full-player__qq-lyrics--previewing': lyricsInteractionActive,
-              'full-player__qq-lyrics--danmaku': danmakuEnabled,
+              'full-player__qq-lyrics--danmaku': danmakuActive,
             }"
           >
             <div
@@ -105,11 +105,13 @@
       </div>
 
       <DanmakuLayer
+        v-if="danmakuMounted"
         class="full-player__danmaku"
-        :enabled="open && danmakuEnabled"
+        :enabled="danmakuActive"
         :song="track"
         :hot-comments="danmakuHotComments"
         :comments="danmakuComments"
+        :max-items="danmakuMaxItems"
         :has-more="danmakuHasMore"
         :loading="danmakuLoading"
         :prefetch-threshold="danmakuPrefetchThreshold"
@@ -137,6 +139,7 @@
 <script setup>
 import {
   computed,
+  defineAsyncComponent,
   nextTick,
   onBeforeUnmount,
   onMounted,
@@ -144,10 +147,14 @@ import {
   watch,
 } from 'vue';
 import { ChevronDown, Play } from 'lucide-vue-next';
-import DanmakuLayer from './DanmakuLayer.vue';
 import { getTrackLyricData } from '../services/netease';
 import { usePlayerStore } from '../stores/player';
 import '../styles/full-player.css';
+
+const DanmakuLayer = defineAsyncComponent({
+  loader: () => import('./DanmakuLayer.vue'),
+  suspensible: false,
+});
 
 const props = defineProps({
   open: {
@@ -186,6 +193,14 @@ const props = defineProps({
     type: Number,
     default: 8,
   },
+  danmakuMaxItems: {
+    type: Number,
+    default: 36,
+  },
+  danmakuActivationDelay: {
+    type: Number,
+    default: 520,
+  },
 });
 
 const emit = defineEmits(['close', 'cover-flight-end', 'danmaku-need-more']);
@@ -195,6 +210,8 @@ const coverLabel = ref(null);
 const coverFlyer = ref(null);
 const coverFlightActive = ref(false);
 const lastSourceRect = ref(null);
+const danmakuMounted = ref(false);
+const danmakuActive = ref(false);
 const lyricsScroll = ref(null);
 const lyricsDragging = ref(false);
 const lyricsWheeling = ref(false);
@@ -210,6 +227,8 @@ const lyricsDragState = {
 const lyricsDragScrollSpeed = 2.2;
 const lyricsWheelScrollSpeed = 1.2;
 let coverFlightAnimation = null;
+let danmakuActivationTimer = null;
+let danmakuActivationFrame = 0;
 let lyricsPreviewTimer = null;
 let lyricsWheelTimer = null;
 let lyricRequestId = 0;
@@ -252,6 +271,14 @@ watch(
     if (isUsableRect(nextRect)) {
       lastSourceRect.value = nextRect;
     }
+  },
+  { immediate: true },
+);
+
+watch(
+  () => [props.open, props.danmakuEnabled, props.track.id],
+  () => {
+    scheduleDanmakuActivation();
   },
   { immediate: true },
 );
@@ -314,9 +341,42 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleLyricsResize);
+  clearDanmakuActivation();
   clearLyricsPreviewTimer();
   clearLyricsWheelTimer();
 });
+
+function scheduleDanmakuActivation() {
+  clearDanmakuActivation();
+  danmakuActive.value = false;
+
+  if (!props.open || !props.danmakuEnabled) {
+    return;
+  }
+
+  const delay = Math.max(0, Number(props.danmakuActivationDelay) || 0);
+
+  danmakuActivationTimer = window.setTimeout(() => {
+    danmakuActivationTimer = null;
+    danmakuMounted.value = true;
+    danmakuActivationFrame = window.requestAnimationFrame(() => {
+      danmakuActivationFrame = 0;
+      danmakuActive.value = Boolean(props.open && props.danmakuEnabled);
+    });
+  }, delay);
+}
+
+function clearDanmakuActivation() {
+  if (danmakuActivationTimer) {
+    window.clearTimeout(danmakuActivationTimer);
+    danmakuActivationTimer = null;
+  }
+
+  if (danmakuActivationFrame) {
+    window.cancelAnimationFrame(danmakuActivationFrame);
+    danmakuActivationFrame = 0;
+  }
+}
 
 async function loadTrackLyrics(trackId) {
   lyricRequestId += 1;
