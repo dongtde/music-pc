@@ -118,9 +118,6 @@
         @need-more="$emit('danmaku-need-more')"
       />
 
-      <div class="full-player__spectrum" aria-hidden="true">
-        <span v-for="bar in 64" :key="bar" />
-      </div>
     </section>
   </Transition>
 
