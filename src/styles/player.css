@@ -287,6 +287,12 @@
   overflow: visible;
 }
 
+.visualizer-popover {
+  width: 154px;
+  padding: 0 5px;
+  overflow: visible;
+}
+
 .mode-option {
   position: relative;
   z-index: 1;
@@ -305,9 +311,33 @@
   cursor: pointer;
 }
 
+.visualizer-option {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  padding: 0 12px;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-start;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 13px;
+  cursor: pointer;
+}
+
 .mode-option svg {
   width: 18px;
   height: 18px;
+}
+
+.visualizer-option svg {
+  width: 17px;
+  height: 17px;
 }
 
 .mode-option span {
@@ -317,7 +347,18 @@
   white-space: nowrap;
 }
 
+.visualizer-option span {
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .mode-option + .mode-option {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.visualizer-option + .visualizer-option {
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -771,7 +812,8 @@
 .mode-button.active,
 .volume-button.active,
 .player-tools > .icon-button.active,
-.queue-popover-wrap .icon-button.active {
+.queue-popover-wrap .icon-button.active,
+.visualizer-popover-wrap .icon-button.active {
   color: var(--accent);
   background: rgba(var(--accent-rgb), 0.14);
 }
@@ -791,26 +833,33 @@
 }
 
 .mode-option:hover,
-.mode-option.active {
+.mode-option.active,
+.visualizer-option:hover,
+.visualizer-option.active {
   color: var(--accent);
   background: rgba(var(--accent-rgb), 0.12);
 }
 
-.mode-option {
+.mode-option,
+.visualizer-option {
   color: var(--text-main);
 }
 
 .mode-option span,
+.visualizer-option span,
 .queue-popover__head small {
   color: var(--text-muted);
 }
 
 .mode-option:hover span,
-.mode-option.active span {
+.mode-option.active span,
+.visualizer-option:hover span,
+.visualizer-option.active span {
   color: var(--accent);
 }
 
-.mode-option + .mode-option {
+.mode-option + .mode-option,
+.visualizer-option + .visualizer-option {
   border-top-color: var(--border-subtle);
 }
 

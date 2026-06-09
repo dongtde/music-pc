@@ -12,6 +12,7 @@
     :danmaku-prefetch-threshold="fullPlayerDanmakuPrefetchThreshold"
     :danmaku-max-items="fullPlayerDanmakuMaxItems"
     :danmaku-activation-delay="fullPlayerDanmakuActivationDelay"
+    :visualizer-mode="fullPlayerVisualizerMode"
     @danmaku-need-more="loadMoreFullPlayerDanmaku"
     @close="closeFullPlayer"
     @cover-flight-end="handleCoverFlightEnd"
@@ -187,6 +188,33 @@
       >
         <Radio :size="18" />
       </button>
+      <div v-if="fullPlayerOpen" class="control-popover-wrap visualizer-popover-wrap">
+        <button
+          class="icon-button"
+          type="button"
+          :aria-label="`频谱效果：${activeVisualizerMode.label}`"
+          :title="`频谱效果：${activeVisualizerMode.label}`"
+          :aria-pressed="visualizerMenuOpen"
+          :class="{ active: visualizerMenuOpen }"
+          @click="toggleVisualizerMenu"
+        >
+          <Settings2 :size="18" />
+        </button>
+        <div v-if="visualizerMenuOpen" class="player-popover visualizer-popover">
+          <button
+            v-for="mode in visualizerModes"
+            :key="mode.value"
+            class="visualizer-option"
+            type="button"
+            :aria-pressed="fullPlayerVisualizerMode === mode.value"
+            :class="{ active: fullPlayerVisualizerMode === mode.value }"
+            @click="selectVisualizerMode(mode.value)"
+          >
+            <component :is="mode.icon" :size="18" />
+            <span>{{ mode.label }}</span>
+          </button>
+        </div>
+      </div>
       <button class="icon-button" type="button" aria-label="麦克风"><Mic2 :size="17" /></button>
       <div class="control-popover-wrap queue-popover-wrap">
         <button
@@ -239,7 +267,7 @@
 
 <script setup>
 import { computed, defineAsyncComponent, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
-import { Ellipsis, Heart, ListMusic, Loader2, Maximize2, MessageCircleMore, Mic2, Minimize2, Pause, Play, Plus, Radio, Repeat, Repeat1, Repeat2, Shuffle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-vue-next'
+import { AudioLines, Ellipsis, Gauge, Heart, ListMusic, Loader2, Maximize2, MessageCircleMore, Mic2, Minimize2, Orbit, Pause, Play, Plus, Radio, Repeat, Repeat1, Repeat2, Settings2, Shuffle, SkipBack, SkipForward, Sparkles, Volume2, VolumeX, Waves } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import SongListRow from './SongListRow.vue'
 import { useThemeStore } from '../stores/theme'
@@ -253,9 +281,13 @@ const FullScreenPlayer = defineAsyncComponent(() => import('./FullScreenPlayer.v
 const theme = useThemeStore()
 const player = usePlayerStore()
 const message = useMessage()
+const fullPlayerVisualizerStorageKey = 'mappic:full-player:visualizer-mode'
+const fallbackFullPlayerVisualizerMode = 'halo'
+const validFullPlayerVisualizerModes = new Set(['halo', 'breath', 'trails', 'needle', 'particles'])
 const modeMenuOpen = ref(false)
 const volumeMenuOpen = ref(false)
 const queueMenuOpen = ref(false)
+const visualizerMenuOpen = ref(false)
 const fullPlayerOpen = ref(false)
 const fullPlayerMounted = ref(false)
 const fullPlayerCoverRect = ref(null)
@@ -273,6 +305,7 @@ const progressPreviewTime = ref(0)
 const pendingProgressTime = ref(0)
 const progressLyricLines = ref([])
 const danmakuEnabled = ref(true)
+const fullPlayerVisualizerMode = ref(readFullPlayerVisualizerMode())
 const songCommentsModalVisible = ref(false)
 const songCommentsModalMounted = ref(false)
 const fullPlayerDanmakuState = reactive({
@@ -310,7 +343,18 @@ const playModes = [
   { value: 'list', label: '列表循环', icon: Repeat2 }
 ]
 
+const visualizerModes = [
+  { value: 'halo', label: '黑胶日冕', icon: Orbit },
+  { value: 'breath', label: '歌词呼吸', icon: Waves },
+  { value: 'trails', label: '评论星云', icon: AudioLines },
+  { value: 'needle', label: '唱针星图', icon: Gauge },
+  { value: 'particles', label: '空间粒子', icon: Sparkles }
+]
+
 const activePlayMode = computed(() => playModes.find((mode) => mode.value === playMode.value) ?? playModes[3])
+const activeVisualizerMode = computed(() =>
+  visualizerModes.find((mode) => mode.value === fullPlayerVisualizerMode.value) ?? visualizerModes[0]
+)
 const currentTrack = computed(() => player.state.currentTrack)
 const songCommentState = useSongComments({
   track: currentTrack,
@@ -408,27 +452,80 @@ watch(fullPlayerOpen, (open) => {
   clearFullPlayerDanmakuLoadTimer()
 })
 
+watch(fullPlayerVisualizerMode, (mode) => {
+  persistFullPlayerVisualizerMode(mode)
+})
+
 function toggleModeMenu() {
   modeMenuOpen.value = !modeMenuOpen.value
   volumeMenuOpen.value = false
   queueMenuOpen.value = false
+  visualizerMenuOpen.value = false
 }
 
 function toggleVolumeMenu() {
   volumeMenuOpen.value = !volumeMenuOpen.value
   modeMenuOpen.value = false
   queueMenuOpen.value = false
+  visualizerMenuOpen.value = false
 }
 
 function toggleQueueMenu() {
   queueMenuOpen.value = !queueMenuOpen.value
   modeMenuOpen.value = false
   volumeMenuOpen.value = false
+  visualizerMenuOpen.value = false
+}
+
+function toggleVisualizerMenu() {
+  visualizerMenuOpen.value = !visualizerMenuOpen.value
+  modeMenuOpen.value = false
+  volumeMenuOpen.value = false
+  queueMenuOpen.value = false
 }
 
 function selectPlayMode(value) {
   playMode.value = value
   modeMenuOpen.value = false
+}
+
+function selectVisualizerMode(value) {
+  if (!isValidVisualizerMode(value)) {
+    return
+  }
+
+  fullPlayerVisualizerMode.value = value
+  visualizerMenuOpen.value = false
+}
+
+function readFullPlayerVisualizerMode() {
+  if (typeof window === 'undefined') {
+    return fallbackFullPlayerVisualizerMode
+  }
+
+  try {
+    const storedMode = window.localStorage.getItem(fullPlayerVisualizerStorageKey)
+
+    return isValidVisualizerMode(storedMode) ? storedMode : fallbackFullPlayerVisualizerMode
+  } catch {
+    return fallbackFullPlayerVisualizerMode
+  }
+}
+
+function persistFullPlayerVisualizerMode(value) {
+  if (typeof window === 'undefined' || !isValidVisualizerMode(value)) {
+    return
+  }
+
+  try {
+    window.localStorage.setItem(fullPlayerVisualizerStorageKey, value)
+  } catch (error) {
+    console.warn('Failed to persist full player visualizer mode:', error)
+  }
+}
+
+function isValidVisualizerMode(value) {
+  return validFullPlayerVisualizerModes.has(String(value ?? ''))
 }
 
 function toggleFullPlayer() {
@@ -497,6 +594,7 @@ function closePlayerPopovers() {
   modeMenuOpen.value = false
   volumeMenuOpen.value = false
   queueMenuOpen.value = false
+  visualizerMenuOpen.value = false
 }
 
 function resetProgressLyrics() {
