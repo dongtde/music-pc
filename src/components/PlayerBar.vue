@@ -1,5 +1,6 @@
 <template>
   <FullScreenPlayer
+    v-if="fullPlayerMounted"
     :open="fullPlayerOpen"
     :track="currentTrack"
     :source-rect="fullPlayerCoverRect"
@@ -220,6 +221,7 @@
   </footer>
 
   <CommentModal
+    v-if="songCommentsModalMounted"
     v-model:show="songCommentsModalVisible"
     title="歌曲评论"
     :subtitle="`${currentTrack.name} - ${currentTrack.artist}`"
@@ -234,11 +236,9 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { Ellipsis, Heart, ListMusic, Loader2, Maximize2, MessageCircleMore, Mic2, Minimize2, Pause, Play, Plus, Radio, Repeat, Repeat1, Repeat2, Shuffle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
-import CommentModal from './CommentModal.vue'
-import FullScreenPlayer from './FullScreenPlayer.vue'
 import SongListRow from './SongListRow.vue'
 import { useThemeStore } from '../stores/theme'
 import { usePlayerStore } from '../stores/player'
@@ -246,6 +246,8 @@ import { getSongCommentsData, getTrackLyricData } from '../services/netease'
 import { useSongComments } from '../composables/useSongComments'
 import '../styles/player.css'
 
+const CommentModal = defineAsyncComponent(() => import('./CommentModal.vue'))
+const FullScreenPlayer = defineAsyncComponent(() => import('./FullScreenPlayer.vue'))
 const theme = useThemeStore()
 const player = usePlayerStore()
 const message = useMessage()
@@ -253,6 +255,7 @@ const modeMenuOpen = ref(false)
 const volumeMenuOpen = ref(false)
 const queueMenuOpen = ref(false)
 const fullPlayerOpen = ref(false)
+const fullPlayerMounted = ref(false)
 const fullPlayerCoverRect = ref(null)
 const albumArtButton = ref(null)
 const progressBar = ref(null)
@@ -269,6 +272,7 @@ const pendingProgressTime = ref(0)
 const progressLyricLines = ref([])
 const danmakuEnabled = ref(true)
 const songCommentsModalVisible = ref(false)
+const songCommentsModalMounted = ref(false)
 const fullPlayerDanmakuState = reactive({
   trackId: '',
   loading: false,
@@ -282,6 +286,8 @@ const fullPlayerDanmakuState = reactive({
 const fullPlayerDanmakuCommentLimit = 80
 const fullPlayerDanmakuPrefetchThreshold = 12
 let progressLyricRequestId = 0
+let progressLyricLoadedTrackId = ''
+let progressLyricLoadingTrackId = ''
 let fullPlayerDanmakuRequestId = 0
 let removeTrackEndedListener = null
 
@@ -375,9 +381,8 @@ watch(volume, (value) => {
 
 watch(
   () => currentTrack.value.id,
-  (trackId) => {
-    loadProgressLyrics(trackId)
-    songCommentState.preload(currentTrack.value)
+  () => {
+    resetProgressLyrics()
     resetFullPlayerDanmakuStream(currentTrack.value)
 
     if (fullPlayerOpen.value && danmakuEnabled.value) {
@@ -425,9 +430,15 @@ function toggleFullPlayer() {
   }
 
   lastAlbumArtToggleAt.value = now
+  const willOpen = !fullPlayerOpen.value
+
+  if (willOpen) {
+    fullPlayerMounted.value = true
+  }
+
   fullPlayerCoverRect.value = getAlbumArtRect()
   albumArtHidden.value = true
-  fullPlayerOpen.value = !fullPlayerOpen.value
+  fullPlayerOpen.value = willOpen
   closePlayerPopovers()
 }
 
@@ -479,23 +490,44 @@ function closePlayerPopovers() {
   queueMenuOpen.value = false
 }
 
+function resetProgressLyrics() {
+  progressLyricRequestId += 1
+  progressLyricLoadedTrackId = ''
+  progressLyricLoadingTrackId = ''
+  progressLyricLines.value = []
+}
+
 async function loadProgressLyrics(trackId) {
+  const normalizedTrackId = String(trackId ?? '')
+
+  if (
+    !normalizedTrackId ||
+    progressLyricLoadedTrackId === normalizedTrackId ||
+    progressLyricLoadingTrackId === normalizedTrackId
+  ) {
+    return
+  }
+
   progressLyricRequestId += 1
   const requestId = progressLyricRequestId
+  progressLyricLoadingTrackId = normalizedTrackId
   progressLyricLines.value = []
 
-  if (!isNeteaseTrackId(trackId)) {
+  if (!isNeteaseTrackId(normalizedTrackId)) {
+    progressLyricLoadedTrackId = normalizedTrackId
+    progressLyricLoadingTrackId = ''
     return
   }
 
   try {
-    const lines = await getTrackLyricData(trackId)
+    const lines = await getTrackLyricData(normalizedTrackId)
 
     if (requestId !== progressLyricRequestId) {
       return
     }
 
     progressLyricLines.value = lines.filter((line) => !line.placeholder)
+    progressLyricLoadedTrackId = normalizedTrackId
   } catch (error) {
     if (requestId !== progressLyricRequestId) {
       return
@@ -503,10 +535,15 @@ async function loadProgressLyrics(trackId) {
 
     console.warn('Failed to load progress lyrics:', error)
     progressLyricLines.value = []
+  } finally {
+    if (requestId === progressLyricRequestId) {
+      progressLyricLoadingTrackId = ''
+    }
   }
 }
 
 async function openSongCommentsModal() {
+  songCommentsModalMounted.value = true
   songCommentsModalVisible.value = true
   closePlayerPopovers()
   await songCommentState.open(currentTrack.value)
@@ -660,6 +697,7 @@ function updateProgressPreview(event) {
     return
   }
 
+  loadProgressLyrics(currentTrack.value.id)
   progressPreviewVisible.value = true
   progressPreviewPercent.value = progress.percent
   progressPreviewTime.value = progress.time

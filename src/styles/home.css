@@ -12,6 +12,12 @@
   color: #ffffff;
 }
 
+.soda-feed--settling .soda-feed__scroller {
+  opacity: 0;
+  pointer-events: none;
+  transition: none;
+}
+
 .soda-feed__tabs {
   position: absolute;
   top: 20px;

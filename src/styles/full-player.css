@@ -1,7 +1,7 @@
 .full-player-page {
   position: fixed;
   inset: 0;
-  z-index: 4;
+  z-index: 30;
   overflow: hidden;
   padding-bottom: 86px;
   color: #f6f7fb;
@@ -157,7 +157,7 @@
 
 .full-player__cover-flyer.album-art--mini {
   position: fixed;
-  z-index: 20;
+  z-index: 45;
   display: none;
   overflow: hidden;
   pointer-events: none;

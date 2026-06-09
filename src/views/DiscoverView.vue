@@ -16,14 +16,9 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import { useRoute } from 'vue-router'
 import { discoverTabs } from '../data/music'
-import AlbumsTab from './discover/AlbumsTab.vue'
-import ArtistsTab from './discover/ArtistsTab.vue'
-import ChartsTab from './discover/ChartsTab.vue'
-import PlaylistsTab from './discover/PlaylistsTab.vue'
-import RecommendTab from './discover/RecommendTab.vue'
 import '../styles/discover.css'
 
 const route = useRoute()
@@ -37,12 +32,12 @@ const displayTabs = computed(() =>
 )
 
 const tabComponents = {
-  recommend: RecommendTab,
-  playlists: PlaylistsTab,
-  charts: ChartsTab,
-  artists: ArtistsTab,
-  albums: AlbumsTab,
-  latest: AlbumsTab
+  recommend: defineAsyncComponent(() => import('./discover/RecommendTab.vue')),
+  playlists: defineAsyncComponent(() => import('./discover/PlaylistsTab.vue')),
+  charts: defineAsyncComponent(() => import('./discover/ChartsTab.vue')),
+  artists: defineAsyncComponent(() => import('./discover/ArtistsTab.vue')),
+  albums: defineAsyncComponent(() => import('./discover/AlbumsTab.vue')),
+  latest: defineAsyncComponent(() => import('./discover/AlbumsTab.vue'))
 }
 
 const activeTab = computed(() => {

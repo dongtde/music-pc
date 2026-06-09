@@ -16,4 +16,29 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) {
+            return undefined;
+          }
+
+          if (id.includes('naive-ui')) {
+            return 'vendor-naive';
+          }
+
+          if (id.includes('lucide-vue-next')) {
+            return 'vendor-icons';
+          }
+
+          if (id.includes('axios')) {
+            return 'vendor-http';
+          }
+
+          return 'vendor';
+        },
+      },
+    },
+  },
 });

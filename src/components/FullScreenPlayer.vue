@@ -258,7 +258,11 @@ watch(
 
 watch(
   () => props.open,
-  async (open) => {
+  async (open, previousOpen) => {
+    if (!open && previousOpen === undefined) {
+      return;
+    }
+
     const sourceRect = getFlightSourceRect();
 
     if (open) {
@@ -276,7 +280,7 @@ watch(
     await nextTick();
     playCoverFlight('leave', { sourceRect, targetRect });
   },
-  { flush: 'sync' },
+  { flush: 'sync', immediate: true },
 );
 
 watch(

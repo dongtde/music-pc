@@ -49,6 +49,7 @@
 }
 
 .player.player--full-screen {
+  z-index: 40;
   border-top: 0;
   padding-top: 13px;
   box-shadow: none;

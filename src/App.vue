@@ -27,24 +27,27 @@
         </section>
         <PlayerBar />
         <ThemeTransitionOverlay />
-        <LoginModal v-model:show="auth.state.loginModalVisible" />
+        <LoginModal
+          v-if="auth.state.loginModalVisible"
+          v-model:show="auth.state.loginModalVisible"
+        />
       </main>
     </n-message-provider>
   </n-config-provider>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { darkTheme } from 'naive-ui';
 import SidebarNav from './components/SidebarNav.vue';
 import TopBar from './components/TopBar.vue';
 import PlayerBar from './components/PlayerBar.vue';
-import LoginModal from './components/LoginModal.vue';
 import ThemeTransitionOverlay from './components/ThemeTransitionOverlay.vue';
 import { useAuthStore } from './stores/auth';
 import { useThemeStore } from './stores/theme';
 
+const LoginModal = defineAsyncComponent(() => import('./components/LoginModal.vue'));
 const auth = useAuthStore();
 const theme = useThemeStore();
 const route = useRoute();

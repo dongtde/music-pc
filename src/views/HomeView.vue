@@ -19,6 +19,7 @@
     <section
       v-show="activeHomeSection === 'music'"
       class="soda-feed"
+      :class="{ 'soda-feed--settling': musicFeedSettling }"
       aria-label="主页推荐听歌"
       :aria-hidden="activeHomeSection !== 'music'"
     >
@@ -423,6 +424,7 @@
     </section>
 
   <CommentModal
+    v-if="songCommentsModalMounted"
     v-model:show="songCommentsModalVisible"
     title="歌曲评论"
     :subtitle="songCommentSubtitle"
@@ -436,6 +438,7 @@
   />
 
   <CommentModal
+    v-if="homeMvCommentsModalMounted"
     v-model:show="homeMvCommentsModalVisible"
     title="MV 评论"
     :subtitle="homeMvCommentSubtitle"
@@ -453,6 +456,7 @@
 <script setup>
 import {
   computed,
+  defineAsyncComponent,
   nextTick,
   onActivated,
   onDeactivated,
@@ -476,7 +480,6 @@ import {
   Radio,
   SkipForward
 } from 'lucide-vue-next'
-import CommentModal from '../components/CommentModal.vue'
 import DanmakuLayer from '../components/DanmakuLayer.vue'
 import { recommendedMvs as fallbackMvs, recommendedSingles } from '../data/music'
 import {
@@ -524,6 +527,7 @@ import {
 } from './home/homeUtils'
 import '../styles/home.css'
 
+const CommentModal = defineAsyncComponent(() => import('../components/CommentModal.vue'))
 const player = usePlayerStore()
 const message = useMessage()
 const feedScroller = ref(null)
@@ -533,6 +537,7 @@ const activeHomeSection = ref('music')
 const activeMood = ref('daily')
 const activeIndex = ref(0)
 const activeMvIndex = ref(0)
+const musicFeedSettling = ref(false)
 const autoPlayAfterGesture = ref(false)
 const mvAutoPlayAfterGesture = ref(false)
 const likedIds = shallowRef(new Set())
@@ -544,6 +549,7 @@ const activeMvLoading = ref(false)
 const mvDragging = ref(false)
 const homeMvDanmakuEnabled = ref(true)
 const homeMvCommentsModalVisible = ref(false)
+const homeMvCommentsModalMounted = ref(false)
 const homeMvState = reactive({
   isPlaying: false,
   isReady: false,
@@ -594,6 +600,7 @@ const previewLyricIndex = ref(null)
 const lyricsPreviewing = ref(false)
 const danmakuEnabled = ref(true)
 const songCommentsModalVisible = ref(false)
+const songCommentsModalMounted = ref(false)
 const feedDragState = {
   pointerId: null,
   startIndex: 0,
@@ -862,42 +869,83 @@ function setHomeSection(value) {
     return
   }
 
-  activeHomeSection.value = value
-
   if (value === 'music') {
     stabilizeMusicFeedAfterSectionSwitch()
+    activeHomeSection.value = value
     return
   }
 
+  musicFeedSettling.value = false
+  activeHomeSection.value = value
   nextTick(() => snapMvToActiveIndex('auto'))
 }
 
 function stabilizeMusicFeedAfterSectionSwitch() {
-  const targetIndex = activeIndex.value
+  const targetIndex = clampSongIndex(activeIndex.value)
 
+  cancelPendingFeedScroll()
+  feedDragging.value = false
+  feedDragState.pointerId = null
   feedScrollLocked = true
+  musicFeedSettling.value = true
   window.clearTimeout(sectionSwitchSnapTimer)
 
   nextTick(async () => {
     await waitForLayoutFrame()
 
     if (activeHomeSection.value !== 'music') {
-      feedScrollLocked = false
+      finishMusicFeedSectionSwitch(false)
       return
     }
 
-    activeIndex.value = clampSongIndex(targetIndex)
-    scrollToIndex(activeIndex.value, 'auto')
+    activeIndex.value = targetIndex
+    scrollToIndex(targetIndex, 'auto')
+    await waitForLayoutFrame()
+
+    if (activeHomeSection.value !== 'music') {
+      finishMusicFeedSectionSwitch(false)
+      return
+    }
+
+    activeIndex.value = targetIndex
+    scrollToIndex(targetIndex, 'auto')
 
     sectionSwitchSnapTimer = window.setTimeout(() => {
       if (activeHomeSection.value === 'music') {
-        activeIndex.value = clampSongIndex(targetIndex)
-        scrollToIndex(activeIndex.value, 'auto')
+        activeIndex.value = targetIndex
+        scrollToIndex(targetIndex, 'auto')
+        finishMusicFeedSectionSwitch(true)
+        return
+      }
+
+      finishMusicFeedSectionSwitch(false)
+    }, 80)
+  })
+}
+
+function finishMusicFeedSectionSwitch(visible) {
+  if (!visible) {
+    musicFeedSettling.value = false
+    feedScrollLocked = false
+    return
+  } else {
+    window.requestAnimationFrame(() => {
+      if (activeHomeSection.value === 'music') {
+        musicFeedSettling.value = false
       }
 
       feedScrollLocked = false
-    }, 180)
-  })
+    })
+  }
+}
+
+function cancelPendingFeedScroll() {
+  if (!scrollFrame) {
+    return
+  }
+
+  window.cancelAnimationFrame(scrollFrame)
+  scrollFrame = 0
 }
 
 function handleGlobalPlaybackKeydown(event) {
@@ -1139,6 +1187,7 @@ async function openHomeMvComments(mv = activeMv.value) {
     return
   }
 
+  homeMvCommentsModalMounted.value = true
   homeMvCommentsModalVisible.value = true
 
   if (String(homeMvCommentState.trackId) !== String(mv.id)) {
@@ -2081,6 +2130,7 @@ async function openSongCommentsModal(song = activeSong.value) {
     return
   }
 
+  songCommentsModalMounted.value = true
   songCommentsModalVisible.value = true
   await songCommentState.open(song)
 }
