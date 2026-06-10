@@ -58,6 +58,7 @@ import {
   Heart,
   History,
   House,
+  MicVocal,
   Music2,
   Radio,
   Users,
@@ -77,7 +78,7 @@ const route = useRoute()
 const auth = useAuthStore()
 const displayName = auth.displayName
 const avatarUrl = auth.avatarUrl
-const icons = { CloudDownload, Compass, Heart, History, House, Music2, Radio, Users, Video }
+const icons = { CloudDownload, Compass, Heart, History, House, MicVocal, Music2, Radio, Users, Video }
 
 function isActive(item) {
   return item.activeMatch ? route.path.startsWith(item.activeMatch) : route.path === item.to

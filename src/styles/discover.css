@@ -1885,6 +1885,7 @@
   position: absolute;
   inset: 0;
   aspect-ratio: 1 / 1;
+  isolation: isolate;
   overflow: hidden;
   width: 100%;
   height: 100%;
@@ -1895,6 +1896,7 @@
 .cover__visual {
   position: absolute;
   inset: 0;
+  z-index: 0;
 }
 
 .cover__image,
@@ -1904,6 +1906,10 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.cover__image {
+  z-index: 0;
 }
 
 .cover-hover-bg {
@@ -2127,6 +2133,12 @@
     0 18px 0 #050403,
     -42px 44px 0 -34px #090605;
   transform: rotate(-13deg);
+}
+
+.cover.cover--with-image::before,
+.cover.cover--with-image::after {
+  display: none;
+  content: none;
 }
 
 .latest-section {

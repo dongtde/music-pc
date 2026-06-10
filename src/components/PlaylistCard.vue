@@ -2,7 +2,14 @@
   <article class="playlist-card" :class="{ 'is-playing': playingPlaylist }">
     <div class="playlist-card__cover-wrap">
       <router-link class="playlist-card__cover-link" :to="playlistLink" :aria-label="playlist.title">
-        <div class="cover" :class="`cover--${playlist.type}`">
+        <div
+          class="cover"
+          :class="[
+            playlist.coverUrl
+              ? 'cover--with-image'
+              : `cover--${playlist.type}`
+          ]"
+        >
           <img
             v-if="playlist.coverUrl"
             class="cover__image"

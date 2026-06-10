@@ -112,6 +112,8 @@ const layerPaused = computed(() => props.paused || !layerVisible.value)
 const danmakuItems = shallowRef([])
 const pendingComments = shallowRef([])
 let seenCommentKeys = new Set()
+let sourceCommentsByKey = new Map()
+let sourceCommentKeys = []
 let showingFallback = false
 const slotTimers = new Map()
 let sourceSyncTimer = 0
@@ -119,6 +121,8 @@ let fillTimer = 0
 let resumeFrame = 0
 let streamClockMs = 0
 let streamStartedAt = 0
+let launchSequence = 0
+let replayCursor = 0
 
 watch(
   () => props.song?.id,
@@ -244,7 +248,11 @@ function resetDanmakuStream() {
   danmakuItems.value = []
   pendingComments.value = []
   seenCommentKeys = new Set()
+  sourceCommentsByKey = new Map()
+  sourceCommentKeys = []
   showingFallback = false
+  launchSequence = 0
+  replayCursor = 0
 }
 
 function resetStreamClock() {
@@ -384,7 +392,13 @@ function enqueueComments(comments) {
   comments.forEach((comment) => {
     const key = getCommentKey(comment)
 
-    if (!key || seenCommentKeys.has(key)) {
+    if (!key) {
+      return
+    }
+
+    rememberSourceComment(key, comment)
+
+    if (seenCommentKeys.has(key)) {
       return
     }
 
@@ -462,7 +476,7 @@ function cycleDanmakuItem(index) {
     return
   }
 
-  const nextComment = pendingComments.value.shift()
+  const nextComment = pendingComments.value.shift() ?? getReplayComment(index)
   const nextItems = danmakuItems.value.slice()
 
   nextItems[index] = nextComment
@@ -493,6 +507,7 @@ function requestMoreIfNeeded() {
 
 function createDanmakuItem(comment, index) {
   const isHot = comment.hot || comment.likedCount >= 500
+  const sourceKey = getCommentKey(comment)
   const timing = {
     ...createDanmakuTiming(comment.content, index),
     startedAtMs: getStreamClockMs()
@@ -500,7 +515,8 @@ function createDanmakuItem(comment, index) {
 
   return {
     ...comment,
-    key: `${props.song?.id ?? 'song'}-${index}`,
+    key: createLaunchKey(index),
+    sourceKey,
     hot: isHot,
     timing,
     style: createDanmakuStyle(timing, isHot, getStreamClockMs())
@@ -515,7 +531,7 @@ function createEmptyDanmakuItem(index) {
 
   return {
     id: `empty-${index}`,
-    key: `${props.song?.id ?? 'song'}-${index}`,
+    key: createLaunchKey(index),
     content: '',
     hot: false,
     empty: true,
@@ -641,6 +657,45 @@ function getTimingDurationMs(timing) {
   const durationMs = Number(timing?.durationMs) || Number(timing?.duration) * 1000
 
   return Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 1000
+}
+
+function rememberSourceComment(key, comment) {
+  if (!sourceCommentsByKey.has(key)) {
+    sourceCommentKeys.push(key)
+  }
+
+  sourceCommentsByKey.set(key, comment)
+}
+
+function getReplayComment(index) {
+  if (!sourceCommentKeys.length) {
+    return null
+  }
+
+  const currentKey = danmakuItems.value[index]?.sourceKey
+
+  for (let attempt = 0; attempt < sourceCommentKeys.length; attempt += 1) {
+    const key = sourceCommentKeys[replayCursor % sourceCommentKeys.length]
+    replayCursor = (replayCursor + 1) % sourceCommentKeys.length
+
+    if (sourceCommentKeys.length > 1 && key === currentKey) {
+      continue
+    }
+
+    const comment = sourceCommentsByKey.get(key)
+
+    if (comment) {
+      return comment
+    }
+  }
+
+  return null
+}
+
+function createLaunchKey(index) {
+  launchSequence += 1
+
+  return `${props.song?.id ?? 'song'}-${index}-${launchSequence}`
 }
 
 function getCommentKey(comment) {

@@ -18,7 +18,7 @@
                 <KeepAlive>
                   <component
                     :is="Component"
-                    :key="String(viewRoute.name || viewRoute.path)"
+                    :key="getRouteViewKey(viewRoute)"
                   />
                 </KeepAlive>
               </Transition>
@@ -60,10 +60,26 @@ const naiveTheme = computed(() =>
 const isImmersiveRoute = computed(() => route.name === 'home');
 const routeTransitionName = ref('route-soft');
 const isLayoutSwitching = ref(false);
+const PODCAST_TAB_ROUTE_NAMES = new Set([
+  'podcast',
+  'podcast-rank',
+  'podcast-sleep',
+  'podcast-radio',
+]);
 let layoutSwitchTimer = 0;
 
 function isHomeRoute(routeName) {
   return routeName === 'home';
+}
+
+function getRouteViewKey(viewRoute) {
+  const routeName = String(viewRoute.name || '');
+
+  if (PODCAST_TAB_ROUTE_NAMES.has(routeName)) {
+    return 'podcast-tabs';
+  }
+
+  return String(viewRoute.name || viewRoute.path);
 }
 
 function markLayoutSwitching() {

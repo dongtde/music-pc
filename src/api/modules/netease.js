@@ -126,6 +126,306 @@ export function sendFmTrash(params = {}) {
   })
 }
 
+export function getPersonalizedDjPrograms(params = {}) {
+  return http.get('/personalized/djprogram', {
+    params
+  })
+}
+
+export function getDjBanner(params = {}) {
+  return http.get('/dj/banner', {
+    params
+  })
+}
+
+export function getDjPersonalizeRecommend(params = {}) {
+  return http.get('/dj/personalize/recommend', {
+    params
+  })
+}
+
+export function getDjHot(params = {}) {
+  return http.get('/dj/hot', {
+    params
+  })
+}
+
+export function getDjProgramToplist(params = {}) {
+  return http.get('/dj/program/toplist', {
+    params
+  })
+}
+
+export function getDjProgramHoursToplist(params = {}) {
+  return http.get('/dj/program/toplist/hours', {
+    params
+  })
+}
+
+export function getDjToplist(params = {}) {
+  return http.get('/dj/toplist', {
+    params
+  })
+}
+
+export function getDjToplistPay(params = {}) {
+  return http.get('/dj/toplist/pay', {
+    params
+  })
+}
+
+export function getDjToplistHours(params = {}) {
+  return http.get('/dj/toplist/hours', {
+    params
+  })
+}
+
+export function getDjToplistNewcomer(params = {}) {
+  return http.get('/dj/toplist/newcomer', {
+    params
+  })
+}
+
+export function getDjToplistPopular(params = {}) {
+  return http.get('/dj/toplist/popular', {
+    params
+  })
+}
+
+export function getDjRadioHot(params = {}) {
+  return http.get('/dj/radio/hot', {
+    params
+  })
+}
+
+export function getDjRecommend(params = {}) {
+  return http.get('/dj/recommend', {
+    params
+  })
+}
+
+export function getDjCatelist(params = {}) {
+  return http.get('/dj/catelist', {
+    params
+  })
+}
+
+export function getDjRecommendType(params = {}) {
+  return http.get('/dj/recommend/type', {
+    params
+  })
+}
+
+export function updateDjSubscribe(params = {}) {
+  return http.get('/dj/sub', {
+    params
+  })
+}
+
+export function getDjSublist(params = {}) {
+  return http.get('/dj/sublist', {
+    params
+  })
+}
+
+export function getDjPaygift(params = {}) {
+  return http.get('/dj/paygift', {
+    params
+  })
+}
+
+export function getDjCategoryExcludehot(params = {}) {
+  return http.get('/dj/category/excludehot', {
+    params
+  })
+}
+
+export function getDjCategoryRecommend(params = {}) {
+  return http.get('/dj/category/recommend', {
+    params
+  })
+}
+
+export function getDjTodayPreferred(params = {}) {
+  return http.get('/dj/today/perfered', {
+    params
+  })
+}
+
+export function getDjDetail(params = {}) {
+  return http.get('/dj/detail', {
+    params
+  })
+}
+
+export function getDjPrograms(params = {}) {
+  return http.get('/dj/program', {
+    params
+  })
+}
+
+export function getDjProgramDetail(params = {}) {
+  return http.get('/dj/program/detail', {
+    params
+  })
+}
+
+export function getDjComments(params = {}) {
+  return http.get('/comment/dj', {
+    params
+  })
+}
+
+export function getRecentDj(params = {}) {
+  return http.get('/record/recent/dj', {
+    params
+  })
+}
+
+export function searchVoiceLists(params = {}) {
+  return http.get('/voicelist/search', {
+    params
+  })
+}
+
+export function searchVoiceListPrograms(params = {}) {
+  return http.get('/voicelist/list/search', {
+    params
+  })
+}
+
+export function getVoiceListDetail(params = {}) {
+  return http.get('/voicelist/detail', {
+    params
+  })
+}
+
+export function getVoiceListPrograms(params = {}) {
+  return http.get('/voicelist/list', {
+    params
+  })
+}
+
+export function getVoiceDetail(params = {}) {
+  return http.get('/voice/detail', {
+    params
+  })
+}
+
+export function getVoiceLyric(params = {}) {
+  return http.get('/voice/lyric', {
+    params
+  })
+}
+
+export function getMyCreatedVoiceList(params = {}) {
+  return http.get('/voicelist/my/created', {
+    params
+  })
+}
+
+export function getBroadcastCategoryRegion(params = {}) {
+  return http.get('/broadcast/category/region/get', {
+    params
+  })
+}
+
+export function getBroadcastCollectList(params = {}) {
+  return http.get('/broadcast/channel/collect/list', {
+    params
+  })
+}
+
+export function getBroadcastCurrentInfo(params = {}) {
+  return http.get('/broadcast/channel/currentinfo', {
+    params
+  })
+}
+
+export function getBroadcastChannelList(params = {}) {
+  return http.get('/broadcast/channel/list', {
+    params
+  })
+}
+
+export function updateBroadcastSubscribe(params = {}) {
+  return http.get('/broadcast/sub', {
+    params
+  })
+}
+
+export function getDifmStyleChannels(params = {}) {
+  return http.get('/dj/difm/all/style/channel', {
+    params
+  })
+}
+
+export function getDifmSubscribedChannels(params = {}) {
+  return http.get('/dj/difm/subscribe/channels/get', {
+    params
+  })
+}
+
+export function subscribeDifmChannel(params = {}) {
+  return http.get('/dj/difm/channel/subscribe', {
+    params
+  })
+}
+
+export function unsubscribeDifmChannel(params = {}) {
+  return http.get('/dj/difm/channel/unsubscribe', {
+    params
+  })
+}
+
+export function getDifmPlayingTracks(params = {}) {
+  return http.get('/dj/difm/playing/tracks/list', {
+    params
+  })
+}
+
+export function getSatiTimeSceneResources(params = {}) {
+  return http.get('/sati/timescene/resources/get', {
+    params
+  })
+}
+
+export function getSatiTags(params = {}) {
+  return http.get('/sati/tag/list', {
+    params
+  })
+}
+
+export function getSatiResources(params = {}) {
+  return http.get('/sati/resource/list', {
+    params
+  })
+}
+
+export function getSatiMoreResources(params = {}) {
+  return http.get('/sati/resource/list/more', {
+    params
+  })
+}
+
+export function getSatiSubscribedResources(params = {}) {
+  return http.get('/sati/resource/sub/list', {
+    params
+  })
+}
+
+export function updateSatiSubscribe(params = {}) {
+  return http.get('/sati/resource/sub', {
+    params
+  })
+}
+
+export function getSportRadio(params = {}) {
+  return http.get('/radio/sport/get', {
+    params
+  })
+}
+
 export function checkSongLike(params = {}) {
   return http.get('/song/like/check', {
     params

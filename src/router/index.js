@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+const PodcastView = () => import('../views/PodcastView.vue')
+
 const routes = [
   { path: '/', redirect: '/home' },
   {
@@ -17,8 +19,37 @@ const routes = [
   {
     path: '/fm',
     name: 'fm',
-    component: () => import('../views/FMView.vue'),
-    meta: { title: '私人 FM', icon: 'Radio' }
+    redirect: '/podcast'
+  },
+  {
+    path: '/podcast',
+    name: 'podcast',
+    component: PodcastView,
+    meta: { title: '播客', icon: 'MicVocal' }
+  },
+  {
+    path: '/podcast/rank',
+    name: 'podcast-rank',
+    component: PodcastView,
+    meta: { title: '播客榜单', icon: 'MicVocal' }
+  },
+  {
+    path: '/podcast/sleep',
+    name: 'podcast-sleep',
+    component: PodcastView,
+    meta: { title: '助眠解压', icon: 'MicVocal' }
+  },
+  {
+    path: '/podcast/radio',
+    name: 'podcast-radio',
+    component: PodcastView,
+    meta: { title: '播客电台', icon: 'MicVocal' }
+  },
+  {
+    path: '/podcast/:id',
+    name: 'podcast-detail',
+    component: () => import('../views/PodcastDetailView.vue'),
+    meta: { title: '播客详情', icon: 'MicVocal' }
   },
   {
     path: '/mv',

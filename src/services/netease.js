@@ -17,7 +17,39 @@ import {
   getExclusiveMvs,
   getFirstMvs,
   getFollowArtistNewMvs,
+  getBroadcastCategoryRegion,
+  getBroadcastChannelList,
+  getBroadcastCollectList,
+  getBroadcastCurrentInfo,
+  getDifmPlayingTracks,
+  getDifmStyleChannels,
+  getDifmSubscribedChannels,
+  getDjBanner,
+  getDjCatelist,
+  getDjCategoryExcludehot,
+  getDjCategoryRecommend,
+  getDjComments,
+  getDjDetail,
+  getDjHot,
+  getDjPaygift,
+  getDjPersonalizeRecommend,
+  getDjProgramDetail,
+  getDjProgramHoursToplist,
+  getDjProgramToplist,
+  getDjPrograms,
+  getDjRadioHot,
+  getDjRecommend,
+  getDjRecommendType,
+  getDjSublist,
+  getDjTodayPreferred,
+  getDjToplist,
+  getDjToplistHours,
+  getDjToplistNewcomer,
+  getDjToplistPay,
+  getDjToplistPopular,
+  getMyCreatedVoiceList,
   getPersonalizedMvs,
+  getPersonalizedDjPrograms,
   getPersonalizedNewSongs,
   getPersonalizedPlaylists,
   getLyric,
@@ -40,18 +72,31 @@ import {
   getSearchHotDetail,
   getSearchMultiMatch,
   getSearchSuggestPc,
+  getSatiMoreResources,
+  getSatiResources,
+  getSatiTags,
+  getSatiTimeSceneResources,
+  getSatiSubscribedResources,
   getSongComments,
   getSongRedCount,
+  getSportRadio,
   getSimilarMvs,
   getSubscribedMvs,
+  getRecentDj,
+  getVoiceLyric,
   sendFmTrash,
+  searchVoiceLists,
   getTopMvs,
   getToplist,
   getTopPlaylists,
   getTopAlbums,
   getUgcMv,
   likeResource,
+  searchVoiceListPrograms,
   subscribeMv,
+  updateBroadcastSubscribe,
+  updateDjSubscribe,
+  updateSatiSubscribe,
   updateSongLike
 } from '../api/modules/netease'
 
@@ -60,6 +105,7 @@ const DATA_CACHE_TTL = {
   comments: 60 * 1000,
   discovery: 2 * 60 * 1000,
   lyrics: 10 * 60 * 1000,
+  podcast: 2 * 60 * 1000,
   playlistDetail: 3 * 60 * 1000,
   searchBoot: 10 * 60 * 1000
 }
@@ -246,6 +292,288 @@ export async function movePersonalFmSongToTrash(id) {
     id,
     timestamp: Date.now()
   })
+}
+
+export async function getPodcastHomeData() {
+  return getCachedData('podcast-home', DATA_CACHE_TTL.podcast, async () => {
+    const [
+      bannerResponse,
+      personalizeResponse,
+      recommendResponse,
+      hotResponse,
+      categoryResponse,
+      categoryHotResponse,
+      todayResponse,
+      programTopResponse,
+      payResponse,
+      recentResponse,
+      sublistResponse,
+      satiTagsResponse,
+      satiResourcesResponse,
+      difmResponse,
+      broadcastMetaResponse,
+      broadcastListResponse
+    ] = await Promise.all([
+      getDjBanner().catch(() => ({})),
+      getDjPersonalizeRecommend({ limit: 6 }).catch(() => ({})),
+      getDjRecommend().catch(() => ({})),
+      getDjHot({ limit: 12, offset: 0 }).catch(() => ({})),
+      getDjCategoryRecommend().catch(() => ({})),
+      getDjCatelist().catch(() => ({})),
+      getDjTodayPreferred().catch(() => ({})),
+      getDjProgramToplist({ limit: 8, offset: 0 }).catch(() => ({})),
+      getDjToplistPay({ limit: 8 }).catch(() => ({})),
+      getRecentDj({ limit: 8 }).catch(() => ({})),
+      getDjSublist({ limit: 12, offset: 0 }).catch(() => ({})),
+      getSatiTags().catch(() => ({})),
+      getSatiResources({ tag: 'RCMD' }).catch(() => ({})),
+      getDifmStyleChannels({ sources: JSON.stringify([0, 1, 2]) }).catch(() => ({})),
+      getBroadcastCategoryRegion().catch(() => ({})),
+      getBroadcastChannelList({ categoryId: 0, regionId: 0 }).catch(() => ({}))
+    ])
+    const categories = mapPodcastCategories(categoryResponse, categoryHotResponse)
+    const firstCategory = categories[0]
+
+    return {
+      banners: mapPodcastBanners(bannerResponse),
+      featured: uniquePodcasts([
+        ...getPodcastPayload(personalizeResponse),
+        ...getPodcastPayload(recommendResponse)
+      ]).slice(0, 12),
+      hot: getPodcastPayload(hotResponse).map(mapPodcastCard),
+      categories,
+      activeCategory: firstCategory ?? null,
+      categoryRadios: firstCategory?.radios ?? [],
+      today: getProgramPayload(todayResponse).slice(0, 8).map(mapPodcastProgramTrack),
+      programToplist: getProgramPayload(programTopResponse).slice(0, 8).map(mapPodcastProgramTrack),
+      paid: getPodcastPayload(payResponse).slice(0, 8).map(mapPodcastCard),
+      recent: getProgramPayload(recentResponse).slice(0, 8).map(mapPodcastProgramTrack),
+      subscribed: getPodcastPayload(sublistResponse).slice(0, 12).map(mapPodcastCard),
+      satiTags: getSatiTagPayload(satiTagsResponse).slice(0, 10).map(mapSatiTag),
+      satiResources: getSatiResourcePayload(satiResourcesResponse).slice(0, 24).map(mapSatiResourceTrack),
+      difm: mapDifmGroups(difmResponse),
+      broadcastMeta: mapBroadcastMeta(broadcastMetaResponse),
+      broadcastChannels: getBroadcastChannelPayload(broadcastListResponse).slice(0, 18).map(mapBroadcastChannel)
+    }
+  })
+}
+
+export async function searchPodcastsData({ keyword, limit = 18, offset = 0 } = {}) {
+  const query = String(keyword ?? '').trim()
+
+  if (!query) {
+    return {
+      items: [],
+      total: 0,
+      more: false
+    }
+  }
+
+  const response = await searchVoiceLists({
+    keyword: query,
+    limit,
+    offset
+  })
+  const result = response.data ?? response
+  const resources = result.resources ?? result.list ?? result.items ?? []
+
+  return {
+    items: resources.map(mapVoiceListSearchResult).filter((item) => item.id),
+    total: result.totalCount ?? result.total ?? resources.length,
+    more: Boolean(result.hasMore || result.more)
+  }
+}
+
+export async function getPodcastCategoryData({ cateId, limit = 18, offset = 0 } = {}) {
+  const response = await getDjRadioHot({
+    cateId,
+    limit,
+    offset
+  })
+  const podcasts = getPodcastPayload(response).map(mapPodcastCard)
+  const total = response.count ?? response.total ?? podcasts.length
+
+  return {
+    items: podcasts,
+    total,
+    more: Boolean(response.hasMore || response.more || (total && offset + podcasts.length < total))
+  }
+}
+
+export async function getPodcastRankData({ type = 'hot', limit = 18, offset = 0 } = {}) {
+  const loaders = {
+    hot: () => getDjToplist({ type: 'hot', limit, offset }),
+    new: () => getDjToplist({ type: 'new', limit, offset }),
+    pay: () => getDjToplistPay({ limit }),
+    hour: () => getDjToplistHours({ limit }),
+    newcomer: () => getDjToplistNewcomer({ limit }),
+    popular: () => getDjToplistPopular({ limit })
+  }
+  const response = await (loaders[type] ?? loaders.hot)()
+  const podcasts = getPodcastPayload(response).map(mapPodcastCard)
+
+  return {
+    items: podcasts,
+    total: response.count ?? response.total ?? podcasts.length,
+    more: Boolean(response.hasMore || response.more)
+  }
+}
+
+export async function getPodcastDetailData({ id, limit = 40, offset = 0 } = {}) {
+  const [detailResponse, programResponse] = await Promise.all([
+    getDjDetail({ rid: id }),
+    getDjPrograms({ rid: id, limit, offset })
+  ])
+  const rawPodcast = detailResponse.data ?? detailResponse.djRadio ?? detailResponse.radio
+
+  if (!rawPodcast) {
+    throw new Error('Podcast detail is empty')
+  }
+
+  const programs = getProgramPayload(programResponse).map(mapPodcastProgramTrack)
+  const total = programResponse.count ?? programResponse.total ?? rawPodcast.programCount ?? programs.length
+
+  return {
+    podcast: mapPodcastDetail(rawPodcast),
+    programs,
+    total,
+    more: Boolean(programResponse.more || programResponse.hasMore || (total && offset + programs.length < total))
+  }
+}
+
+export async function getPodcastProgramsData({ id, limit = 40, offset = 0 } = {}) {
+  const response = await getDjPrograms({ rid: id, limit, offset })
+  const programs = getProgramPayload(response).map(mapPodcastProgramTrack)
+  const total = response.count ?? response.total ?? programs.length
+
+  return {
+    programs,
+    total,
+    more: Boolean(response.more || response.hasMore || (total && offset + programs.length < total))
+  }
+}
+
+export async function getPodcastProgramDetailData(id) {
+  const response = await getDjProgramDetail({ id })
+  const program = response.program ?? response.data ?? response
+
+  return mapPodcastProgramTrack(program)
+}
+
+export async function getPodcastProgramCommentsData({ id, limit = 20, offset = 0 } = {}) {
+  const response = await getDjComments({ id, limit, offset })
+
+  return {
+    hotComments: (response.hotComments ?? []).map(mapComment),
+    comments: (response.comments ?? []).map(mapComment),
+    total: response.total ?? 0,
+    more: Boolean(response.more),
+    isFirstPage: offset <= 0
+  }
+}
+
+export async function togglePodcastSubscribeData({ id, subscribe }) {
+  return updateDjSubscribe({
+    rid: id,
+    t: subscribe ? 1 : 0,
+    timestamp: Date.now()
+  })
+}
+
+export async function getPodcastCategoryRecommendationsData(type) {
+  const response = await getDjRecommendType({ type })
+
+  return getPodcastPayload(response).map(mapPodcastCard)
+}
+
+export async function getSatiResourcesData(tag = 'RCMD') {
+  const response = await getSatiResources({ tag })
+
+  return getSatiResourcePayload(response).map(mapSatiResourceTrack)
+}
+
+export async function getSatiMoreResourcesData(id) {
+  const response = await getSatiMoreResources({ id })
+
+  return getSatiResourcePayload(response).map(mapSatiResourceTrack)
+}
+
+export async function getSatiSubscribedResourcesData() {
+  const response = await getSatiSubscribedResources()
+
+  return getSatiResourcePayload(response).map(mapSatiResourceTrack)
+}
+
+export async function toggleSatiResourceSubscribeData({ id, cancel = false }) {
+  return updateSatiSubscribe({
+    id,
+    cancel: cancel || undefined,
+    timestamp: Date.now()
+  })
+}
+
+export async function getDifmChannelTracksData({ source = 0, channelId, limit = 12 } = {}) {
+  const response = await getDifmPlayingTracks({
+    source,
+    channelId,
+    limit
+  })
+
+  return getDifmTrackPayload(response).map(mapDifmTrack)
+}
+
+export async function getBroadcastChannelsData({ categoryId = 0, regionId = 0 } = {}) {
+  const response = await getBroadcastChannelList({
+    categoryId,
+    regionId
+  })
+
+  return getBroadcastChannelPayload(response).map(mapBroadcastChannel)
+}
+
+export async function getBroadcastChannelDetailData(id) {
+  const response = await getBroadcastCurrentInfo({ id })
+
+  return mapBroadcastChannel(response.data ?? response.channel ?? response)
+}
+
+export async function getBroadcastCollectedChannelsData(limit = 99999) {
+  const response = await getBroadcastCollectList({ limit })
+
+  return getBroadcastChannelPayload(response).map(mapBroadcastChannel)
+}
+
+export async function toggleBroadcastSubscribeData({ id, subscribe }) {
+  return updateBroadcastSubscribe({
+    id,
+    t: subscribe ? 1 : 0,
+    timestamp: Date.now()
+  })
+}
+
+export async function getMyCreatedVoiceListData(limit = 20) {
+  const response = await getMyCreatedVoiceList({ limit })
+
+  return getProgramPayload(response).map(mapPodcastProgramTrack)
+}
+
+export async function searchVoiceListProgramsData(params = {}) {
+  const response = await searchVoiceListPrograms(params)
+
+  return getProgramPayload(response).map(mapPodcastProgramTrack)
+}
+
+export async function getVoiceLyricData(id) {
+  const response = await getVoiceLyric({ id })
+
+  return parseLyricLines(response.data?.lyric ?? response.lrc?.lyric ?? response.lyric ?? '')
+}
+
+export async function getSportRadioData(bpm = 120) {
+  const response = await getSportRadio({ bpm })
+  const songs = response.data?.songs ?? response.songs ?? response.data ?? []
+
+  return Array.isArray(songs) ? songs.map(mapPlaylistTrack) : []
 }
 
 export async function getVideoCenterData({
@@ -824,6 +1152,473 @@ export async function getSongCommentsData({ id, limit = 20, offset = 0 }) {
   }
     }
   )
+}
+
+function getPodcastPayload(response = {}) {
+  const candidates = [
+    response.data,
+    response.result,
+    response.djRadios,
+    response.radios,
+    response.toplist,
+    response.data?.list,
+    response.data?.toplist,
+    response.data?.radios,
+    response.data?.djRadios,
+    response.data?.resources,
+    response.data?.items,
+    response.list,
+    response.resources,
+    response.items
+  ]
+  const items = candidates.find((item) => Array.isArray(item)) ?? []
+
+  return items.flatMap((item) => {
+    if (Array.isArray(item?.radios)) {
+      return item.radios
+    }
+
+    return item?.baseInfo ?? item?.radio ?? item?.djRadio ?? item?.resource ?? item
+  })
+}
+
+function getProgramPayload(response = {}) {
+  const candidates = [
+    response.programs,
+    response.toplist,
+    response.data?.programs,
+    response.data?.list,
+    response.data?.toplist,
+    response.data?.resources,
+    response.data,
+    response.list,
+    response.resources,
+    response.records,
+    response.program ? [response.program] : null
+  ]
+  const items = candidates.find((item) => Array.isArray(item)) ?? []
+
+  return items
+    .map((item) => item?.data ?? item?.resource ?? item?.program ?? item)
+    .filter(Boolean)
+}
+
+function getSatiTagPayload(response = {}) {
+  const candidates = [response.data, response.tags, response.data?.tags, response.list]
+
+  return candidates.find((item) => Array.isArray(item)) ?? []
+}
+
+function getSatiResourcePayload(response = {}) {
+  const candidates = [
+    response.data,
+    response.resources,
+    response.resourceList,
+    response.items,
+    response.result,
+    response.data?.resources,
+    response.data?.resourceList,
+    response.data?.list,
+    response.data?.items,
+    response.data?.result,
+    response.list
+  ]
+
+  return candidates.find((item) => Array.isArray(item)) ?? []
+}
+
+function getDifmTrackPayload(response = {}) {
+  const candidates = [response.data, response.tracks, response.data?.tracks, response.data?.list, response.list]
+
+  return candidates.find((item) => Array.isArray(item)) ?? []
+}
+
+function getBroadcastChannelPayload(response = {}) {
+  const candidates = [
+    response.data,
+    response.channels,
+    response.data?.channels,
+    response.data?.list,
+    response.list,
+    response.channelList
+  ]
+
+  return candidates.find((item) => Array.isArray(item)) ?? []
+}
+
+function mapPodcastBanners(response = {}) {
+  const banners = Array.isArray(response.data)
+    ? response.data
+    : Array.isArray(response.banners)
+      ? response.banners
+      : []
+
+  return banners.map((banner, index) => ({
+    id: banner.targetId || banner.url || `podcast-banner-${index}`,
+    title: banner.typeTitle || '播客精选',
+    coverUrl: resizeNeteaseImage(banner.pic ?? banner.imageUrl, 1200),
+    targetId: banner.targetId || '',
+    externalUrl: banner.url?.startsWith('http') ? banner.url : ''
+  }))
+}
+
+function mapPodcastCategories(categoryResponse = {}, hotCategoryResponse = {}) {
+  const featured = Array.isArray(categoryResponse.data)
+    ? categoryResponse.data
+    : Array.isArray(categoryResponse.categories)
+      ? categoryResponse.categories
+      : []
+  const hotCategories = Array.isArray(hotCategoryResponse.categories)
+    ? hotCategoryResponse.categories
+    : Array.isArray(hotCategoryResponse.data)
+      ? hotCategoryResponse.data
+      : []
+  const categoryMap = new Map()
+
+  featured.forEach((item) => {
+    const id = item.categoryId ?? item.id
+
+    if (!id) {
+      return
+    }
+
+    categoryMap.set(String(id), {
+      id,
+      name: item.categoryName ?? item.name,
+      radios: (item.radios ?? []).map(mapPodcastCard)
+    })
+  })
+
+  hotCategories.forEach((item) => {
+    const id = item.id ?? item.categoryId
+
+    if (!id || categoryMap.has(String(id))) {
+      return
+    }
+
+    categoryMap.set(String(id), {
+      id,
+      name: item.name ?? item.categoryName,
+      radios: []
+    })
+  })
+
+  return [...categoryMap.values()].filter((item) => item.name)
+}
+
+function uniquePodcasts(items = []) {
+  const seenIds = new Set()
+
+  return items
+    .map(mapPodcastCard)
+    .filter((item) => {
+      const id = String(item?.id ?? '')
+
+      if (!id || seenIds.has(id)) {
+        return false
+      }
+
+      seenIds.add(id)
+      return true
+    })
+}
+
+function mapVoiceListSearchResult(resource, index) {
+  return mapPodcastCard(
+    {
+      ...(resource?.baseInfo ?? {}),
+      resourceId: resource?.resourceId,
+      uiElement: resource?.uiElement,
+      extInfo: resource?.extInfo
+    },
+    index
+  )
+}
+
+function mapPodcastCard(raw = {}, index = 0) {
+  const source = raw.baseInfo ?? raw.radio ?? raw.djRadio ?? raw
+  const extInfo = raw.extInfo ?? {}
+  const title = cleanPodcastTitle(
+    source.name ?? raw.uiElement?.mainTitle?.title ?? raw.name ?? raw.title ?? '未命名播客'
+  )
+  const id = source.id ?? source.radioId ?? source.rid ?? raw.resourceId ?? raw.id
+  const coverUrl =
+    source.picUrl ??
+    source.intervenePicUrl ??
+    raw.uiElement?.image?.imageUrl ??
+    raw.picUrl ??
+    raw.coverUrl
+  const playCount = source.playCount || raw.playCount || parseCountText(extInfo.playCount)
+  const subCount = source.subCount ?? raw.subCount ?? 0
+  const programCount = source.programCount ?? source.programCnt ?? raw.programCount ?? 0
+  const category = source.secondCategory || source.category || extInfo.officialTags?.[0] || raw.categoryName || ''
+
+  return {
+    id,
+    title,
+    name: title,
+    description: source.rcmdText || source.rcmdtext || source.desc || raw.desc || source.lastProgramName || '',
+    creator: source.dj?.nickname || raw.dj?.nickname || source.creatorName || raw.creatorName || '',
+    creatorAvatarUrl: source.dj?.avatarUrl || raw.dj?.avatarUrl || '',
+    category,
+    primaryCategory: source.category || raw.categoryName || '',
+    subCategory: source.secondCategory || '',
+    coverUrl: resizeNeteaseImage(coverUrl, 520),
+    programCount,
+    subCount,
+    playCount,
+    playCountLabel: extInfo.playCount || formatPlayCount(playCount),
+    subCountLabel: formatPlayCount(subCount),
+    programCountLabel: programCount ? `${programCount} 期` : '',
+    lastProgramName: source.lastProgramName || source.lastUpdateProgramName || '',
+    score: extInfo.scoreDto?.score || extInfo.rightLabelText || '',
+    tag: extInfo.labels?.[0]?.text || category,
+    subed: Boolean(source.subed),
+    type: coverType(index || Number(id) || 0),
+    to: id ? `/podcast/${id}` : ''
+  }
+}
+
+function mapPodcastDetail(raw = {}) {
+  const card = mapPodcastCard(raw, Number(raw.id) || 0)
+
+  return {
+    ...card,
+    description: raw.desc || card.description || '这个播客暂时没有简介。',
+    shareCount: toFiniteCount(raw.shareCount),
+    likedCount: toFiniteCount(raw.likedCount),
+    commentCount: toFiniteCount(raw.commentCount),
+    createdAt: formatPlainDate(raw.createTime),
+    lastUpdated: formatPlainDate(raw.lastProgramCreateTime),
+    comments: (raw.commentDatas ?? []).map((comment) => ({
+      id: comment.commentId,
+      content: comment.content,
+      programName: comment.programName,
+      user: {
+        name: comment.userProfile?.nickname || '听友',
+        avatarUrl: comment.userProfile?.avatarUrl || ''
+      }
+    }))
+  }
+}
+
+function mapPodcastProgramTrack(program = {}, index = 0) {
+  const song = program.mainSong ?? program.song ?? program.track ?? program
+  const radio = program.radio ?? program.djRadio ?? {}
+  const artists = song.artists ?? song.ar ?? []
+  const coverUrl =
+    program.coverUrl ??
+    program.blurCoverUrl ??
+    radio.picUrl ??
+    radio.intervenePicUrl ??
+    song.album?.picUrl ??
+    song.al?.picUrl
+  const id = song.id ?? program.mainTrackId ?? program.trackId ?? program.id
+  const programId = program.id ?? program.programId ?? program.djProgramId ?? ''
+  const duration = song.duration ?? song.dt ?? program.duration ?? 0
+  const artist = program.dj?.brand || program.dj?.nickname || getArtistNames(artists) || radio.name || '播客节目'
+
+  return {
+    id,
+    programId,
+    voiceId: programId,
+    name: program.name || song.name || '未命名声音',
+    artist,
+    album: radio.name || program.categoryName || program.radioName || '播客',
+    rank: String(index + 1).padStart(2, '0'),
+    type: coverType(index || Number(programId) || Number(id) || 0),
+    time: formatDuration(duration),
+    duration: formatDuration(duration),
+    coverUrl: resizeNeteaseImage(coverUrl, 360),
+    publishTime: formatPlainDate(program.scheduledPublishTime ?? program.createTime ?? song.publishTime),
+    description: program.description || program.programDesc || '',
+    source: '播客',
+    category: radio.secondCategory || radio.category || program.categoryName || '',
+    likedCount: toFiniteCount(program.likedCount),
+    likedCountLabel: formatPlayCount(program.likedCount || 0),
+    commentCount: toFiniteCount(program.commentCount),
+    commentCountLabel: formatPlayCount(program.commentCount || 0),
+    listenerCount: toFiniteCount(program.listenerCount),
+    listenerCountLabel: formatPlayCount(program.listenerCount || 0),
+    vip: Boolean(song.fee && song.fee !== 0),
+    hasVideo: Boolean(song.mv),
+    mvId: song.mv || '',
+    podcastId: radio.id || program.radioId || '',
+    podcastTitle: radio.name || ''
+  }
+}
+
+function mapSatiTag(item = {}) {
+  return {
+    id: item.tag,
+    tag: item.tag,
+    title: item.tagDesc || item.tag,
+    description: item.text || ''
+  }
+}
+
+function mapSatiResourceTrack(item = {}, index = 0) {
+  const id = item.trackId ?? item.djProgramId ?? item.id
+
+  return {
+    id,
+    programId: item.djProgramId ?? '',
+    name: item.name || '助眠声音',
+    artist: '助眠解压',
+    album: getSatiCategoryName(item.category),
+    rank: String(index + 1).padStart(2, '0'),
+    type: coverType(index || Number(id) || 0),
+    time: '--:--',
+    duration: '--:--',
+    coverUrl: resizeNeteaseImage(item.pic, 240),
+    source: '助眠解压',
+    satiId: item.id,
+    category: item.category
+  }
+}
+
+function mapDifmGroups(response = {}) {
+  const candidates = [response.data, response.channels, response.data?.channels, response.list]
+  const items = candidates.find((item) => Array.isArray(item)) ?? []
+
+  return items.flatMap((item, index) => {
+    const styles = item.styles ?? item.styleList
+
+    if (Array.isArray(styles)) {
+      return styles.map((style, styleIndex) => ({
+        id: style.id ?? style.styleId ?? `${item.source ?? index}-${styleIndex}`,
+        title: style.chineseName || style.name || style.title || 'DIFM 频道',
+        source: style.source ?? item.source ?? 0,
+        description: style.description ?? '',
+        channels: (style.channels ?? style.channelList ?? []).map((channel, channelIndex) => ({
+          id: channel.id ?? channel.channelId ?? `${styleIndex}-${channelIndex}`,
+          title: channel.chineseName || channel.name || channel.title || 'DIFM 频道',
+          description: channel.description ?? channel.desc ?? style.description ?? '',
+          source: channel.source ?? style.source ?? item.source ?? 0,
+          coverUrl: resizeNeteaseImage(
+            channel.cover ?? channel.coverUrl ?? channel.picUrl ?? channel.imgUrl,
+            360
+          )
+        }))
+      }))
+    }
+
+    return {
+      id: item.id ?? item.channelId ?? `${item.name ?? item.title}-${index}`,
+      title: item.chineseName || item.name || item.title || item.styleName || 'DIFM 频道',
+      source: item.source ?? item.sourceType ?? item.type ?? 0,
+      description: item.description ?? item.desc ?? '',
+      channels: (item.channels ?? item.channelList ?? item.list ?? []).map((channel, channelIndex) => ({
+        id: channel.id ?? channel.channelId ?? `${index}-${channelIndex}`,
+        title: channel.chineseName || channel.name || channel.title || 'DIFM 频道',
+        description: channel.desc ?? channel.description ?? '',
+        source: channel.source ?? item.source ?? 0,
+        coverUrl: resizeNeteaseImage(channel.cover ?? channel.coverUrl ?? channel.picUrl ?? channel.imgUrl, 360)
+      }))
+    }
+  })
+}
+
+function mapDifmTrack(item = {}, index = 0) {
+  const song = item.song ?? item.track ?? item
+  const id = song.id ?? item.trackId ?? item.id
+
+  return {
+    id,
+    name: song.name ?? item.name ?? 'DIFM 声音',
+    artist: getArtistNames(song.ar ?? song.artists ?? []) || song.artist || item.artistName || item.artist || 'DIFM',
+    album: item.channelName || item.styleName || 'DIFM 电台',
+    rank: String(index + 1).padStart(2, '0'),
+    type: coverType(index || Number(id) || 0),
+    time: formatDifmDuration(song.dt ?? song.duration ?? item.duration),
+    duration: formatDifmDuration(song.dt ?? song.duration ?? item.duration),
+    coverUrl: resizeNeteaseImage(song.al?.picUrl ?? song.album?.picUrl ?? item.cover ?? item.coverUrl ?? item.picUrl, 360),
+    source: 'DIFM'
+  }
+}
+
+function mapBroadcastMeta(response = {}) {
+  const data = response.data ?? response
+
+  return {
+    categories: (data.categories ?? data.categoryList ?? data.category ?? []).map((item) => ({
+      id: item.id ?? item.categoryId,
+      name: item.name ?? item.categoryName
+    })),
+    regions: (data.regions ?? data.regionList ?? data.region ?? []).map((item) => ({
+      id: item.id ?? item.regionId,
+      name: item.name ?? item.regionName
+    }))
+  }
+}
+
+function mapBroadcastChannel(item = {}, index = 0) {
+  const id = item.id ?? item.channelId ?? item.radioId
+
+  return {
+    id,
+    title: item.name ?? item.channelName ?? '广播电台',
+    name: item.name ?? item.channelName ?? '广播电台',
+    description: item.desc ?? item.description ?? item.programName ?? '',
+    coverUrl: resizeNeteaseImage(item.picUrl ?? item.coverUrl ?? item.logoUrl, 360),
+    category: item.categoryName ?? item.category ?? '',
+    region: item.regionName ?? item.region ?? '',
+    subed: Boolean(item.subed ?? item.collected),
+    type: coverType(index || Number(id) || 0)
+  }
+}
+
+function getSatiCategoryName(tag) {
+  const names = {
+    RCMD: '热门',
+    sleep: '助眠',
+    meditation: '冥想',
+    starGoodNight: '明星哄睡',
+    lightmusic: '轻音乐',
+    goodnightStory: '晚安故事',
+    dokodemo: '任意门',
+    cloudStudyRoom: '云上自习室',
+    relax: '解压',
+    naturalMusic: '空灵乐器'
+  }
+
+  return names[tag] || '声音资源'
+}
+
+function cleanPodcastTitle(value) {
+  return String(value ?? '').replace(/^播客[:：]\s*/, '').trim()
+}
+
+function parseCountText(value) {
+  if (typeof value === 'number') {
+    return value
+  }
+
+  if (typeof value !== 'string') {
+    return 0
+  }
+
+  const match = value.match(/([\d.]+)\s*(亿|万)?/)
+
+  if (!match) {
+    return 0
+  }
+
+  const number = Number(match[1])
+
+  if (!Number.isFinite(number)) {
+    return 0
+  }
+
+  if (match[2] === '亿') {
+    return Math.round(number * 100000000)
+  }
+
+  if (match[2] === '万') {
+    return Math.round(number * 10000)
+  }
+
+  return number
 }
 
 function mapBanner(banner, index) {
@@ -1784,6 +2579,16 @@ function formatDuration(duration = 0) {
   const seconds = String(totalSeconds % 60).padStart(2, '0')
 
   return `${minutes}:${seconds}`
+}
+
+function formatDifmDuration(duration = 0) {
+  const value = Number(duration)
+
+  if (!Number.isFinite(value)) {
+    return '0:00'
+  }
+
+  return formatDuration(value > 0 && value < 10000 ? value * 1000 : value)
 }
 
 function formatPlayCount(count = 0) {
