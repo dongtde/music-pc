@@ -1,8 +1,10 @@
 import { reactive } from 'vue'
 import { getSongUrl } from '../api/modules/netease'
+import { STORAGE_KEYS } from '../config/app'
 import { currentTrack as fallbackTrack, newSongs } from '../data/music'
+import { readJsonStorage, writeJsonStorage } from '../utils/storage'
+import { clampTime, formatTime, parseDuration, toFiniteNumber } from '../utils/time'
 
-const PLAYBACK_STORAGE_KEY = 'mappic:player:last-track'
 const audio = new Audio()
 const endedListeners = new Set()
 const restoredSnapshot = readPlaybackSnapshot()
@@ -236,18 +238,8 @@ function createEmptyTrack() {
 }
 
 function readPlaybackSnapshot() {
-  if (!canUseStorage()) {
-    return null
-  }
-
   try {
-    const rawSnapshot = window.localStorage.getItem(PLAYBACK_STORAGE_KEY)
-
-    if (!rawSnapshot) {
-      return null
-    }
-
-    const snapshot = JSON.parse(rawSnapshot)
+    const snapshot = readJsonStorage(STORAGE_KEYS.playerSnapshot, null)
     const track = snapshot?.track
 
     if (!isRestorableTrack(track)) {
@@ -282,25 +274,18 @@ function persistPlaybackSnapshotThrottled() {
 }
 
 function persistPlaybackSnapshot() {
-  if (!canUseStorage()) {
-    return
-  }
-
   try {
     if (!isRestorableTrack(state.currentTrack)) {
-      window.localStorage.removeItem(PLAYBACK_STORAGE_KEY)
+      writeJsonStorage(STORAGE_KEYS.playerSnapshot, null)
       return
     }
 
-    window.localStorage.setItem(
-      PLAYBACK_STORAGE_KEY,
-      JSON.stringify({
-        track: serializeTrack(state.currentTrack),
-        currentTime: state.currentTime,
-        duration: state.duration,
-        updatedAt: Date.now()
-      })
-    )
+    writeJsonStorage(STORAGE_KEYS.playerSnapshot, {
+      track: serializeTrack(state.currentTrack),
+      currentTime: state.currentTime,
+      duration: state.duration,
+      updatedAt: Date.now()
+    })
   } catch (error) {
     console.warn('Failed to persist playback snapshot:', error)
   }
@@ -330,50 +315,4 @@ function serializeTrack(track) {
 
 function isRestorableTrack(track) {
   return Boolean(track?.id && track?.name)
-}
-
-function canUseStorage() {
-  if (typeof window === 'undefined') {
-    return false
-  }
-
-  try {
-    return Boolean(window.localStorage)
-  } catch {
-    return false
-  }
-}
-
-function toFiniteNumber(value, fallback = 0) {
-  const number = Number(value)
-
-  return Number.isFinite(number) ? number : fallback
-}
-
-function clampTime(value, duration = 0) {
-  const currentTime = Math.max(0, toFiniteNumber(value, 0))
-
-  return duration > 0 ? Math.min(currentTime, duration) : currentTime
-}
-
-function parseDuration(duration) {
-  if (typeof duration !== 'string') {
-    return 0
-  }
-
-  const parts = duration.split(':').map(Number)
-
-  if (parts.some(Number.isNaN)) {
-    return 0
-  }
-
-  return parts.reduce((total, part) => total * 60 + part, 0)
-}
-
-function formatTime(value = 0) {
-  const totalSeconds = Math.max(0, Math.floor(value))
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = String(totalSeconds % 60).padStart(2, '0')
-
-  return `${minutes}:${seconds}`
 }

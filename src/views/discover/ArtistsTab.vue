@@ -171,13 +171,14 @@
 import {
   computed,
   nextTick,
-  onBeforeUnmount,
   onMounted,
   reactive,
   ref,
 } from 'vue';
 import { Mic2 } from 'lucide-vue-next';
+import { useLoadMoreTrigger } from '../../composables/useLoadMoreTrigger';
 import { getArtistsDiscoveryData } from '../../services/netease';
+import { waitForMinimumDelay } from '../../utils/time';
 
 const ARTIST_LIMIT = 32;
 const ARTIST_SKELETON_COUNT = 20;
@@ -225,14 +226,16 @@ const hasArtistContent = computed(() =>
   Boolean(artists.value.length || topArtists.value.length),
 );
 let artistRequestId = 0;
-let loadMoreObserver = null;
+const loadMoreController = useLoadMoreTrigger({
+  trigger: loadMoreTrigger,
+  canLoad: () => !loading.value && !loadingMore.value && hasMore.value && !error.value,
+  loadMore,
+  rootMargin: '360px 0px 360px',
+  threshold: 0,
+});
 
 onMounted(() => {
   loadData({ reset: true });
-});
-
-onBeforeUnmount(() => {
-  disconnectLoadMoreObserver();
 });
 
 function setFilter(key, value) {
@@ -280,7 +283,7 @@ async function loadData({ reset = false } = {}) {
   const requestId = ++artistRequestId;
 
   if (reset) {
-    disconnectLoadMoreObserver();
+    loadMoreController.cleanup();
     loading.value = true;
     loadingMore.value = false;
     skeletonVisible.value = true;
@@ -323,7 +326,7 @@ async function loadData({ reset = false } = {}) {
   } finally {
     if (requestId === artistRequestId) {
       if (reset) {
-        await waitForSkeleton(startedAt);
+        await waitForMinimumDelay(startedAt, ARTIST_SKELETON_MIN_MS);
 
         if (requestId !== artistRequestId) {
           return;
@@ -334,21 +337,9 @@ async function loadData({ reset = false } = {}) {
 
       loading.value = false;
       loadingMore.value = false;
-      nextTick(setupLoadMoreObserver);
+      nextTick(loadMoreController.setup);
     }
   }
-}
-
-function waitForSkeleton(startedAt) {
-  const remaining = ARTIST_SKELETON_MIN_MS - (Date.now() - startedAt);
-
-  if (remaining <= 0) {
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, remaining);
-  });
 }
 
 function mergeArtists(currentArtists, nextArtists) {
@@ -367,34 +358,4 @@ function mergeArtists(currentArtists, nextArtists) {
   ];
 }
 
-function setupLoadMoreObserver() {
-  disconnectLoadMoreObserver();
-
-  if (!loadMoreTrigger.value || typeof IntersectionObserver === 'undefined') {
-    return;
-  }
-
-  const scrollRoot = loadMoreTrigger.value.closest('.view');
-  loadMoreObserver = new IntersectionObserver(handleLoadMoreIntersect, {
-    root: scrollRoot,
-    rootMargin: '360px 0px 360px',
-    threshold: 0,
-  });
-  loadMoreObserver.observe(loadMoreTrigger.value);
-}
-
-function handleLoadMoreIntersect(entries) {
-  if (entries.some((entry) => entry.isIntersecting)) {
-    loadMore();
-  }
-}
-
-function disconnectLoadMoreObserver() {
-  if (!loadMoreObserver) {
-    return;
-  }
-
-  loadMoreObserver.disconnect();
-  loadMoreObserver = null;
-}
 </script>

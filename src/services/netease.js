@@ -99,80 +99,14 @@ import {
   updateSatiSubscribe,
   updateSongLike
 } from '../api/modules/netease'
+import { CACHE_TTL, COVER_TYPES } from '../config/app'
+import { cacheKey, getCachedData } from './cache'
 
-const COVER_TYPES = ['sunset', 'neon', 'lofi', 'stage', 'piano']
-const DATA_CACHE_TTL = {
-  comments: 60 * 1000,
-  discovery: 2 * 60 * 1000,
-  lyrics: 10 * 60 * 1000,
-  podcast: 2 * 60 * 1000,
-  playlistDetail: 3 * 60 * 1000,
-  searchBoot: 10 * 60 * 1000
-}
-const dataCache = new Map()
 let playlistCategoryMetaPromise = null
 let artistToplistPromise = null
 
-function getCachedData(key, ttlMs, loader) {
-  const now = Date.now()
-  const cached = dataCache.get(key)
-
-  if (cached && cached.expiresAt > now) {
-    return cached.promise.then(cloneCachedData)
-  }
-
-  const promise = Promise.resolve()
-    .then(loader)
-    .catch((error) => {
-      dataCache.delete(key)
-      throw error
-    })
-
-  dataCache.set(key, {
-    expiresAt: now + ttlMs,
-    promise
-  })
-
-  return promise.then(cloneCachedData)
-}
-
-function cacheKey(scope, payload = '') {
-  return `${scope}:${stableStringify(payload)}`
-}
-
-function stableStringify(value) {
-  if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(',')}]`
-  }
-
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
-      .join(',')}}`
-  }
-
-  return JSON.stringify(value)
-}
-
-function cloneCachedData(value) {
-  if (!value || typeof value !== 'object') {
-    return value
-  }
-
-  if (typeof structuredClone === 'function') {
-    try {
-      return structuredClone(value)
-    } catch {
-      // Fall back to JSON cloning for plain API payloads.
-    }
-  }
-
-  return JSON.parse(JSON.stringify(value))
-}
-
 export async function getHomeDiscoverData() {
-  return getCachedData('home-discover', DATA_CACHE_TTL.discovery, async () => {
+  return getCachedData('home-discover', CACHE_TTL.discovery, async () => {
   const [bannerResponse, playlistResponse, newsongResponse, mvResponse] = await Promise.all([
     getBanners({ type: 0 }),
     getPersonalizedPlaylists({ limit: 18 }),
@@ -196,7 +130,7 @@ export async function getHomeDiscoverData() {
 }
 
 export async function getMusicFeedData({ limit = 80 } = {}) {
-  return getCachedData(cacheKey('music-feed', { limit }), DATA_CACHE_TTL.discovery, async () => {
+  return getCachedData(cacheKey('music-feed', { limit }), CACHE_TTL.discovery, async () => {
   const [newsongResponse, toplistResponse] = await Promise.all([
     getPersonalizedNewSongs({ limit }).catch(() => ({})),
     getToplist().catch(() => ({}))
@@ -295,7 +229,7 @@ export async function movePersonalFmSongToTrash(id) {
 }
 
 export async function getPodcastHomeData() {
-  return getCachedData('podcast-home', DATA_CACHE_TTL.podcast, async () => {
+  return getCachedData('podcast-home', CACHE_TTL.podcast, async () => {
     const [
       bannerResponse,
       personalizeResponse,
@@ -706,7 +640,7 @@ export async function toggleMvLikeData({ id, like }) {
 }
 
 export async function getPlaylistDetailData(id) {
-  return getCachedData(cacheKey('playlist-detail', { id }), DATA_CACHE_TTL.playlistDetail, async () => {
+  return getCachedData(cacheKey('playlist-detail', { id }), CACHE_TTL.playlistDetail, async () => {
   const detailResponse = await getPlaylistDetail({ id })
   const rawPlaylist = detailResponse.playlist
 
@@ -738,7 +672,7 @@ export async function getPlaylistDetailData(id) {
 }
 
 export async function getTrackLyricData(id) {
-  return getCachedData(cacheKey('track-lyric', { id }), DATA_CACHE_TTL.lyrics, async () => {
+  return getCachedData(cacheKey('track-lyric', { id }), CACHE_TTL.lyrics, async () => {
   const response = await getLyric({ id })
   const lines = parseLyricLines(response.lrc?.lyric, response.tlyric?.lyric)
 
@@ -778,7 +712,7 @@ export async function getSongInteractionStatsData(id) {
 }
 
 export async function getSearchBootData() {
-  return getCachedData('search-boot', DATA_CACHE_TTL.searchBoot, async () => {
+  return getCachedData('search-boot', CACHE_TTL.searchBoot, async () => {
   const [defaultResponse, hotResponse] = await Promise.all([
     getSearchDefault().catch(() => ({})),
     getSearchHotDetail().catch(() => ({}))
@@ -852,7 +786,7 @@ export async function getPlaylistDiscoveryData(category = '全部', { limit = 50
   const cat = category || '全部'
   return getCachedData(
     cacheKey('playlist-discovery', { cat, limit, offset }),
-    DATA_CACHE_TTL.discovery,
+    CACHE_TTL.discovery,
     async () => {
   const [categoryMeta, playlistResponse] = await Promise.all([
     getPlaylistCategoryMeta(),
@@ -1138,7 +1072,7 @@ export async function getPlaylistCommentsData({ id, limit = 20, offset = 0 }) {
 export async function getSongCommentsData({ id, limit = 20, offset = 0 }) {
   return getCachedData(
     cacheKey('song-comments', { id, limit, offset }),
-    DATA_CACHE_TTL.comments,
+    CACHE_TTL.comments,
     async () => {
   const response = await getSongComments({ id, limit, offset })
   const result = response ?? {}

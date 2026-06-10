@@ -115,27 +115,18 @@ import {
   getAlbumCommentsData,
   getAlbumDetailData
 } from '../services/netease'
-import { usePlayerStore } from '../stores/player'
+import { usePaginatedComments } from '../composables/usePaginatedComments'
+import { useQueuePlayback } from '../composables/useQueuePlayback'
+import { formatCompactCount } from '../utils/number'
 import '../styles/album.css'
 
-const COMMENT_LIMIT = 30
-
 const route = useRoute()
-const player = usePlayerStore()
 const message = useMessage()
 
 const remoteAlbum = ref(null)
 const remoteTracks = ref([])
 const isLoading = ref(false)
 const errorMessage = ref('')
-const commentsModalVisible = ref(false)
-const hotComments = ref([])
-const comments = ref([])
-const commentTotal = ref(0)
-const commentsOffset = ref(0)
-const commentsHasMore = ref(false)
-const commentsLoading = ref(false)
-const commentsError = ref('')
 
 const album = computed(() =>
   remoteAlbum.value || {
@@ -161,9 +152,20 @@ const albumTracks = computed(() =>
   }))
 )
 
-const displayCommentTotal = computed(
-  () => commentTotal.value || album.value.commentCount || 0
-)
+const commentState = usePaginatedComments({
+  resourceId: computed(() => route.params.id),
+  loader: getAlbumCommentsData,
+  getFallbackTotal: () => album.value.commentCount,
+  errorMessage: '评论加载失败',
+  warnPrefix: 'Failed to load album comments:'
+})
+const commentsModalVisible = commentState.visible
+const hotComments = commentState.hotComments
+const comments = commentState.comments
+const displayCommentTotal = commentState.displayTotal
+const commentsHasMore = commentState.hasMore
+const commentsLoading = commentState.loading
+const commentsError = commentState.error
 
 const hasAlbumStats = computed(() =>
   [album.value.subCount, displayCommentTotal.value, album.value.shareCount].some(
@@ -171,15 +173,22 @@ const hasAlbumStats = computed(() =>
   )
 )
 
-const isPlaying = computed(() =>
-  albumTracks.value.some((track) => String(track.id) === String(player.state.currentTrack.id)) && player.state.isPlaying
-)
+const {
+  isPlaying,
+  playAll: playAllTracks,
+  playTrack: playAlbumTrack
+} = useQueuePlayback({
+  queue: albumTracks,
+  message,
+  emptyMessage: '当前专辑暂无可播放歌曲',
+  errorMessage: '当前歌曲暂无可播放链接'
+})
 
 watch(
   () => route.params.id,
   (id) => {
     loadAlbumDetail(id)
-    loadComments(id, true)
+    commentState.load(id, { reset: true })
   },
   { immediate: true }
 )
@@ -208,95 +217,15 @@ async function loadAlbumDetail(id) {
   }
 }
 
-async function loadComments(id, reset = false) {
-  if (!/^\d+$/.test(String(id ?? ''))) {
-    return
-  }
-
-  commentsLoading.value = true
-  commentsError.value = ''
-
-  const offset = reset ? 0 : commentsOffset.value
-
-  try {
-    const data = await getAlbumCommentsData({
-      id,
-      limit: COMMENT_LIMIT,
-      offset
-    })
-
-    if (reset) {
-      hotComments.value = data.hotComments
-      comments.value = data.comments
-    } else {
-      comments.value = [...comments.value, ...data.comments]
-    }
-
-    commentTotal.value = data.total
-    commentsHasMore.value = data.more || comments.value.length < data.total
-    commentsOffset.value = comments.value.length
-  } catch (error) {
-    console.warn('Failed to load album comments:', error)
-    commentsError.value = '评论加载失败'
-  } finally {
-    commentsLoading.value = false
-  }
-}
-
 function loadMoreComments() {
-  loadComments(route.params.id)
+  commentState.loadMore(route.params.id)
 }
 
-async function openCommentsModal() {
-  commentsModalVisible.value = true
-
-  if (!comments.value.length && !commentsLoading.value) {
-    await loadComments(route.params.id, true)
-  }
-}
-
-async function playAllTracks() {
-  if (!albumTracks.value.length) {
-    message.warning('当前专辑暂无可播放歌曲')
-    return
-  }
-
-  player.setQueue(albumTracks.value)
-  const played = await player.playTrack(albumTracks.value[0])
-  if (!played) {
-    message.error(player.state.error?.message || '当前歌曲暂无可播放链接')
-  }
-}
-
-async function playAlbumTrack(track) {
-  player.setQueue(albumTracks.value)
-
-  if (String(player.state.currentTrack.id) === String(track.id)) {
-    await player.togglePlay()
-    return
-  }
-
-  const played = await player.playTrack(track)
-  if (!played) {
-    message.error(player.state.error?.message || '当前歌曲暂无可播放链接')
-  }
+function openCommentsModal() {
+  return commentState.open(route.params.id)
 }
 
 function formatStat(value = 0) {
-  const count = Number(value) || 0
-
-  if (count >= 100000000) {
-    return `${trimNumber(count / 100000000)}亿`
-  }
-
-  if (count >= 10000) {
-    return `${trimNumber(count / 10000)}万`
-  }
-
-  return String(count)
-}
-
-function trimNumber(number) {
-  return Number(number.toFixed(1)).toString()
+  return formatCompactCount(value)
 }
 </script>

@@ -1,8 +1,10 @@
 import axios from 'axios';
+import { API_CONFIG, STORAGE_KEYS } from '../config/app';
+import { readStorage } from '../utils/storage';
 
 const http = axios.create({
-  baseURL: '/api',
-  timeout: 12000,
+  baseURL: API_CONFIG.baseURL,
+  timeout: API_CONFIG.timeout,
   withCredentials: true,
 });
 
@@ -38,11 +40,7 @@ http.interceptors.response.use(
 );
 
 function getStoredCookie() {
-  try {
-    return window.localStorage.getItem('mappic:netease-cookie') || '';
-  } catch {
-    return '';
-  }
+  return readStorage(STORAGE_KEYS.neteaseCookie, '');
 }
 
 export default http;

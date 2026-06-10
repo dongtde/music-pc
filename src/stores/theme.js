@@ -1,4 +1,6 @@
 import { nextTick, reactive } from 'vue'
+import { STORAGE_KEYS } from '../config/app'
+import { readJsonStorage, writeJsonStorage } from '../utils/storage'
 
 export const defaultThemeColor = '#ff3f73'
 
@@ -62,18 +64,8 @@ export const queueTransitionEffects = [
   }
 ]
 
-const storageKey = 'mappic-theme-preferences'
-
 function readPreferences() {
-  if (typeof window === 'undefined') {
-    return {}
-  }
-
-  try {
-    return JSON.parse(window.localStorage.getItem(storageKey) || '{}')
-  } catch {
-    return {}
-  }
+  return readJsonStorage(STORAGE_KEYS.themePreferences, {})
 }
 
 function normalizeHex(color) {
@@ -120,19 +112,12 @@ const state = reactive({
 let timer = null
 
 function persistPreferences() {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  window.localStorage.setItem(
-    storageKey,
-    JSON.stringify({
-      mode: state.mode,
-      transition: state.transition,
-      queueTransition: state.queueTransition,
-      primaryColor: state.primaryColor
-    })
-  )
+  writeJsonStorage(STORAGE_KEYS.themePreferences, {
+    mode: state.mode,
+    transition: state.transition,
+    queueTransition: state.queueTransition,
+    primaryColor: state.primaryColor
+  })
 }
 
 function applyTheme(mode) {

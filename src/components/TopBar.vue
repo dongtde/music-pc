@@ -231,9 +231,11 @@ import {
 } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import SongListRow from './SongListRow.vue'
+import { STORAGE_KEYS } from '../config/app'
 import { getSearchBootData, getSearchResultData, getSearchSuggestData } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
 import { useThemeStore } from '../stores/theme'
+import { readJsonStorage, writeJsonStorage } from '../utils/storage'
 
 const SearchGroup = defineComponent({
   name: 'SearchGroup',
@@ -265,7 +267,6 @@ const SearchGroup = defineComponent({
 
 const SEARCH_INPUT_TRANSITION_MS = 320
 const SEARCH_PANEL_LEAVE_MS = 220
-const SEARCH_HISTORY_KEY = 'mappic.searchHistory'
 const SEARCH_HISTORY_LIMIT = 8
 
 const searchTabs = [
@@ -369,36 +370,21 @@ async function loadSearchBoot() {
 }
 
 function loadSearchHistory() {
-  try {
-    const raw = window.localStorage.getItem(SEARCH_HISTORY_KEY)
+  const parsed = readJsonStorage(STORAGE_KEYS.searchHistory, [])
 
-    if (!raw) {
-      searchHistory.value = []
-      return
-    }
-
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) {
-      searchHistory.value = []
-      return
-    }
-
-    searchHistory.value = parsed
+  searchHistory.value = Array.isArray(parsed)
+    ? parsed
       .map((item) => String(item ?? '').trim())
       .filter(Boolean)
       .slice(0, SEARCH_HISTORY_LIMIT)
-  } catch (error) {
-    searchHistory.value = []
-  }
+    : []
 }
 
 function persistSearchHistory(items) {
   searchHistory.value = items
 
-  try {
-    window.localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(items))
-  } catch (error) {
-    console.warn('Failed to persist search history:', error)
+  if (!writeJsonStorage(STORAGE_KEYS.searchHistory, items)) {
+    console.warn('Failed to persist search history')
   }
 }
 
@@ -415,12 +401,6 @@ function rememberSearchHistory(keyword) {
 
 function clearSearchHistory() {
   persistSearchHistory([])
-
-  try {
-    window.localStorage.removeItem(SEARCH_HISTORY_KEY)
-  } catch (error) {
-    console.warn('Failed to clear search history:', error)
-  }
 }
 
 async function loadSuggestions(keyword) {

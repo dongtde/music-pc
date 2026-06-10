@@ -13,9 +13,8 @@ import {
   verifyCaptcha,
   logout as requestLogout
 } from '../api/modules/netease'
-
-const COOKIE_STORAGE_KEY = 'mappic:netease-cookie'
-const DEFAULT_COUNTRY_CODE = '86'
+import { DEFAULT_COUNTRY_CODE, STORAGE_KEYS } from '../config/app'
+import { readStorage, writeStorage } from '../utils/storage'
 
 const state = reactive({
   initialized: false,
@@ -470,16 +469,7 @@ function resetQr() {
 
 function saveCookie(cookie) {
   state.cookie = cookie || ''
-
-  try {
-    if (state.cookie) {
-      window.localStorage.setItem(COOKIE_STORAGE_KEY, state.cookie)
-    } else {
-      window.localStorage.removeItem(COOKIE_STORAGE_KEY)
-    }
-  } catch {
-    // localStorage may be unavailable in privacy modes.
-  }
+  writeStorage(STORAGE_KEYS.neteaseCookie, state.cookie)
 }
 
 async function completeLogin(response, loginType) {
@@ -507,11 +497,7 @@ function normalizeCountryCode(value) {
 }
 
 function readStoredCookie() {
-  try {
-    return window.localStorage.getItem(COOKIE_STORAGE_KEY) || ''
-  } catch {
-    return ''
-  }
+  return readStorage(STORAGE_KEYS.neteaseCookie, '')
 }
 
 function getQrStatusText(code) {

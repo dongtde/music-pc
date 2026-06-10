@@ -165,28 +165,19 @@ import {
   getPlaylistCommentsData,
   getPlaylistDetailData,
 } from '../services/netease';
-import { usePlayerStore } from '../stores/player';
+import { SKELETON_MIN_MS } from '../config/app';
+import { usePaginatedComments } from '../composables/usePaginatedComments';
+import { useQueuePlayback } from '../composables/useQueuePlayback';
+import { waitForMinimumDelay } from '../utils/time';
 import '../styles/playlist.css';
 
-const COMMENT_LIMIT = 30;
-const DETAIL_SKELETON_MIN_MS = 360;
-
 const route = useRoute();
-const player = usePlayerStore();
 const message = useMessage();
 
 const remotePlaylist = ref(null);
 const remoteTracks = ref([]);
 const isLoading = ref(false);
 const errorMessage = ref('');
-const commentsModalVisible = ref(false);
-const hotComments = ref([]);
-const comments = ref([]);
-const commentTotal = ref(0);
-const commentsOffset = ref(0);
-const commentsHasMore = ref(false);
-const commentsLoading = ref(false);
-const commentsError = ref('');
 
 const playlist = computed(
   () =>
@@ -215,18 +206,36 @@ const playlistTracks = computed(() =>
 const creatorInitial = computed(
   () => playlist.value.creator?.slice(0, 1) || '云',
 );
-const isPlaying = computed(
-  () =>
-    playlistTracks.value.some(
-      (track) => String(track.id) === String(player.state.currentTrack.id),
-    ) && player.state.isPlaying,
-);
+const commentState = usePaginatedComments({
+  resourceId: computed(() => route.params.id),
+  loader: getPlaylistCommentsData,
+  getFallbackTotal: () => playlist.value.commentCount,
+  errorMessage: '评论加载失败',
+  warnPrefix: 'Failed to load playlist comments:',
+});
+const commentsModalVisible = commentState.visible;
+const hotComments = commentState.hotComments;
+const comments = commentState.comments;
+const commentTotal = commentState.displayTotal;
+const commentsHasMore = commentState.hasMore;
+const commentsLoading = commentState.loading;
+const commentsError = commentState.error;
 
+const {
+  isPlaying,
+  playAll: playAllTracks,
+  playTrack: playPlaylistTrack,
+} = useQueuePlayback({
+  queue: playlistTracks,
+  message,
+  emptyMessage: '当前歌单暂无可播放歌曲',
+  errorMessage: '当前歌曲暂无可播放链接',
+});
 watch(
   () => route.params.id,
   (id) => {
     loadPlaylistDetail(id);
-    loadComments(id, true);
+    commentState.load(id, { reset: true });
   },
   { immediate: true },
 );
@@ -253,94 +262,18 @@ async function loadPlaylistDetail(id) {
     console.warn('Failed to load playlist detail:', error);
     errorMessage.value = '歌单详情加载失败';
   } finally {
-    await waitForSkeleton(startedAt);
+    await waitForMinimumDelay(startedAt, SKELETON_MIN_MS);
     isLoading.value = false;
   }
 }
 
-function waitForSkeleton(startedAt) {
-  const remaining = DETAIL_SKELETON_MIN_MS - (Date.now() - startedAt);
-
-  if (remaining <= 0) {
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, remaining);
-  });
-}
-
-async function loadComments(id, reset = false) {
-  if (!/^\d+$/.test(String(id ?? ''))) {
-    return;
-  }
-
-  commentsLoading.value = true;
-  commentsError.value = '';
-
-  const offset = reset ? 0 : commentsOffset.value;
-
-  try {
-    const data = await getPlaylistCommentsData({
-      id,
-      limit: COMMENT_LIMIT,
-      offset,
-    });
-
-    if (reset) {
-      hotComments.value = data.hotComments;
-      comments.value = data.comments;
-    } else {
-      comments.value = [...comments.value, ...data.comments];
-    }
-
-    commentTotal.value = data.total;
-    commentsHasMore.value = data.more || comments.value.length < data.total;
-    commentsOffset.value = comments.value.length;
-  } catch (error) {
-    console.warn('Failed to load playlist comments:', error);
-    commentsError.value = '评论加载失败';
-  } finally {
-    commentsLoading.value = false;
-  }
-}
 
 function loadMoreComments() {
-  loadComments(route.params.id);
+  commentState.loadMore(route.params.id);
 }
 
-async function openCommentsModal() {
-  commentsModalVisible.value = true;
-
-  if (!comments.length && !commentsLoading.value) {
-    await loadComments(route.params.id, true);
-  }
+function openCommentsModal() {
+  return commentState.open(route.params.id);
 }
 
-async function playAllTracks() {
-  if (!playlistTracks.value.length) {
-    message.warning('当前歌单暂无可播放歌曲');
-    return;
-  }
-
-  player.setQueue(playlistTracks.value);
-  const played = await player.playTrack(playlistTracks.value[0]);
-  if (!played) {
-    message.error(player.state.error?.message || '当前歌曲暂无可播放链接');
-  }
-}
-
-async function playPlaylistTrack(track) {
-  player.setQueue(playlistTracks.value);
-
-  if (String(player.state.currentTrack.id) === String(track.id)) {
-    await player.togglePlay();
-    return;
-  }
-
-  const played = await player.playTrack(track);
-  if (!played) {
-    message.error(player.state.error?.message || '当前歌曲暂无可播放链接');
-  }
-}
 </script>

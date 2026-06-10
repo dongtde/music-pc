@@ -1,722 +1,490 @@
 import http from '../http'
 
-export function getPersonalizedPlaylists(params = {}) {
-  return http.get('/personalized', {
+function getNetease(path, params = {}, config = {}) {
+  return http.get(path, {
+    ...config,
     params
   })
+}
+
+export function getPersonalizedPlaylists(params = {}) {
+  return getNetease('/personalized', params)
 }
 
 export function getBanners(params = {}) {
-  return http.get('/banner', {
-    params
-  })
+  return getNetease('/banner', params)
 }
 
 export function getPersonalizedMvs(params = {}) {
-  return http.get('/personalized/mv', {
-    params
-  })
+  return getNetease('/personalized/mv', params)
 }
 
 export function subscribeMv(params = {}) {
-  return http.get('/mv/sub', {
-    params
-  })
+  return getNetease('/mv/sub', params)
 }
 
 export function getSubscribedMvs(params = {}) {
-  return http.get('/mv/sublist', {
-    params
-  })
+  return getNetease('/mv/sublist', params)
 }
 
 export function getMvComments(params = {}) {
-  return http.get('/comment/mv', {
-    params
-  })
+  return getNetease('/comment/mv', params)
 }
 
 export function likeResource(params = {}) {
-  return http.get('/resource/like', {
-    params
-  })
+  return getNetease('/resource/like', params)
 }
 
 export function getSimilarMvs(params = {}) {
-  return http.get('/simi/mv', {
-    params
-  })
+  return getNetease('/simi/mv', params)
 }
 
 export function getAllMvs(params = {}) {
-  return http.get('/mv/all', {
-    params
-  })
+  return getNetease('/mv/all', params)
 }
 
 export function getFirstMvs(params = {}) {
-  return http.get('/mv/first', {
-    params
-  })
+  return getNetease('/mv/first', params)
 }
 
 export function getExclusiveMvs(params = {}) {
-  return http.get('/mv/exclusive/rcmd', {
-    params
-  })
+  return getNetease('/mv/exclusive/rcmd', params)
 }
 
 export function getTopMvs(params = {}) {
-  return http.get('/top/mv', {
-    params
-  })
+  return getNetease('/top/mv', params)
 }
 
 export function getMvDetail(params = {}) {
-  return http.get('/mv/detail', {
-    params
-  })
+  return getNetease('/mv/detail', params)
 }
 
 export function getMvDetailInfo(params = {}) {
-  return http.get('/mv/detail/info', {
-    params
-  })
+  return getNetease('/mv/detail/info', params)
 }
 
 export function getMvUrl(params = {}) {
-  return http.get('/mv/url', {
-    params
-  })
+  return getNetease('/mv/url', params)
 }
 
 export function getFollowArtistNewMvs(params = {}) {
-  return http.get('/artist/new/mv', {
-    params
-  })
+  return getNetease('/artist/new/mv', params)
 }
 
 export function getUgcMv(params = {}) {
-  return http.get('/ugc/mv/get', {
-    params
-  })
+  return getNetease('/ugc/mv/get', params)
 }
 
 export function getPersonalizedNewSongs(params = {}) {
-  return http.get('/personalized/newsong', {
-    params
-  })
+  return getNetease('/personalized/newsong', params)
 }
 
 export function getPersonalFm(params = {}) {
-  return http.get('/personal_fm', {
-    params
-  })
+  return getNetease('/personal_fm', params)
 }
 
 export function getPersonalFmByMode(params = {}) {
-  return http.get('/personal/fm/mode', {
-    params
-  })
+  return getNetease('/personal/fm/mode', params)
 }
 
 export function sendFmTrash(params = {}) {
-  return http.get('/fm_trash', {
-    params
-  })
+  return getNetease('/fm_trash', params)
 }
 
 export function getPersonalizedDjPrograms(params = {}) {
-  return http.get('/personalized/djprogram', {
-    params
-  })
+  return getNetease('/personalized/djprogram', params)
 }
 
 export function getDjBanner(params = {}) {
-  return http.get('/dj/banner', {
-    params
-  })
+  return getNetease('/dj/banner', params)
 }
 
 export function getDjPersonalizeRecommend(params = {}) {
-  return http.get('/dj/personalize/recommend', {
-    params
-  })
+  return getNetease('/dj/personalize/recommend', params)
 }
 
 export function getDjHot(params = {}) {
-  return http.get('/dj/hot', {
-    params
-  })
+  return getNetease('/dj/hot', params)
 }
 
 export function getDjProgramToplist(params = {}) {
-  return http.get('/dj/program/toplist', {
-    params
-  })
+  return getNetease('/dj/program/toplist', params)
 }
 
 export function getDjProgramHoursToplist(params = {}) {
-  return http.get('/dj/program/toplist/hours', {
-    params
-  })
+  return getNetease('/dj/program/toplist/hours', params)
 }
 
 export function getDjToplist(params = {}) {
-  return http.get('/dj/toplist', {
-    params
-  })
+  return getNetease('/dj/toplist', params)
 }
 
 export function getDjToplistPay(params = {}) {
-  return http.get('/dj/toplist/pay', {
-    params
-  })
+  return getNetease('/dj/toplist/pay', params)
 }
 
 export function getDjToplistHours(params = {}) {
-  return http.get('/dj/toplist/hours', {
-    params
-  })
+  return getNetease('/dj/toplist/hours', params)
 }
 
 export function getDjToplistNewcomer(params = {}) {
-  return http.get('/dj/toplist/newcomer', {
-    params
-  })
+  return getNetease('/dj/toplist/newcomer', params)
 }
 
 export function getDjToplistPopular(params = {}) {
-  return http.get('/dj/toplist/popular', {
-    params
-  })
+  return getNetease('/dj/toplist/popular', params)
 }
 
 export function getDjRadioHot(params = {}) {
-  return http.get('/dj/radio/hot', {
-    params
-  })
+  return getNetease('/dj/radio/hot', params)
 }
 
 export function getDjRecommend(params = {}) {
-  return http.get('/dj/recommend', {
-    params
-  })
+  return getNetease('/dj/recommend', params)
 }
 
 export function getDjCatelist(params = {}) {
-  return http.get('/dj/catelist', {
-    params
-  })
+  return getNetease('/dj/catelist', params)
 }
 
 export function getDjRecommendType(params = {}) {
-  return http.get('/dj/recommend/type', {
-    params
-  })
+  return getNetease('/dj/recommend/type', params)
 }
 
 export function updateDjSubscribe(params = {}) {
-  return http.get('/dj/sub', {
-    params
-  })
+  return getNetease('/dj/sub', params)
 }
 
 export function getDjSublist(params = {}) {
-  return http.get('/dj/sublist', {
-    params
-  })
+  return getNetease('/dj/sublist', params)
 }
 
 export function getDjPaygift(params = {}) {
-  return http.get('/dj/paygift', {
-    params
-  })
+  return getNetease('/dj/paygift', params)
 }
 
 export function getDjCategoryExcludehot(params = {}) {
-  return http.get('/dj/category/excludehot', {
-    params
-  })
+  return getNetease('/dj/category/excludehot', params)
 }
 
 export function getDjCategoryRecommend(params = {}) {
-  return http.get('/dj/category/recommend', {
-    params
-  })
+  return getNetease('/dj/category/recommend', params)
 }
 
 export function getDjTodayPreferred(params = {}) {
-  return http.get('/dj/today/perfered', {
-    params
-  })
+  return getNetease('/dj/today/perfered', params)
 }
 
 export function getDjDetail(params = {}) {
-  return http.get('/dj/detail', {
-    params
-  })
+  return getNetease('/dj/detail', params)
 }
 
 export function getDjPrograms(params = {}) {
-  return http.get('/dj/program', {
-    params
-  })
+  return getNetease('/dj/program', params)
 }
 
 export function getDjProgramDetail(params = {}) {
-  return http.get('/dj/program/detail', {
-    params
-  })
+  return getNetease('/dj/program/detail', params)
 }
 
 export function getDjComments(params = {}) {
-  return http.get('/comment/dj', {
-    params
-  })
+  return getNetease('/comment/dj', params)
 }
 
 export function getRecentDj(params = {}) {
-  return http.get('/record/recent/dj', {
-    params
-  })
+  return getNetease('/record/recent/dj', params)
 }
 
 export function searchVoiceLists(params = {}) {
-  return http.get('/voicelist/search', {
-    params
-  })
+  return getNetease('/voicelist/search', params)
 }
 
 export function searchVoiceListPrograms(params = {}) {
-  return http.get('/voicelist/list/search', {
-    params
-  })
+  return getNetease('/voicelist/list/search', params)
 }
 
 export function getVoiceListDetail(params = {}) {
-  return http.get('/voicelist/detail', {
-    params
-  })
+  return getNetease('/voicelist/detail', params)
 }
 
 export function getVoiceListPrograms(params = {}) {
-  return http.get('/voicelist/list', {
-    params
-  })
+  return getNetease('/voicelist/list', params)
 }
 
 export function getVoiceDetail(params = {}) {
-  return http.get('/voice/detail', {
-    params
-  })
+  return getNetease('/voice/detail', params)
 }
 
 export function getVoiceLyric(params = {}) {
-  return http.get('/voice/lyric', {
-    params
-  })
+  return getNetease('/voice/lyric', params)
 }
 
 export function getMyCreatedVoiceList(params = {}) {
-  return http.get('/voicelist/my/created', {
-    params
-  })
+  return getNetease('/voicelist/my/created', params)
 }
 
 export function getBroadcastCategoryRegion(params = {}) {
-  return http.get('/broadcast/category/region/get', {
-    params
-  })
+  return getNetease('/broadcast/category/region/get', params)
 }
 
 export function getBroadcastCollectList(params = {}) {
-  return http.get('/broadcast/channel/collect/list', {
-    params
-  })
+  return getNetease('/broadcast/channel/collect/list', params)
 }
 
 export function getBroadcastCurrentInfo(params = {}) {
-  return http.get('/broadcast/channel/currentinfo', {
-    params
-  })
+  return getNetease('/broadcast/channel/currentinfo', params)
 }
 
 export function getBroadcastChannelList(params = {}) {
-  return http.get('/broadcast/channel/list', {
-    params
-  })
+  return getNetease('/broadcast/channel/list', params)
 }
 
 export function updateBroadcastSubscribe(params = {}) {
-  return http.get('/broadcast/sub', {
-    params
-  })
+  return getNetease('/broadcast/sub', params)
 }
 
 export function getDifmStyleChannels(params = {}) {
-  return http.get('/dj/difm/all/style/channel', {
-    params
-  })
+  return getNetease('/dj/difm/all/style/channel', params)
 }
 
 export function getDifmSubscribedChannels(params = {}) {
-  return http.get('/dj/difm/subscribe/channels/get', {
-    params
-  })
+  return getNetease('/dj/difm/subscribe/channels/get', params)
 }
 
 export function subscribeDifmChannel(params = {}) {
-  return http.get('/dj/difm/channel/subscribe', {
-    params
-  })
+  return getNetease('/dj/difm/channel/subscribe', params)
 }
 
 export function unsubscribeDifmChannel(params = {}) {
-  return http.get('/dj/difm/channel/unsubscribe', {
-    params
-  })
+  return getNetease('/dj/difm/channel/unsubscribe', params)
 }
 
 export function getDifmPlayingTracks(params = {}) {
-  return http.get('/dj/difm/playing/tracks/list', {
-    params
-  })
+  return getNetease('/dj/difm/playing/tracks/list', params)
 }
 
 export function getSatiTimeSceneResources(params = {}) {
-  return http.get('/sati/timescene/resources/get', {
-    params
-  })
+  return getNetease('/sati/timescene/resources/get', params)
 }
 
 export function getSatiTags(params = {}) {
-  return http.get('/sati/tag/list', {
-    params
-  })
+  return getNetease('/sati/tag/list', params)
 }
 
 export function getSatiResources(params = {}) {
-  return http.get('/sati/resource/list', {
-    params
-  })
+  return getNetease('/sati/resource/list', params)
 }
 
 export function getSatiMoreResources(params = {}) {
-  return http.get('/sati/resource/list/more', {
-    params
-  })
+  return getNetease('/sati/resource/list/more', params)
 }
 
 export function getSatiSubscribedResources(params = {}) {
-  return http.get('/sati/resource/sub/list', {
-    params
-  })
+  return getNetease('/sati/resource/sub/list', params)
 }
 
 export function updateSatiSubscribe(params = {}) {
-  return http.get('/sati/resource/sub', {
-    params
-  })
+  return getNetease('/sati/resource/sub', params)
 }
 
 export function getSportRadio(params = {}) {
-  return http.get('/radio/sport/get', {
-    params
-  })
+  return getNetease('/radio/sport/get', params)
 }
 
 export function checkSongLike(params = {}) {
-  return http.get('/song/like/check', {
-    params
-  })
+  return getNetease('/song/like/check', params)
 }
 
 export function updateSongLike(params = {}) {
-  return http.get('/song/like', {
-    params
-  })
+  return getNetease('/song/like', params)
 }
 
 export function getPlaylistDetail(params = {}) {
-  return http.get('/playlist/detail', {
-    params
-  })
+  return getNetease('/playlist/detail', params)
 }
 
 export function getPlaylistTracks(params = {}) {
-  return http.get('/playlist/track/all', {
-    params
-  })
+  return getNetease('/playlist/track/all', params)
 }
 
 export function getPlaylistHotCategories(params = {}) {
-  return http.get('/playlist/hot', {
-    params
-  })
+  return getNetease('/playlist/hot', params)
 }
 
 export function getPlaylistCategories(params = {}) {
-  return http.get('/playlist/catlist', {
-    params
-  })
+  return getNetease('/playlist/catlist', params)
 }
 
 export function getTopPlaylists(params = {}) {
-  return http.get('/top/playlist', {
-    params
-  })
+  return getNetease('/top/playlist', params)
 }
 
 export function getHighQualityPlaylists(params = {}) {
-  return http.get('/top/playlist/highquality', {
-    params
-  })
+  return getNetease('/top/playlist/highquality', params)
 }
 
 export function getToplist(params = {}) {
-  return http.get('/toplist', {
-    params
-  })
+  return getNetease('/toplist', params)
 }
 
 export function getArtistList(params = {}) {
-  return http.get('/artist/list', {
-    params
-  })
+  return getNetease('/artist/list', params)
 }
 
 export function getArtistToplist(params = {}) {
-  return http.get('/toplist/artist', {
-    params
-  })
+  return getNetease('/toplist/artist', params)
 }
 
 export function getArtistDetail(params = {}) {
-  return http.get('/artist/detail', {
-    params
-  })
+  return getNetease('/artist/detail', params)
 }
 
 export function getArtistHotSongs(params = {}) {
-  return http.get('/artists', {
-    params
-  })
+  return getNetease('/artists', params)
 }
 
 export function getArtistTopSongs(params = {}) {
-  return http.get('/artist/top/song', {
-    params
-  })
+  return getNetease('/artist/top/song', params)
 }
 
 export function getArtistSongs(params = {}) {
-  return http.get('/artist/songs', {
-    params
-  })
+  return getNetease('/artist/songs', params)
 }
 
 export function getArtistAlbums(params = {}) {
-  return http.get('/artist/album', {
-    params
-  })
+  return getNetease('/artist/album', params)
 }
 
 export function getArtistMvs(params = {}) {
-  return http.get('/artist/mv', {
-    params
-  })
+  return getNetease('/artist/mv', params)
 }
 
 export function getArtistVideos(params = {}) {
-  return http.get('/artist/video', {
-    params
-  })
+  return getNetease('/artist/video', params)
 }
 
 export function getArtistDesc(params = {}) {
-  return http.get('/artist/desc', {
-    params
-  })
+  return getNetease('/artist/desc', params)
 }
 
 export function getArtistDynamic(params = {}) {
-  return http.get('/artist/detail/dynamic', {
-    params
-  })
+  return getNetease('/artist/detail/dynamic', params)
 }
 
 export function getAlbumNewest(params = {}) {
-  return http.get('/album/newest', {
-    params
-  })
+  return getNetease('/album/newest', params)
 }
 
 export function getNewAlbums(params = {}) {
-  return http.get('/album/new', {
-    params
-  })
+  return getNetease('/album/new', params)
 }
 
 export function getTopAlbums(params = {}) {
-  return http.get('/top/album', {
-    params
-  })
+  return getNetease('/top/album', params)
 }
 
 export function getAlbumDetail(params = {}) {
-  return http.get('/album', {
-    params
-  })
+  return getNetease('/album', params)
 }
 
 export function getAlbumDynamic(params = {}) {
-  return http.get('/album/detail/dynamic', {
-    params
-  })
+  return getNetease('/album/detail/dynamic', params)
 }
 
 export function getAlbumComments(params = {}) {
-  return http.get('/comment/album', {
-    params
-  })
+  return getNetease('/comment/album', params)
 }
 
 export function getPlaylistComments(params = {}) {
-  return http.get('/comment/playlist', {
-    params
-  })
+  return getNetease('/comment/playlist', params)
 }
 
 export function getCommentInfoList(params = {}) {
-  return http.get('/comment/info/list', {
-    params
-  })
+  return getNetease('/comment/info/list', params)
 }
 
 export function getLoginStatus(params = {}) {
-  return http.get('/login/status', {
-    params
-  })
+  return getNetease('/login/status', params)
 }
 
 export function loginByCellphone(params = {}) {
-  return http.get('/login/cellphone', {
-    params
-  })
+  return getNetease('/login/cellphone', params)
 }
 
 export function loginByEmail(params = {}) {
-  return http.get('/login', {
-    params
-  })
+  return getNetease('/login', params)
 }
 
 export function registerAnonymous(params = {}) {
-  return http.get('/register/anonimous', {
-    params
-  })
+  return getNetease('/register/anonimous', params)
 }
 
 export function refreshLogin(params = {}) {
-  return http.get('/login/refresh', {
-    params
-  })
+  return getNetease('/login/refresh', params)
 }
 
 export function sendCaptcha(params = {}) {
-  return http.get('/captcha/sent', {
-    params
-  })
+  return getNetease('/captcha/sent', params)
 }
 
 export function verifyCaptcha(params = {}) {
-  return http.get('/captcha/verify', {
-    params
-  })
+  return getNetease('/captcha/verify', params)
 }
 
 export function getLoginQrKey(params = {}) {
-  return http.get('/login/qr/key', {
-    params
-  })
+  return getNetease('/login/qr/key', params)
 }
 
 export function getLoginQrCreate(params = {}) {
-  return http.get('/login/qr/create', {
-    params
-  })
+  return getNetease('/login/qr/create', params)
 }
 
 export function getLoginQrCheck(params = {}) {
-  return http.get('/login/qr/check', {
-    acceptCodes: [800, 801, 802, 803],
-    params
+  return getNetease('/login/qr/check', params, {
+    acceptCodes: [800, 801, 802, 803]
   })
 }
 
 export function getUserAccount(params = {}) {
-  return http.get('/user/account', {
-    params
-  })
+  return getNetease('/user/account', params)
 }
 
 export function logout(params = {}) {
-  return http.get('/logout', {
-    params
-  })
+  return getNetease('/logout', params)
 }
 
 export function getSongComments(params = {}) {
-  return http.get('/comment/music', {
-    params
-  })
+  return getNetease('/comment/music', params)
 }
 
 export function getSongRedCount(params = {}) {
-  return http.get('/song/red/count', {
-    params
-  })
+  return getNetease('/song/red/count', params)
 }
 
 export function getSongUrl(params = {}) {
-  return http.get('/song/url/v1', {
-    params
-  })
+  return getNetease('/song/url/v1', params)
 }
 
 export function getLyric(params = {}) {
-  return http.get('/lyric', {
-    params
-  })
+  return getNetease('/lyric', params)
 }
 
 export function getSearchDefault(params = {}) {
-  return http.get('/search/default', {
-    params
-  })
+  return getNetease('/search/default', params)
 }
 
 export function getSearchHotDetail(params = {}) {
-  return http.get('/search/hot/detail', {
-    params
-  })
+  return getNetease('/search/hot/detail', params)
 }
 
 export function getSearchSuggestPc(params = {}) {
-  return http.get('/search/suggest/pc', {
-    params
-  })
+  return getNetease('/search/suggest/pc', params)
 }
 
 export function getSearchMultiMatch(params = {}) {
-  return http.get('/search/multimatch', {
-    params
-  })
+  return getNetease('/search/multimatch', params)
 }
 
 export function getCloudSearch(params = {}) {
-  return http.get('/cloudsearch', {
-    params
-  })
+  return getNetease('/cloudsearch', params)
 }

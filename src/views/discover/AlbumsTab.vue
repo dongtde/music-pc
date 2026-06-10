@@ -134,9 +134,10 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { Disc3, Play } from 'lucide-vue-next'
 import SectionTitle from '../../components/SectionTitle.vue'
+import { useLoadMoreTrigger } from '../../composables/useLoadMoreTrigger'
 import { getAlbumsDiscoveryData } from '../../services/netease'
 
 const ALBUM_LIMIT = 36
@@ -163,8 +164,19 @@ const albumOffset = ref(0)
 const pageRoot = ref(null)
 const loadMoreTrigger = ref(null)
 let albumRequestId = 0
-let loadMoreObserver = null
-let loadMoreScrollRoot = null
+const loadMoreController = useLoadMoreTrigger({
+  trigger: loadMoreTrigger,
+  canLoad: () =>
+    !loading.value &&
+    !loadingMore.value &&
+    hasMore.value &&
+    !(error.value && albums.value.length),
+  loadMore,
+  getRoot: getScrollRoot,
+  rootMargin: '360px 0px 360px',
+  scrollThreshold: 360,
+  threshold: 0
+})
 
 const activeAreaLabel = computed(() =>
   albumAreas.find((area) => area.value === activeArea.value)?.label || '全部'
@@ -172,10 +184,6 @@ const activeAreaLabel = computed(() =>
 
 onMounted(() => {
   loadData({ reset: true })
-})
-
-onBeforeUnmount(() => {
-  disconnectLoadMoreObserver()
 })
 
 function selectArea(area) {
@@ -208,7 +216,7 @@ async function loadData({ reset = true } = {}) {
   const requestId = ++albumRequestId
 
   if (reset) {
-    disconnectLoadMoreObserver()
+    loadMoreController.cleanup()
     loading.value = true
     albums.value = []
     albumOffset.value = 0
@@ -252,7 +260,7 @@ async function loadData({ reset = true } = {}) {
     if (requestId === albumRequestId) {
       loading.value = false
       loadingMore.value = false
-      nextTick(setupLoadMoreObserver)
+      nextTick(loadMoreController.setup)
     }
   }
 }
@@ -273,83 +281,7 @@ function mergeAlbums(currentAlbums, nextAlbums) {
   ]
 }
 
-function setupLoadMoreObserver() {
-  disconnectLoadMoreObserver()
-
-  if (
-    !hasMore.value ||
-    (error.value && albums.value.length)
-  ) {
-    return
-  }
-
-  loadMoreScrollRoot = getScrollRoot()
-
-  if (loadMoreScrollRoot) {
-    loadMoreScrollRoot.addEventListener('scroll', handleLoadMoreScroll, { passive: true })
-  }
-
-  if (loadMoreTrigger.value && typeof IntersectionObserver !== 'undefined') {
-    loadMoreObserver = new IntersectionObserver(handleLoadMoreIntersect, {
-      root: loadMoreScrollRoot,
-      rootMargin: '360px 0px 360px',
-      threshold: 0
-    })
-    loadMoreObserver.observe(loadMoreTrigger.value)
-  }
-
-  handleLoadMoreScroll()
-}
-
-function handleLoadMoreIntersect(entries) {
-  if (entries.some((entry) => entry.isIntersecting)) {
-    loadMore()
-  }
-}
-
-function handleLoadMoreScroll() {
-  if (
-    loading.value ||
-    loadingMore.value ||
-    !hasMore.value ||
-    (error.value && albums.value.length)
-  ) {
-    return
-  }
-
-  const root = loadMoreScrollRoot || getScrollRoot()
-
-  if (!root) {
-    return
-  }
-
-  const distanceToBottom = root.scrollHeight - root.scrollTop - root.clientHeight
-
-  if (distanceToBottom <= 360) {
-    loadMore()
-  }
-}
-
 function getScrollRoot() {
   return loadMoreTrigger.value?.closest('.view') || pageRoot.value?.closest('.view') || null
-}
-
-function disconnectLoadMoreObserver() {
-  if (!loadMoreObserver) {
-    if (loadMoreScrollRoot) {
-      loadMoreScrollRoot.removeEventListener('scroll', handleLoadMoreScroll)
-      loadMoreScrollRoot = null
-    }
-
-    return
-  }
-
-  loadMoreObserver.disconnect()
-  loadMoreObserver = null
-
-  if (loadMoreScrollRoot) {
-    loadMoreScrollRoot.removeEventListener('scroll', handleLoadMoreScroll)
-    loadMoreScrollRoot = null
-  }
 }
 </script>

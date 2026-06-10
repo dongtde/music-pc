@@ -88,10 +88,12 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import PlaylistCard from '../../components/PlaylistCard.vue'
 import SectionTitle from '../../components/SectionTitle.vue'
+import { useLoadMoreTrigger } from '../../composables/useLoadMoreTrigger'
 import { getPlaylistDiscoveryData } from '../../services/netease'
+import { waitForMinimumDelay } from '../../utils/time'
 
 const PLAYLIST_LIMIT = 50
 const PLAYLIST_SKELETON_COUNT = 24
@@ -110,17 +112,20 @@ const playlistsOffset = ref(0)
 const hasMore = ref(true)
 const loadMoreTrigger = ref(null)
 let playlistRequestId = 0
-let loadMoreObserver = null
 
 const visibleCategories = computed(() => ['全部', ...hotCategories.value.filter((item) => item !== '全部')])
+const loadMoreController = useLoadMoreTrigger({
+  trigger: loadMoreTrigger,
+  canLoad: () => !loading.value && !loadingMore.value && hasMore.value && !error.value,
+  loadMore,
+  rootMargin: '360px 0px 360px',
+  threshold: 0
+})
 
 onMounted(() => {
   loadData({ reset: true })
 })
 
-onBeforeUnmount(() => {
-  disconnectLoadMoreObserver()
-})
 
 function selectCategory(category) {
   categoryPanelOpen.value = false
@@ -149,7 +154,7 @@ async function loadData({ reset = false } = {}) {
   const startedAt = Date.now()
 
   if (reset) {
-    disconnectLoadMoreObserver()
+    loadMoreController.cleanup()
     loading.value = true
     skeletonVisible.value = true
     playlists.value = []
@@ -189,7 +194,7 @@ async function loadData({ reset = false } = {}) {
   } finally {
     if (requestId === playlistRequestId) {
       if (reset) {
-        await waitForSkeleton(startedAt)
+        await waitForMinimumDelay(startedAt, PLAYLIST_SKELETON_MIN_MS)
 
         if (requestId !== playlistRequestId) {
           return
@@ -200,22 +205,11 @@ async function loadData({ reset = false } = {}) {
 
       loading.value = false
       loadingMore.value = false
-      nextTick(setupLoadMoreObserver)
+      nextTick(loadMoreController.setup)
     }
   }
 }
 
-function waitForSkeleton(startedAt) {
-  const remaining = PLAYLIST_SKELETON_MIN_MS - (Date.now() - startedAt)
-
-  if (remaining <= 0) {
-    return Promise.resolve()
-  }
-
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, remaining)
-  })
-}
 
 function mergePlaylists(currentPlaylists, nextPlaylists) {
   const seenIds = new Set(currentPlaylists.map((playlist) => playlist.id))
@@ -233,34 +227,4 @@ function mergePlaylists(currentPlaylists, nextPlaylists) {
   ]
 }
 
-function setupLoadMoreObserver() {
-  disconnectLoadMoreObserver()
-
-  if (!loadMoreTrigger.value || typeof IntersectionObserver === 'undefined') {
-    return
-  }
-
-  const scrollRoot = loadMoreTrigger.value.closest('.view')
-  loadMoreObserver = new IntersectionObserver(handleLoadMoreIntersect, {
-    root: scrollRoot,
-    rootMargin: '360px 0px 360px',
-    threshold: 0
-  })
-  loadMoreObserver.observe(loadMoreTrigger.value)
-}
-
-function handleLoadMoreIntersect(entries) {
-  if (entries.some((entry) => entry.isIntersecting)) {
-    loadMore()
-  }
-}
-
-function disconnectLoadMoreObserver() {
-  if (!loadMoreObserver) {
-    return
-  }
-
-  loadMoreObserver.disconnect()
-  loadMoreObserver = null
-}
 </script>

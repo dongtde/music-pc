@@ -383,7 +383,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   BadgeCheck,
@@ -394,6 +394,7 @@ import {
 import { useMessage } from 'naive-ui'
 import ArtistVideoCard from '../components/ArtistVideoCard.vue'
 import SongListRow from '../components/SongListRow.vue'
+import { useLoadMoreTrigger } from '../composables/useLoadMoreTrigger'
 import {
   getArtistAlbumsData,
   getArtistDetailData,
@@ -434,7 +435,6 @@ const artistSongsHasMore = ref(false)
 const artistAlbumsHasMore = ref(false)
 const artistVideosHasMore = ref(false)
 let artistRequestId = 0
-let loadMoreObserver
 
 const tabLoading = reactive({
   songs: false,
@@ -526,6 +526,13 @@ const activeTabLoading = computed(() => {
   return false
 })
 
+const loadMoreController = useLoadMoreTrigger({
+  trigger: loadMoreTrigger,
+  canLoad: () => activeTabHasMore.value && !activeTabLoading.value,
+  loadMore: loadMoreForActiveTab,
+  rootMargin: '260px 0px'
+})
+
 const artistTags = computed(() => {
   const tags = [
     artist.value.identity,
@@ -553,19 +560,10 @@ watch(
     artistVideos.value.length
   ],
   () => {
-    nextTick(observeLoadMoreTrigger)
+    nextTick(loadMoreController.setup)
   },
   { flush: 'post' }
 )
-
-onMounted(() => {
-  setupLoadMoreObserver()
-  nextTick(observeLoadMoreTrigger)
-})
-
-onBeforeUnmount(() => {
-  loadMoreObserver?.disconnect()
-})
 
 function resetArtistTabs() {
   activeTab.value = 'featured'
@@ -639,7 +637,7 @@ function loadFeaturedPreviews() {
 function selectArtistTab(tab) {
   activeTab.value = tab
   ensureArtistTabData(tab)
-  nextTick(observeLoadMoreTrigger)
+  nextTick(loadMoreController.setup)
 }
 
 function ensureArtistTabData(tab) {
@@ -845,33 +843,6 @@ function setArtistSongOrder(order) {
   artistSongsHasMore.value = false
   tabLoaded.songs = false
   loadArtistSongs({ reset: true })
-}
-
-function setupLoadMoreObserver() {
-  if (typeof IntersectionObserver === 'undefined') {
-    return
-  }
-
-  loadMoreObserver = new IntersectionObserver(
-    (entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        loadMoreForActiveTab()
-      }
-    },
-    { rootMargin: '260px 0px' }
-  )
-}
-
-function observeLoadMoreTrigger() {
-  if (!loadMoreObserver) {
-    return
-  }
-
-  loadMoreObserver.disconnect()
-
-  if (loadMoreTrigger.value && activeTabHasMore.value) {
-    loadMoreObserver.observe(loadMoreTrigger.value)
-  }
 }
 
 function loadMoreForActiveTab() {

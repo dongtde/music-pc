@@ -1,4 +1,5 @@
 import { COVER_TINT_FALLBACKS, DEFAULT_COVER_TINT_RGB } from './homeConstants'
+export { formatTime, parseDuration } from '../../utils/time'
 
 export function prepareQueue(songs) {
   return songs.map((song, index) => {
@@ -115,28 +116,6 @@ export function findCurrentLyricIndex(lines, currentTime) {
 
 export function isNeteaseTrackId(trackId) {
   return /^\d+$/.test(String(trackId ?? ''))
-}
-
-export function formatTime(value = 0) {
-  const totalSeconds = Math.max(0, Math.floor(value))
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = String(totalSeconds % 60).padStart(2, '0')
-
-  return `${minutes}:${seconds}`
-}
-
-export function parseDuration(duration = '0:00') {
-  if (typeof duration !== 'string') {
-    return 0
-  }
-
-  const parts = duration.split(':').map(Number)
-
-  if (!parts.length || parts.some(Number.isNaN)) {
-    return 0
-  }
-
-  return parts.reduce((total, part) => total * 60 + part, 0)
 }
 
 export function normalizeVideoUrl(url) {

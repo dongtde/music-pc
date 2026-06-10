@@ -406,6 +406,7 @@ import {
 } from '../services/netease'
 import { useAuthStore } from '../stores/auth'
 import { usePlayerStore } from '../stores/player'
+import { parseDuration } from '../utils/time'
 import '../styles/mv.css'
 
 const PAGE_SIZE = 24
@@ -1241,19 +1242,6 @@ function formatCount(value = 0) {
     return `${Number((count / 10000).toFixed(1))}万`
   }
   return String(count)
-}
-
-function parseDuration(duration = '0:00') {
-  if (typeof duration !== 'string') {
-    return 0
-  }
-
-  const parts = duration.split(':').map(Number)
-  if (parts.some(Number.isNaN)) {
-    return 0
-  }
-
-  return parts.reduce((total, part) => total * 60 + part, 0)
 }
 
 function formatVideoClock(value = 0) {

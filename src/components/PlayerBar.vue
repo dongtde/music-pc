@@ -270,10 +270,13 @@ import { computed, defineAsyncComponent, onMounted, onUnmounted, reactive, ref, 
 import { AudioLines, Ellipsis, Gauge, Heart, ListMusic, Loader2, Maximize2, MessageCircleMore, Mic2, Minimize2, Orbit, Pause, Play, Plus, Radio, Repeat, Repeat1, Repeat2, Settings2, Shuffle, SkipBack, SkipForward, Sparkles, Volume2, VolumeX, Waves } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import SongListRow from './SongListRow.vue'
+import { STORAGE_KEYS } from '../config/app'
 import { useThemeStore } from '../stores/theme'
 import { usePlayerStore } from '../stores/player'
 import { getSongCommentsData, getTrackLyricData } from '../services/netease'
 import { useSongComments } from '../composables/useSongComments'
+import { readStorage, writeStorage } from '../utils/storage'
+import { formatTime } from '../utils/time'
 import '../styles/player.css'
 
 const CommentModal = defineAsyncComponent(() => import('./CommentModal.vue'))
@@ -281,7 +284,6 @@ const FullScreenPlayer = defineAsyncComponent(() => import('./FullScreenPlayer.v
 const theme = useThemeStore()
 const player = usePlayerStore()
 const message = useMessage()
-const fullPlayerVisualizerStorageKey = 'mappic:full-player:visualizer-mode'
 const fallbackFullPlayerVisualizerMode = 'halo'
 const validFullPlayerVisualizerModes = new Set(['halo', 'breath', 'trails', 'needle', 'particles'])
 const modeMenuOpen = ref(false)
@@ -499,28 +501,21 @@ function selectVisualizerMode(value) {
 }
 
 function readFullPlayerVisualizerMode() {
-  if (typeof window === 'undefined') {
-    return fallbackFullPlayerVisualizerMode
-  }
+  const storedMode = readStorage(
+    STORAGE_KEYS.fullPlayerVisualizerMode,
+    fallbackFullPlayerVisualizerMode
+  )
 
-  try {
-    const storedMode = window.localStorage.getItem(fullPlayerVisualizerStorageKey)
-
-    return isValidVisualizerMode(storedMode) ? storedMode : fallbackFullPlayerVisualizerMode
-  } catch {
-    return fallbackFullPlayerVisualizerMode
-  }
+  return isValidVisualizerMode(storedMode) ? storedMode : fallbackFullPlayerVisualizerMode
 }
 
 function persistFullPlayerVisualizerMode(value) {
-  if (typeof window === 'undefined' || !isValidVisualizerMode(value)) {
+  if (!isValidVisualizerMode(value)) {
     return
   }
 
-  try {
-    window.localStorage.setItem(fullPlayerVisualizerStorageKey, value)
-  } catch (error) {
-    console.warn('Failed to persist full player visualizer mode:', error)
+  if (!writeStorage(STORAGE_KEYS.fullPlayerVisualizerMode, value)) {
+    console.warn('Failed to persist full player visualizer mode')
   }
 }
 
@@ -900,14 +895,6 @@ function findLyricLineAt(time) {
   }
 
   return lines[currentIndex]
-}
-
-function formatTime(value = 0) {
-  const totalSeconds = Math.max(0, Math.floor(value))
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = String(totalSeconds % 60).padStart(2, '0')
-
-  return `${minutes}:${seconds}`
 }
 
 function isNeteaseTrackId(trackId) {
