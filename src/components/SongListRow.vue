@@ -4,7 +4,7 @@
     :class="{ 'is-playing': isPlaying(track), 'is-compact': compact }"
     role="button"
     tabindex="0"
-    @click="handlePlayClick"
+    @dblclick="handleRowDoubleClick"
     @keydown="handleRowKeydown"
   >
     <span class="song-list-row__main">
@@ -17,14 +17,16 @@
           loading="lazy"
           decoding="async"
         />
-        <span
+        <button
           class="song-list-row__play"
           :class="{ 'song-list-row__play--playing': isPlaying(track) }"
+          type="button"
+          @click.stop="handlePlayIconClick"
           aria-label="播放单曲"
         >
           <AudioLines v-if="isPlaying(track)" :size="16" />
           <Play v-else :size="15" fill="currentColor" />
-        </span>
+        </button>
       </span>
 
       <span class="song-list-row__title">
@@ -96,11 +98,19 @@ function isPlaying(track) {
   return track.isPlaying || (player.state.currentTrack.id === track.id && player.state.isPlaying)
 }
 
-function handlePlayClick(event) {
+function handleRowDoubleClick(event) {
   if (isInteractiveTarget(event?.target)) {
     return
   }
 
+  playTrack()
+}
+
+function handlePlayIconClick() {
+  playTrack()
+}
+
+function playTrack() {
   if (props.track.vip) {
     message.warning('当前歌曲为 VIP 歌曲，将尝试播放试听')
   }
@@ -118,7 +128,7 @@ function handleRowKeydown(event) {
   }
 
   event.preventDefault()
-  handlePlayClick()
+  playTrack()
 }
 
 function isInteractiveTarget(target) {
@@ -295,10 +305,15 @@ function normalizeRouteId(value) {
   width: 28px;
   height: 28px;
   place-items: center;
+  appearance: none;
+  padding: 0;
+  border: 0;
   border-radius: 50%;
   color: #ffffff;
   background: var(--accent);
   box-shadow: 0 10px 20px rgba(var(--accent-rgb), 0.3);
+  cursor: pointer;
+  font: inherit;
   opacity: 0;
   transform: translate(-50%, calc(-50% + 6px)) scale(0.9);
   transition:
@@ -315,9 +330,15 @@ function normalizeRouteId(value) {
 }
 
 .song-list-row:hover .song-list-row__play,
+.song-list-row:focus-within .song-list-row__play,
 .song-list-row.is-playing .song-list-row__play {
   opacity: 1;
   transform: translate(-50%, -50%) scale(1);
+}
+
+.song-list-row__play:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.92);
+  outline-offset: 2px;
 }
 
 .song-list-row__cover--sunset {

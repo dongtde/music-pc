@@ -1,4 +1,9 @@
 import { COVER_TINT_FALLBACKS, DEFAULT_COVER_TINT_RGB } from './homeConstants'
+export {
+  createLyricPlaceholder,
+  findCurrentLyricIndex,
+  isNeteaseTrackId
+} from '../../utils/lyrics'
 export { formatTime, parseDuration } from '../../utils/time'
 
 export function prepareQueue(songs) {
@@ -84,38 +89,6 @@ export function uniqueMvs(items = []) {
     seen.add(id)
     return true
   })
-}
-
-export function createLyricPlaceholder(text) {
-  return [{ time: '--:--', text, seconds: 0, placeholder: true }]
-}
-
-export function findCurrentLyricIndex(lines, currentTime) {
-  if (!lines.length || lines[0]?.placeholder) {
-    return 0
-  }
-
-  const targetTime = currentTime + 0.16
-  let low = 0
-  let high = lines.length - 1
-  let currentIndex = 0
-
-  while (low <= high) {
-    const middle = Math.floor((low + high) / 2)
-
-    if (lines[middle].seconds <= targetTime) {
-      currentIndex = middle
-      low = middle + 1
-    } else {
-      high = middle - 1
-    }
-  }
-
-  return currentIndex
-}
-
-export function isNeteaseTrackId(trackId) {
-  return /^\d+$/.test(String(trackId ?? ''))
 }
 
 export function normalizeVideoUrl(url) {
@@ -211,6 +184,24 @@ export function formatActionCount(value = 0) {
 
 export function getCoverType(index) {
   return ['sunset', 'neon', 'lofi', 'stage', 'piano'][index % 5]
+}
+
+export function isPlaybackSpaceKey(event) {
+  return (
+    event.code === 'Space' ||
+    event.key === ' ' ||
+    event.key === 'Spacebar'
+  )
+}
+
+export function shouldIgnorePlaybackShortcut(event) {
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.repeat) {
+    return true
+  }
+
+  return Boolean(event.target?.closest?.(
+    'input, textarea, select, button, a, [contenteditable="true"], [role="textbox"]'
+  ))
 }
 
 function getChillWeight(song) {

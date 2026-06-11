@@ -133,76 +133,16 @@
             <p>{{ track.artist }}</p>
           </header>
 
-          <div
-            class="full-player__qq-lyrics"
-            :class="{
-              'full-player__qq-lyrics--dragging': lyricsDragging,
-              'full-player__qq-lyrics--wheeling': lyricsWheeling,
-              'full-player__qq-lyrics--previewing': lyricsInteractionActive,
-              'full-player__qq-lyrics--danmaku': danmakuActive,
-              'full-player__qq-lyrics--breath': visualizerMode === 'breath',
-              'is-playing': player.state.isPlaying,
-            }"
-          >
-            <div
-              v-if="visualizerMode === 'breath'"
-              class="full-player__lyric-breath"
-              aria-hidden="true"
-            >
-              <span />
-              <span />
-              <span />
-            </div>
-            <div
-              v-if="lyricsInteractionActive && previewLyric"
-              class="full-player__lyric-guide"
-            >
-              <span class="full-player__lyric-guide-time">{{ previewLyric.time }}</span>
-              <span class="full-player__lyric-guide-line" />
-              <button
-                class="full-player__lyric-guide-play"
-                type="button"
-                :disabled="previewLyric.placeholder"
-                aria-label="跳转到选中歌词"
-                @click.stop="seekToPreviewLyric"
-              >
-                <Play :size="14" fill="currentColor" />
-              </button>
-            </div>
-
-            <div
-              ref="lyricsScroll"
-              class="full-player__lyrics-scroll"
-              aria-label="滚动歌词"
-              @pointerdown="startLyricsDrag"
-              @pointermove="handleLyricsPointerMove"
-              @pointerup="stopLyricsDrag"
-              @pointerleave="stopLyricsDrag"
-              @pointercancel="stopLyricsDrag"
-              @wheel.prevent="handleLyricsWheel"
-            >
-              <button
-                v-for="(line, index) in lyricLines"
-                :key="`${line.seconds}-${line.text}-${index}`"
-                class="full-player__lyric-line"
-                :class="{
-                  active: playbackLyricIndex === index,
-                  preview: lyricsInteractionActive && previewLyricIndex === index,
-                  past: index < playbackLyricIndex,
-                  future: index > playbackLyricIndex,
-                  placeholder: line.placeholder,
-                }"
-                type="button"
-                :data-lyric-index="index"
-                @click="selectLyric(index)"
-              >
-                <span class="full-player__lyric-text">{{ line.text }}</span>
-                <span v-if="line.translation" class="full-player__lyric-translation">
-                  {{ line.translation }}
-                </span>
-              </button>
-            </div>
-          </div>
+          <LyricsScroller
+            ref="lyricsScroller"
+            variant="full"
+            :lines="lyricLines"
+            :active-index="playbackLyricIndex"
+            :playing="player.state.isPlaying"
+            :danmaku-active="danmakuActive"
+            :breath="visualizerMode === 'breath'"
+            @seek="seekToLyric"
+          />
         </section>
       </div>
 
@@ -241,13 +181,18 @@ import {
   defineAsyncComponent,
   nextTick,
   onBeforeUnmount,
-  onMounted,
   ref,
   watch,
 } from 'vue';
-import { ChevronDown, Play } from 'lucide-vue-next';
+import { ChevronDown } from 'lucide-vue-next';
 import { getTrackLyricData } from '../services/netease';
 import { usePlayerStore } from '../stores/player';
+import {
+  createLyricPlaceholder,
+  findCurrentLyricIndex,
+  isNeteaseTrackId,
+} from '../utils/lyrics';
+import LyricsScroller from './LyricsScroller.vue';
 import '../styles/full-player.css';
 
 const DanmakuLayer = defineAsyncComponent({
@@ -311,31 +256,17 @@ const player = usePlayerStore();
 
 const coverLabel = ref(null);
 const coverFlyer = ref(null);
+const lyricsScroller = ref(null);
 const coverFlightActive = ref(false);
 const lastSourceRect = ref(null);
 const danmakuMounted = ref(false);
 const danmakuActive = ref(false);
-const lyricsScroll = ref(null);
-const lyricsDragging = ref(false);
-const lyricsWheeling = ref(false);
 const playbackLyricIndex = ref(0);
-const previewLyricIndex = ref(null);
-const lyricsPreviewing = ref(false);
 const lyricLines = ref(createLyricPlaceholder('歌词加载中...'));
-const lyricsDragState = {
-  startY: 0,
-  startScrollTop: 0,
-  moved: false,
-};
-const lyricsDragScrollSpeed = 2.2;
-const lyricsWheelScrollSpeed = 1.2;
 let coverFlightAnimation = null;
 let danmakuActivationTimer = null;
 let danmakuActivationFrame = 0;
-let lyricsPreviewTimer = null;
-let lyricsWheelTimer = null;
 let lyricRequestId = 0;
-let suppressNextLyricClick = false;
 
 const fallbackCoverPalette = {
   primary: '#213245',
@@ -461,16 +392,6 @@ const coverStyle = computed(() => {
   };
 });
 
-const currentLyricIndex = computed(() => playbackLyricIndex.value);
-const lyricsInteractionActive = computed(
-  () => lyricsDragging.value || lyricsWheeling.value || lyricsPreviewing.value,
-);
-const previewLyric = computed(() => {
-  const index = previewLyricIndex.value ?? playbackLyricIndex.value;
-
-  return lyricLines.value[index] ?? null;
-});
-
 watch(
   () => props.sourceRect,
   (rect) => {
@@ -504,7 +425,7 @@ watch(
       coverFlightActive.value = Boolean(sourceRect);
       await nextTick();
       await waitForLayoutFrame();
-      refreshLyricsLayout('auto');
+      lyricsScroller.value?.refreshLayout('auto');
       playCoverFlight('enter', { sourceRect });
       return;
     }
@@ -533,25 +454,14 @@ watch(
   },
 );
 
-watch(currentLyricIndex, async () => {
-  if (lyricsInteractionActive.value) {
-    return;
-  }
-
+watch(playbackLyricIndex, async () => {
   await nextTick();
-  updateLyricsEdgePadding();
-  centerCurrentLyric();
-});
-
-onMounted(() => {
-  window.addEventListener('resize', handleLyricsResize);
+  lyricsScroller.value?.refreshLayout();
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', handleLyricsResize);
   clearDanmakuActivation();
-  clearLyricsPreviewTimer();
-  clearLyricsWheelTimer();
+  lyricRequestId += 1;
 });
 
 function scheduleDanmakuActivation() {
@@ -590,15 +500,12 @@ async function loadTrackLyrics(trackId) {
   lyricRequestId += 1;
   const requestId = lyricRequestId;
   playbackLyricIndex.value = 0;
-  previewLyricIndex.value = null;
-  lyricsPreviewing.value = false;
-  lyricsWheeling.value = false;
-  clearLyricsPreviewTimer();
-  clearLyricsWheelTimer();
+  lyricsScroller.value?.resetInteraction();
 
   if (!isNeteaseTrackId(trackId)) {
     lyricLines.value = createLyricPlaceholder(trackId ? '暂无歌词' : '无播放歌曲');
-    await refreshLyricsLayout('auto');
+    await nextTick();
+    lyricsScroller.value?.refreshLayout('auto');
     return;
   }
 
@@ -622,7 +529,8 @@ async function loadTrackLyrics(trackId) {
     lyricLines.value = createLyricPlaceholder('歌词加载失败');
   }
 
-  await refreshLyricsLayout('auto');
+  await nextTick();
+  lyricsScroller.value?.refreshLayout('auto');
 }
 
 function syncPlaybackLyric(currentTime) {
@@ -640,30 +548,6 @@ function syncPlaybackLyric(currentTime) {
   }
 }
 
-function findCurrentLyricIndex(lines, currentTime) {
-  let low = 0;
-  let high = lines.length - 1;
-  let currentIndex = 0;
-
-  while (low <= high) {
-    const middle = Math.floor((low + high) / 2);
-
-    if (lines[middle].seconds <= currentTime + 0.16) {
-      currentIndex = middle;
-      low = middle + 1;
-      continue;
-    }
-
-    high = middle - 1;
-  }
-
-  return currentIndex;
-}
-
-function createLyricPlaceholder(text) {
-  return [{ time: '--:--', text, seconds: 0, placeholder: true }];
-}
-
 function clampVisualizerComment(value) {
   const text = String(value ?? '').replace(/\s+/g, ' ').trim();
 
@@ -674,229 +558,9 @@ function clampVisualizerComment(value) {
   return `${text.slice(0, 23)}...`;
 }
 
-function isNeteaseTrackId(trackId) {
-  return /^\d+$/.test(String(trackId ?? ''));
-}
-
-function startLyricsDrag(event) {
-  const scroller = lyricsScroll.value;
-
-  if (!scroller || event.button > 0) {
-    return;
-  }
-
-  lyricsDragging.value = true;
-  lyricsPreviewing.value = true;
-  previewLyricIndex.value = playbackLyricIndex.value;
-  lyricsDragState.startY = event.clientY;
-  lyricsDragState.startScrollTop = scroller.scrollTop;
-  lyricsDragState.moved = false;
-  clearLyricsPreviewTimer();
-  clearLyricsWheelTimer();
-  lyricsWheeling.value = false;
-  scroller.setPointerCapture?.(event.pointerId);
-  updatePreviewLyricFromCenter();
-}
-
-function handleLyricsPointerMove(event) {
-  const scroller = lyricsScroll.value;
-
-  if (!scroller) {
-    return;
-  }
-
-  if (lyricsDragging.value) {
-    const deltaY = event.clientY - lyricsDragState.startY;
-
-    if (Math.abs(deltaY) > 3) {
-      lyricsDragState.moved = true;
-    }
-
-    scroller.scrollTop =
-      lyricsDragState.startScrollTop - deltaY * lyricsDragScrollSpeed;
-    updatePreviewLyricFromCenter();
-  }
-}
-
-function stopLyricsDrag(event) {
-  if (!lyricsDragging.value) {
-    return;
-  }
-
-  updatePreviewLyricFromCenter();
-  lyricsScroll.value?.releasePointerCapture?.(event.pointerId);
-  lyricsDragging.value = false;
-
-  if (lyricsDragState.moved) {
-    suppressNextLyricClick = true;
-    window.setTimeout(() => {
-      suppressNextLyricClick = false;
-    }, 0);
-  }
-
-  schedulePlaybackLyricReturn();
-}
-
-function handleLyricsWheel(event) {
-  const scroller = lyricsScroll.value;
-
-  if (!scroller || lyricsDragging.value) {
-    return;
-  }
-
-  event.preventDefault();
-  lyricsPreviewing.value = true;
-  lyricsWheeling.value = true;
-  clearLyricsPreviewTimer();
-  clearLyricsWheelTimer();
-
-  const wheelDelta =
-    event.deltaMode === WheelEvent.DOM_DELTA_LINE
-      ? event.deltaY * 18
-      : event.deltaY;
-
-  scroller.scrollTop += wheelDelta * lyricsWheelScrollSpeed;
-  updatePreviewLyricFromCenter();
-
-  lyricsWheelTimer = window.setTimeout(() => {
-    lyricsWheeling.value = false;
-    schedulePlaybackLyricReturn();
-  }, 140);
-}
-
-function selectLyric(index) {
-  const line = lyricLines.value[index];
-
-  if (suppressNextLyricClick) {
-    suppressNextLyricClick = false;
-    return;
-  }
-
-  seekToLyricLine(line, index);
-}
-
-function seekToPreviewLyric() {
-  seekToLyricLine(previewLyric.value, previewLyricIndex.value);
-}
-
-function seekToLyricLine(line, index) {
-  if (!line || line.placeholder) {
-    return;
-  }
-
+function seekToLyric({ index, seconds }) {
   playbackLyricIndex.value = Number.isInteger(index) ? index : playbackLyricIndex.value;
-  previewLyricIndex.value = null;
-  lyricsPreviewing.value = false;
-  lyricsWheeling.value = false;
-  clearLyricsPreviewTimer();
-  clearLyricsWheelTimer();
-  player.seekTo(line.seconds);
-  nextTick(() => centerCurrentLyric());
-}
-
-function updatePreviewLyricFromCenter() {
-  const scroller = lyricsScroll.value;
-
-  if (!scroller) {
-    return;
-  }
-
-  const centerY =
-    scroller.getBoundingClientRect().top + scroller.clientHeight / 2;
-  const lyricLines = scroller.querySelectorAll('.full-player__lyric-line');
-  let nearestIndex = previewLyricIndex.value ?? playbackLyricIndex.value;
-  let nearestDistance = Number.POSITIVE_INFINITY;
-
-  lyricLines.forEach((line) => {
-    const rect = line.getBoundingClientRect();
-    const distance = Math.abs(rect.top + rect.height / 2 - centerY);
-    const lyricIndex = Number(line.dataset.lyricIndex);
-
-    if (distance < nearestDistance && Number.isInteger(lyricIndex)) {
-      nearestDistance = distance;
-      nearestIndex = lyricIndex;
-    }
-  });
-
-  if (nearestIndex !== previewLyricIndex.value) {
-    previewLyricIndex.value = nearestIndex;
-  }
-}
-
-function schedulePlaybackLyricReturn() {
-  clearLyricsPreviewTimer();
-  lyricsPreviewTimer = window.setTimeout(() => {
-    lyricsPreviewing.value = false;
-    previewLyricIndex.value = null;
-    centerCurrentLyric();
-  }, 4200);
-}
-
-function clearLyricsPreviewTimer() {
-  if (lyricsPreviewTimer) {
-    window.clearTimeout(lyricsPreviewTimer);
-    lyricsPreviewTimer = null;
-  }
-}
-
-function clearLyricsWheelTimer() {
-  if (lyricsWheelTimer) {
-    window.clearTimeout(lyricsWheelTimer);
-    lyricsWheelTimer = null;
-  }
-}
-
-async function refreshLyricsLayout(behavior = 'smooth') {
-  await nextTick();
-  updateLyricsEdgePadding();
-  centerCurrentLyric(behavior);
-}
-
-function updateLyricsEdgePadding() {
-  const scroller = lyricsScroll.value;
-
-  if (!scroller) {
-    return;
-  }
-
-  const activeLine = scroller.querySelector(
-    `[data-lyric-index="${currentLyricIndex.value}"]`,
-  );
-  const firstLine = scroller.querySelector('[data-lyric-index="0"]');
-  const lineHeight = activeLine?.offsetHeight || firstLine?.offsetHeight || 86;
-  const edgePadding = Math.max(0, scroller.clientHeight / 2 - lineHeight / 2);
-
-  scroller.style.setProperty('--full-player-lyrics-edge-padding', `${edgePadding}px`);
-}
-
-function centerCurrentLyric(behavior = 'smooth') {
-  const scroller = lyricsScroll.value;
-  const lyricIndex = currentLyricIndex.value;
-
-  if (!scroller || lyricIndex < 0) {
-    return;
-  }
-
-  const activeLine = scroller.querySelector(
-    `[data-lyric-index="${lyricIndex}"]`,
-  );
-
-  if (!activeLine) {
-    return;
-  }
-
-  scroller.scrollTo({
-    top:
-      activeLine.offsetTop -
-      scroller.clientHeight / 2 +
-      activeLine.offsetHeight / 2,
-    behavior,
-  });
-}
-
-function handleLyricsResize() {
-  updateLyricsEdgePadding();
-  centerCurrentLyric('auto');
+  player.seekTo(seconds);
 }
 
 function playCoverFlight(direction, options = {}) {
