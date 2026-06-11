@@ -210,6 +210,7 @@ import {
   Loader2,
   MessageCircleMore,
   Pause,
+  Play,
   Radio,
   SkipForward
 } from 'lucide-vue-next'

@@ -39,8 +39,14 @@
           <small>{{ currentTrack.artist }}</small>
         </div>
         <div class="track-summary__actions">
-          <button class="track-action-button" type="button" aria-label="喜欢">
-            <Heart :size="25" />
+          <button
+            class="track-action-button"
+            type="button"
+            :class="{ active: currentTrackLiked }"
+            :aria-label="currentTrackLiked ? '取消喜欢' : '喜欢'"
+            @click="toggleCurrentTrackLike"
+          >
+            <Heart :size="25" :fill="currentTrackLiked ? 'currentColor' : 'none'" />
           </button>
           <button
             class="track-action-button track-action-button--comment"
@@ -273,7 +279,9 @@ import SongListRow from './SongListRow.vue'
 import { STORAGE_KEYS } from '../config/app'
 import { useThemeStore } from '../stores/theme'
 import { usePlayerStore } from '../stores/player'
-import { getSongCommentsData, getTrackLyricData } from '../services/netease'
+import { useLibraryStore } from '../stores/library'
+import { useAuthStore } from '../stores/auth'
+import { getSongCommentsData, getTrackLyricData, updateSongLikeStateData } from '../services/netease'
 import { useSongComments } from '../composables/useSongComments'
 import { readStorage, writeStorage } from '../utils/storage'
 import { formatTime } from '../utils/time'
@@ -283,6 +291,8 @@ const CommentModal = defineAsyncComponent(() => import('./CommentModal.vue'))
 const FullScreenPlayer = defineAsyncComponent(() => import('./FullScreenPlayer.vue'))
 const theme = useThemeStore()
 const player = usePlayerStore()
+const library = useLibraryStore()
+const auth = useAuthStore()
 const message = useMessage()
 const fallbackFullPlayerVisualizerMode = 'halo'
 const validFullPlayerVisualizerModes = new Set(['halo', 'breath', 'trails', 'needle', 'particles'])
@@ -358,6 +368,7 @@ const activeVisualizerMode = computed(() =>
   visualizerModes.find((mode) => mode.value === fullPlayerVisualizerMode.value) ?? visualizerModes[0]
 )
 const currentTrack = computed(() => player.state.currentTrack)
+const currentTrackLiked = computed(() => library.isTrackLiked(currentTrack.value))
 const songCommentState = useSongComments({
   track: currentTrack,
   getFallbackTotal: (track) => Number(track?.commentCount) || 0,
@@ -649,6 +660,29 @@ async function openSongCommentsModal() {
   songCommentsModalVisible.value = true
   closePlayerPopovers()
   await songCommentState.open(currentTrack.value)
+}
+
+async function toggleCurrentTrackLike() {
+  if (!currentTrack.value?.id) {
+    return
+  }
+
+  const liked = library.toggleLikedTrack(currentTrack.value)
+
+  if (auth.userId.value && isNeteaseTrackId(currentTrack.value.id)) {
+    try {
+      await updateSongLikeStateData({
+        id: currentTrack.value.id,
+        uid: auth.userId.value,
+        like: liked
+      })
+    } catch (error) {
+      console.warn('Failed to sync current track like state:', error)
+      message.warning('云端喜欢状态同步失败，已保留本地记录')
+    }
+  }
+
+  message.success(liked ? '已添加到我喜欢的音乐' : '已取消喜欢')
 }
 
 function loadMoreSongComments() {

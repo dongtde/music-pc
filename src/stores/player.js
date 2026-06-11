@@ -2,6 +2,7 @@ import { reactive } from 'vue'
 import { getSongUrl } from '../api/modules/netease'
 import { STORAGE_KEYS } from '../config/app'
 import { currentTrack as fallbackTrack, newSongs } from '../data/music'
+import { useLibraryStore } from './library'
 import { readJsonStorage, writeJsonStorage } from '../utils/storage'
 import { clampTime, formatTime, parseDuration, toFiniteNumber } from '../utils/time'
 
@@ -76,8 +77,7 @@ export function usePlayerStore() {
     state.error = null
 
     try {
-      const response = await getSongUrl({ id: track.id, level: 'standard' })
-      const songUrl = response.data?.[0]?.url
+      const songUrl = await resolvePlaybackUrl(track)
 
       if (!songUrl) {
         throw new Error('当前歌曲暂无可播放链接')
@@ -91,6 +91,7 @@ export function usePlayerStore() {
       audio.currentTime = 0
       await audio.play()
       persistPlaybackSnapshot()
+      useLibraryStore().addRecentTrack(state.currentTrack)
       return true
     } catch (error) {
       state.error = error
@@ -190,6 +191,19 @@ export function usePlayerStore() {
     seekTo,
     onTrackEnded
   }
+}
+
+async function resolvePlaybackUrl(track) {
+  if (track.localUrl) {
+    return track.localUrl
+  }
+
+  if (String(track.id).startsWith('local-')) {
+    throw new Error('本地文件需要重新导入后播放')
+  }
+
+  const response = await getSongUrl({ id: track.id, level: 'standard' })
+  return response.data?.[0]?.url || ''
 }
 
 function notifyTrackEnded() {
@@ -302,7 +316,11 @@ function serializeTrack(track) {
     time: track.time,
     duration: track.duration,
     coverUrl: track.coverUrl,
+    thumbnailUrl: track.thumbnailUrl,
     coverPalette: track.coverPalette,
+    source: track.source,
+    artistId: track.artistId,
+    albumId: track.albumId,
     likedCount: track.likedCount,
     likedCountLabel: track.likedCountLabel,
     commentCount: track.commentCount,

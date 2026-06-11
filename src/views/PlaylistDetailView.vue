@@ -108,6 +108,7 @@
               <span>{{ isPlaying ? '暂停播放' : '播放全部' }}</span>
             </button>
             <button
+              v-if="isRemotePlaylist"
               class="playlist-action"
               type="button"
               :disabled="commentsLoading && !comments.length"
@@ -199,6 +200,7 @@ import { SKELETON_MIN_MS } from '../config/app';
 import { useLoadMoreTrigger } from '../composables/useLoadMoreTrigger';
 import { usePaginatedComments } from '../composables/usePaginatedComments';
 import { useQueuePlayback } from '../composables/useQueuePlayback';
+import { useLibraryStore } from '../stores/library';
 import { waitForMinimumDelay } from '../utils/time';
 import '../styles/playlist.css';
 
@@ -209,6 +211,7 @@ const VIRTUAL_OVERSCAN_ROWS = 8;
 
 const route = useRoute();
 const message = useMessage();
+const library = useLibraryStore();
 
 const pageRoot = ref(null);
 const remotePlaylist = ref(null);
@@ -274,8 +277,9 @@ const commentTotal = commentState.displayTotal;
 const commentsHasMore = commentState.hasMore;
 const commentsLoading = commentState.loading;
 const commentsError = commentState.error;
+const isRemotePlaylist = computed(() => /^\d+$/.test(String(route.params.id ?? '')));
 const showTrackLoadMore = computed(
-  () => trackHasMore.value || trackLoading.value || Boolean(trackError.value),
+  () => isRemotePlaylist.value && (trackHasMore.value || trackLoading.value || Boolean(trackError.value)),
 );
 
 const {
@@ -318,7 +322,7 @@ watch(
   (id) => {
     loadPlaylistDetail(id);
     commentState.reset();
-    if (commentsModalVisible.value) {
+    if (commentsModalVisible.value && /^\d+$/.test(String(id ?? ''))) {
       commentState.load(id, { reset: true });
     }
   },
@@ -345,15 +349,14 @@ async function loadPlaylistDetail(id) {
   errorMessage.value = '';
   resetTrackLoadingState();
 
-  if (!/^\d+$/.test(String(id ?? ''))) {
-    errorMessage.value = '歌单 ID 不正确';
-    isLoading.value = false;
-    return;
-  }
-
   isLoading.value = true;
 
   try {
+    if (!/^\d+$/.test(String(id ?? ''))) {
+      loadLocalPlaylist(id);
+      return;
+    }
+
     const data = await getPlaylistOverviewData(id, {
       trackLimit: PLAYLIST_INITIAL_TRACK_LIMIT,
     });
@@ -388,6 +391,48 @@ async function loadPlaylistDetail(id) {
       });
     }
   }
+}
+
+function loadLocalPlaylist(id) {
+  const localPlaylist = library.getPlaylist(id);
+
+  if (!localPlaylist) {
+    errorMessage.value = '歌单不存在';
+    remotePlaylist.value = {
+      id,
+      title: '歌单不存在',
+      description: '没有找到这个本地歌单',
+      creator: '本地资料库',
+      creatorAvatarUrl: '',
+      updated: '',
+      trackCount: 0,
+      listeners: '0',
+      commentCount: 0,
+      tags: [],
+      type: 'sunset',
+      coverUrl: ''
+    };
+    remoteTracks.value = [];
+    return;
+  }
+
+  remotePlaylist.value = {
+    id: localPlaylist.id,
+    title: localPlaylist.title,
+    description: localPlaylist.description || '本地创建或收藏的歌单',
+    creator: localPlaylist.collectedAt ? '收藏的歌单' : '本地创建',
+    creatorAvatarUrl: '',
+    updated: formatLocalDate(localPlaylist.updatedAt),
+    trackCount: localPlaylist.tracks.length,
+    listeners: '0',
+    commentCount: 0,
+    tags: localPlaylist.collectedAt ? ['收藏'] : ['创建'],
+    type: 'lofi',
+    coverUrl: ''
+  };
+  remoteTracks.value = getUniqueTracks(localPlaylist.tracks);
+  syncTrackHasMore();
+  nextTick(updateVirtualRange);
 }
 
 async function loadMoreTracks({ force = false, token = playlistLoadToken } = {}) {
@@ -599,7 +644,25 @@ function loadMoreComments() {
 }
 
 function openCommentsModal() {
+  if (!isRemotePlaylist.value) {
+    return null;
+  }
+
   return commentState.open(route.params.id);
+}
+
+function formatLocalDate(value) {
+  if (!value) {
+    return '';
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 </script>

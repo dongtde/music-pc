@@ -5,6 +5,7 @@ export const API_CONFIG = {
 
 export const STORAGE_KEYS = {
   neteaseCookie: 'mappic:netease-cookie',
+  libraryData: 'mappic:library:data',
   playerSnapshot: 'mappic:player:last-track',
   themePreferences: 'mappic-theme-preferences',
   searchHistory: 'mappic.searchHistory',
@@ -24,4 +25,3 @@ export const DEFAULT_COUNTRY_CODE = '86'
 export const DEFAULT_COMMENT_LIMIT = 30
 export const SKELETON_MIN_MS = 360
 export const COVER_TYPES = ['sunset', 'neon', 'lofi', 'stage', 'piano']
-

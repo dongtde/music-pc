@@ -67,7 +67,7 @@ const routes = [
   {
     path: '/library/:type',
     name: 'library',
-    component: () => import('../views/SimpleView.vue'),
+    component: () => import('../views/LibraryView.vue'),
     meta: { title: '我的音乐', icon: 'Music' }
   },
   {

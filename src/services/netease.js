@@ -68,6 +68,7 @@ import {
   getPlaylistHotCategories,
   getPlaylistComments,
   getPlaylistTracks,
+  getSongDownloadList,
   getSearchDefault,
   getSearchHotDetail,
   getSearchMultiMatch,
@@ -90,6 +91,8 @@ import {
   getToplist,
   getTopPlaylists,
   getTopAlbums,
+  getUserCollectedPlaylists,
+  getUserCreatedPlaylists,
   getUgcMv,
   likeResource,
   searchVoiceListPrograms,
@@ -709,6 +712,36 @@ export async function getPlaylistTracksData({ id, limit = 100, offset = 0 }) {
       }
     }
   )
+}
+
+export async function getUserPlaylistLibraryData(uid, { limit = 100, offset = 0 } = {}) {
+  const userId = String(uid ?? '')
+
+  if (!userId) {
+    return {
+      createdPlaylists: [],
+      collectedPlaylists: []
+    }
+  }
+
+  const [createdResponse, collectedResponse] = await Promise.all([
+    getUserCreatedPlaylists({ uid: userId, limit, offset, timestamp: Date.now() }).catch(() => ({})),
+    getUserCollectedPlaylists({ uid: userId, limit, offset, timestamp: Date.now() }).catch(() => ({}))
+  ])
+
+  return {
+    createdPlaylists: mapUserPlaylists(createdResponse.playlist ?? createdResponse.playlists),
+    collectedPlaylists: mapUserPlaylists(collectedResponse.playlist ?? collectedResponse.playlists)
+  }
+}
+
+export async function getDownloadedSongsData({ limit = 50, offset = 0 } = {}) {
+  const response = await getSongDownloadList({ limit, offset, timestamp: Date.now() })
+  const songs = response.data?.list ?? response.list ?? response.songs ?? []
+
+  return Array.isArray(songs)
+    ? songs.map((item, index) => mapPlaylistTrack(item.song ?? item, offset + index))
+    : []
 }
 
 export async function getTrackLyricData(id) {
@@ -1953,6 +1986,22 @@ function mapPlaylistDetail(playlist) {
     type: coverType(Number(playlist.id) || 0),
     coverUrl: resizeNeteaseImage(playlist.coverImgUrl, 480)
   }
+}
+
+function mapUserPlaylists(playlists = []) {
+  return Array.isArray(playlists)
+    ? playlists.map((playlist) => ({
+      id: playlist.id,
+      title: playlist.name || '未命名歌单',
+      description: playlist.description || playlist.copywriter || '',
+      trackIds: [],
+      remote: true,
+      coverUrl: resizeNeteaseImage(playlist.coverImgUrl || playlist.picUrl, 120),
+      trackCount: playlist.trackCount ?? 0,
+      updatedAt: playlist.updateTime || playlist.createTime || Date.now(),
+      collectedAt: playlist.subscribed ? playlist.updateTime || Date.now() : 0
+    }))
+    : []
 }
 
 function mapPlaylistTrack(song, index) {

@@ -299,6 +299,18 @@ export function updateSongLike(params = {}) {
   return getNetease('/song/like', params)
 }
 
+export function getUserCreatedPlaylists(params = {}) {
+  return getNetease('/user/playlist/create', params)
+}
+
+export function getUserCollectedPlaylists(params = {}) {
+  return getNetease('/user/playlist/collect', params)
+}
+
+export function getSongDownloadList(params = {}) {
+  return getNetease('/song/downlist', params)
+}
+
 export function getPlaylistDetail(params = {}) {
   return getNetease('/playlist/detail', params)
 }

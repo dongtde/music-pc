@@ -28,7 +28,15 @@
       <section v-for="group in sidebarGroups" :key="group.title" class="nav-group">
         <div class="nav-title">
           <span>{{ group.title }}</span>
-          <button v-if="group.action" class="mini-action" type="button">{{ group.action }}</button>
+          <button
+            v-if="group.action"
+            class="mini-action"
+            type="button"
+            :aria-label="group.actionLabel || group.action"
+            @click="handleGroupAction(group)"
+          >
+            {{ group.action }}
+          </button>
         </div>
         <router-link
           v-for="item in group.items"
@@ -50,6 +58,7 @@
 
 <script setup>
 import { useRoute } from 'vue-router'
+import { computed, watch } from 'vue'
 import {
   ChevronRight,
   CloudDownload,
@@ -64,8 +73,9 @@ import {
   Users,
   Video
 } from 'lucide-vue-next'
-import { sidebarGroups } from '../data/music'
 import { useAuthStore } from '../stores/auth'
+import { useLibraryStore } from '../stores/library'
+import { getUserPlaylistLibraryData } from '../services/netease'
 
 defineProps({
   compact: {
@@ -76,11 +86,100 @@ defineProps({
 
 const route = useRoute()
 const auth = useAuthStore()
+const library = useLibraryStore()
 const displayName = auth.displayName
 const avatarUrl = auth.avatarUrl
 const icons = { CloudDownload, Compass, Heart, History, House, MicVocal, Music2, Radio, Users, Video }
+const sidebarGroups = computed(() => [
+  {
+    title: '发现',
+    items: [
+      { label: '发现音乐', to: '/home', icon: 'House' },
+      {
+        label: '音乐厅',
+        to: '/discover/recommend',
+        icon: 'Compass',
+        activeMatch: '/discover'
+      },
+      { label: '播客', to: '/podcast', icon: 'MicVocal', activeMatch: '/podcast' },
+      { label: '视频', to: '/mv', icon: 'Video' },
+      { label: '朋友', to: '/friends', icon: 'Users' }
+    ]
+  },
+  {
+    title: '我的音乐',
+    items: [
+      { label: '本地与下载', to: '/library/local', icon: 'CloudDownload' },
+      { label: '最近播放', to: '/library/recent', icon: 'History' },
+      {
+        label: '我喜欢的音乐',
+        to: '/library/liked',
+        icon: 'Heart',
+        badge: formatBadge(library.likedCount.value)
+      }
+    ]
+  },
+  {
+    title: '创建的歌单',
+    action: '+',
+    actionLabel: '新建歌单',
+    type: 'created',
+    items: library.state.createdPlaylists.map((playlist) => ({
+      label: playlist.title,
+      to: `/playlist/${playlist.id}`,
+      icon: 'Music2'
+    }))
+  },
+  {
+    title: '收藏的歌单',
+    items: library.state.collectedPlaylists.map((playlist) => ({
+      label: playlist.title,
+      to: `/playlist/${playlist.id}`,
+      icon: 'Music2'
+    }))
+  }
+])
+
+watch(
+  () => auth.userId.value,
+  (uid) => {
+    syncRemotePlaylists(uid)
+  },
+  { immediate: true }
+)
 
 function isActive(item) {
   return item.activeMatch ? route.path.startsWith(item.activeMatch) : route.path === item.to
+}
+
+function handleGroupAction(group) {
+  if (group.type !== 'created') {
+    return
+  }
+
+  const title = window.prompt('新建歌单名称')
+
+  if (!title?.trim()) {
+    return
+  }
+
+  library.createPlaylist(title)
+}
+
+function formatBadge(value) {
+  return Number(value || 0).toLocaleString('en-US')
+}
+
+async function syncRemotePlaylists(uid) {
+  if (!uid) {
+    return
+  }
+
+  try {
+    const data = await getUserPlaylistLibraryData(uid)
+    library.mergeRemotePlaylists(data)
+  } catch (error) {
+    console.warn('Failed to sync user playlists:', error)
+  }
 }
 </script>
