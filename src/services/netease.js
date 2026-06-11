@@ -641,34 +641,74 @@ export async function toggleMvLikeData({ id, like }) {
 
 export async function getPlaylistDetailData(id) {
   return getCachedData(cacheKey('playlist-detail', { id }), CACHE_TTL.playlistDetail, async () => {
-  const detailResponse = await getPlaylistDetail({ id })
-  const rawPlaylist = detailResponse.playlist
+    const detailResponse = await getPlaylistDetail({ id })
+    const rawPlaylist = detailResponse.playlist
 
-  if (!rawPlaylist) {
-    throw new Error('Playlist detail is empty')
-  }
-
-  let tracks = rawPlaylist.tracks ?? []
-
-  try {
-    const trackResponse = await getPlaylistTracks({
-      id,
-      limit: rawPlaylist.trackCount || 1000,
-      offset: 0
-    })
-
-    if (Array.isArray(trackResponse.songs) && trackResponse.songs.length) {
-      tracks = trackResponse.songs
+    if (!rawPlaylist) {
+      throw new Error('Playlist detail is empty')
     }
-  } catch (error) {
-    console.warn('Failed to load full playlist tracks:', error)
-  }
 
-  return {
-    playlist: mapPlaylistDetail(rawPlaylist),
-    tracks: tracks.map(mapPlaylistTrack)
-  }
+    let tracks = rawPlaylist.tracks ?? []
+
+    try {
+      const trackResponse = await getPlaylistTracks({
+        id,
+        limit: rawPlaylist.trackCount || 1000,
+        offset: 0
+      })
+
+      if (Array.isArray(trackResponse.songs) && trackResponse.songs.length) {
+        tracks = trackResponse.songs
+      }
+    } catch (error) {
+      console.warn('Failed to load full playlist tracks:', error)
+    }
+
+    return {
+      playlist: mapPlaylistDetail(rawPlaylist),
+      tracks: tracks.map(mapPlaylistTrack)
+    }
   })
+}
+
+export async function getPlaylistOverviewData(id, { trackLimit = 60 } = {}) {
+  return getCachedData(
+    cacheKey('playlist-overview', { id, trackLimit }),
+    CACHE_TTL.playlistDetail,
+    async () => {
+      const detailResponse = await getPlaylistDetail({ id })
+      const rawPlaylist = detailResponse.playlist
+
+      if (!rawPlaylist) {
+        throw new Error('Playlist detail is empty')
+      }
+
+      const tracks = Array.isArray(rawPlaylist.tracks)
+        ? rawPlaylist.tracks.slice(0, trackLimit)
+        : []
+
+      return {
+        playlist: mapPlaylistDetail(rawPlaylist),
+        tracks: tracks.map(mapPlaylistTrack)
+      }
+    }
+  )
+}
+
+export async function getPlaylistTracksData({ id, limit = 100, offset = 0 }) {
+  return getCachedData(
+    cacheKey('playlist-tracks', { id, limit, offset }),
+    CACHE_TTL.playlistDetail,
+    async () => {
+      const response = await getPlaylistTracks({ id, limit, offset })
+      const songs = Array.isArray(response.songs) ? response.songs : []
+
+      return {
+        tracks: songs.map((song, index) => mapPlaylistTrack(song, offset + index)),
+        more: songs.length >= limit
+      }
+    }
+  )
 }
 
 export async function getTrackLyricData(id) {
@@ -1904,13 +1944,14 @@ function mapPlaylistDetail(playlist) {
     title: playlist.name,
     description: playlist.description || playlist.copywriter || '这个歌单暂时没有简介',
     creator: creator.nickname || '网易云音乐用户',
-    creatorAvatarUrl: creator.avatarUrl,
+    creatorAvatarUrl: resizeNeteaseImage(creator.avatarUrl, 80),
     updated: formatDate(playlist.updateTime),
     trackCount: playlist.trackCount ?? playlist.tracks?.length ?? 0,
     listeners: formatPlayCount(playlist.playCount),
+    commentCount: playlist.commentCount ?? 0,
     tags: playlist.tags ?? [],
     type: coverType(Number(playlist.id) || 0),
-    coverUrl: playlist.coverImgUrl
+    coverUrl: resizeNeteaseImage(playlist.coverImgUrl, 480)
   }
 }
 
@@ -1931,6 +1972,7 @@ function mapPlaylistTrack(song, index) {
     type: coverType(index),
     time: formatDuration(song.dt ?? song.duration),
     coverUrl: album.picUrl,
+    thumbnailUrl: resizeNeteaseImage(album.picUrl, 96),
     to: `/playlist/song-${song.id}`,
     vip: Boolean(song.fee && song.fee !== 0),
     hasVideo: Boolean(song.mv),

@@ -12,7 +12,7 @@
         <img
           v-if="track.coverUrl"
           class="song-list-row__cover-image"
-          :src="track.coverUrl"
+          :src="track.thumbnailUrl || track.coverUrl"
           :alt="track.name"
           loading="lazy"
           decoding="async"
