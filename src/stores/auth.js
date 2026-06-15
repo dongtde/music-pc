@@ -13,7 +13,13 @@ import {
   sendCaptcha
 } from '../api/modules/netease'
 import { DEFAULT_COUNTRY_CODE, STORAGE_KEYS } from '../config/app'
-import { readStorage, writeStorage } from '../utils/storage'
+import { readJsonStorage, readStorage, writeJsonStorage, writeStorage } from '../utils/storage'
+
+const storedCookie = readStoredCookie()
+const storedSession = readStoredSession(storedCookie)
+const initialSession = storedSession.profile || storedSession.account
+  ? storedSession
+  : createSessionFromCookie(storedCookie)
 
 const state = reactive({
   initialized: false,
@@ -21,11 +27,11 @@ const state = reactive({
   formLoading: false,
   captchaLoading: false,
   loginModalVisible: false,
-  isLoggedIn: false,
-  loginType: '',
-  account: null,
-  profile: null,
-  cookie: readStoredCookie(),
+  isLoggedIn: Boolean(storedCookie && (initialSession.profile || initialSession.account)),
+  loginType: storedCookie ? initialSession.loginType : '',
+  account: storedCookie ? initialSession.account : null,
+  profile: storedCookie ? initialSession.profile : null,
+  cookie: storedCookie,
   error: '',
   notice: '',
   qr: {
@@ -54,21 +60,21 @@ export function useAuthStore() {
     state.error = ''
 
     try {
-      await refreshLoginStatus()
+      await refreshLoginStatus({ preserveCurrent: state.isLoggedIn })
     } finally {
       state.initialized = true
       state.loading = false
     }
   }
 
-  async function refreshLoginStatus() {
+  async function refreshLoginStatus({ preserveCurrent = false } = {}) {
     if (!state.cookie) {
       clearAccountState(false)
       return false
     }
 
     try {
-      const response = await getLoginStatus({ timestamp: Date.now() })
+      const response = await getLoginStatus(createAuthRequestParams({ timestamp: Date.now() }))
       const data = response.data ?? response
       const profile = response.profile ?? data.profile ?? null
       const account = response.account ?? data.account ?? null
@@ -78,21 +84,21 @@ export function useAuthStore() {
         return true
       }
 
-      return await loadUserAccount()
+      return await loadUserAccount({ preserveCurrent })
     } catch (error) {
       console.warn('Failed to refresh login status:', error)
-      return await loadUserAccount()
+      return await loadUserAccount({ preserveCurrent })
     }
   }
 
-  async function loadUserAccount() {
+  async function loadUserAccount({ preserveCurrent = false } = {}) {
     if (!state.cookie) {
       clearAccountState(false)
       return false
     }
 
     try {
-      const response = await getUserAccount({ timestamp: Date.now() })
+      const response = await getUserAccount(createAuthRequestParams({ timestamp: Date.now() }))
 
       if (response.profile || response.account) {
         setAccountState({
@@ -106,7 +112,10 @@ export function useAuthStore() {
       console.warn('Failed to load user account:', error)
     }
 
-    clearAccountState(false)
+    if (!preserveCurrent) {
+      clearAccountState(false)
+    }
+
     return false
   }
 
@@ -350,7 +359,7 @@ export function useAuthStore() {
       const loggedIn = await refreshLoginStatus()
 
       if (!loggedIn) {
-        saveCookie('')
+        clearAccountState(true)
         setError('Cookie 无法获取账号信息')
         return false
       }
@@ -359,7 +368,7 @@ export function useAuthStore() {
       return true
     } catch (error) {
       console.warn('Failed to login with cookie:', error)
-      saveCookie('')
+      clearAccountState(true)
       setError(error?.message || 'Cookie 登录失败')
       return false
     } finally {
@@ -373,13 +382,14 @@ export function useAuthStore() {
     state.notice = ''
 
     try {
-      const response = await refreshLogin({ timestamp: Date.now() })
+      const response = await refreshLogin(createAuthRequestParams({ timestamp: Date.now() }))
 
       if (response.cookie) {
-        saveCookie(response.cookie)
+        saveCookie(mergeCookie(state.cookie, response.cookie))
+        saveSession()
       }
 
-      const refreshed = await refreshLoginStatus()
+      const refreshed = await refreshLoginStatus({ preserveCurrent: true })
       state.notice = refreshed ? '登录状态已刷新' : '当前登录已失效'
       return refreshed
     } catch (error) {
@@ -395,7 +405,7 @@ export function useAuthStore() {
     state.loading = true
 
     try {
-      await requestLogout({ timestamp: Date.now() })
+      await requestLogout(createAuthRequestParams({ timestamp: Date.now() }))
     } catch (error) {
       console.warn('Failed to logout:', error)
     } finally {
@@ -445,6 +455,7 @@ function setAccountState({ profile, account, loginType }) {
   state.isLoggedIn = Boolean(profile || account)
   state.loginType = state.isLoggedIn ? loginType || 'account' : ''
   state.error = ''
+  saveSession()
 }
 
 function clearAccountState(clearCookie) {
@@ -458,6 +469,8 @@ function clearAccountState(clearCookie) {
   if (clearCookie) {
     saveCookie('')
   }
+
+  clearSession()
 }
 
 function resetQr() {
@@ -487,7 +500,7 @@ async function completeLogin(response, loginType) {
     return true
   }
 
-  return await refreshLoginStatus()
+  return await refreshLoginStatus({ preserveCurrent: state.isLoggedIn })
 }
 
 function setError(message) {
@@ -501,6 +514,123 @@ function normalizeCountryCode(value) {
 
 function readStoredCookie() {
   return readStorage(STORAGE_KEYS.neteaseCookie, '')
+}
+
+function readStoredSession(cookie) {
+  const session = readJsonStorage(STORAGE_KEYS.neteaseSession, {})
+
+  if (!session || typeof session !== 'object' || session.cookie !== cookie) {
+    return {}
+  }
+
+  return {
+    account: session.account ?? null,
+    profile: session.profile ?? null,
+    loginType: session.loginType || 'account'
+  }
+}
+
+function createSessionFromCookie(cookie) {
+  if (!cookie) {
+    return {}
+  }
+
+  const cookieValues = parseCookie(cookie)
+
+  if (cookieValues.userid) {
+    return {
+      account: {
+        id: cookieValues.userid,
+        userName: '酷狗账号'
+      },
+      profile: {
+        userId: cookieValues.userid,
+        nickname: '酷狗账号',
+        avatarUrl: ''
+      },
+      loginType: 'account'
+    }
+  }
+
+  if (cookieValues.dfid) {
+    return {
+      account: null,
+      profile: {
+        userId: 'guest',
+        nickname: '游客账号',
+        avatarUrl: ''
+      },
+      loginType: 'guest'
+    }
+  }
+
+  return {}
+}
+
+function saveSession() {
+  if (!state.cookie || (!state.profile && !state.account)) {
+    clearSession()
+    return
+  }
+
+  writeJsonStorage(STORAGE_KEYS.neteaseSession, {
+    cookie: state.cookie,
+    account: state.account,
+    profile: state.profile,
+    loginType: state.loginType || 'account',
+    savedAt: Date.now()
+  })
+}
+
+function clearSession() {
+  writeJsonStorage(STORAGE_KEYS.neteaseSession, null)
+}
+
+function createAuthRequestParams(params = {}) {
+  const cookieValues = parseCookie(state.cookie)
+  const fallbackUserId = state.profile?.userId || state.account?.id || ''
+
+  return {
+    ...params,
+    token: params.token ?? cookieValues.token,
+    userid: params.userid ?? cookieValues.userid ?? fallbackUserId,
+    dfid: params.dfid ?? cookieValues.dfid
+  }
+}
+
+function parseCookie(cookie = '') {
+  return String(cookie)
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce((values, part) => {
+      const separatorIndex = part.indexOf('=')
+
+      if (separatorIndex === -1) {
+        return values
+      }
+
+      const key = part.slice(0, separatorIndex).trim()
+      const value = part.slice(separatorIndex + 1).trim()
+
+      if (key && value) {
+        values[key] = value
+      }
+
+      return values
+    }, {})
+}
+
+function mergeCookie(currentCookie = '', nextCookie = '') {
+  const values = {
+    ...parseCookie(currentCookie),
+    ...parseCookie(nextCookie)
+  }
+
+  return Object.entries(values)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => `${key}=${value}`)
+    .join(';')
 }
 
 function normalizeQrImage(value) {

@@ -47,9 +47,9 @@
           v-for="board in boards"
           :key="board.id"
           class="chart-summary-card"
-          :class="{ 'is-playing': playingChartId === board.id }"
+          :class="{ 'is-playing': playingChartId === String(board.id) }"
         >
-          <router-link :to="`/playlist/${board.id}`" class="chart-summary-card__link">
+          <router-link :to="getChartDetailTarget(board)" class="chart-summary-card__link">
             <span class="chart-summary-card__cover">
               <img
                 v-if="board.coverUrl"
@@ -93,10 +93,10 @@
             v-for="chart in section.items"
             :key="chart.id"
             class="region-chart-card"
-            :class="{ 'is-playing': playingChartId === chart.id }"
+            :class="{ 'is-playing': playingChartId === String(chart.id) }"
           >
             <router-link
-              :to="`/playlist/${chart.id}`"
+              :to="getChartDetailTarget(chart)"
               class="region-chart-card__link"
               :aria-label="chart.title"
             >
@@ -220,18 +220,41 @@ async function resolveChartTracks(chart) {
     return []
   }
 
-  if (Array.isArray(chart.tracks) && chart.tracks.length) {
-    return chart.tracks.filter((track) => track?.id)
+  const previewTracks = Array.isArray(chart.tracks)
+    ? chart.tracks.filter((track) => track?.id)
+    : []
+  const expectedTrackCount = Number(chart?.trackCount) || 0
+
+  if (previewTracks.length && expectedTrackCount > 0 && previewTracks.length >= expectedTrackCount) {
+    return previewTracks
   }
 
   if (chartTrackCache.has(chartId)) {
     return chartTrackCache.get(chartId)
   }
 
-  const detail = await getPlaylistDetailData(chartId)
-  const tracks = (detail.tracks ?? []).filter((track) => track?.id)
+  let tracks = []
+
+  try {
+    const detail = await getPlaylistDetailData(chartId)
+    tracks = (detail.tracks ?? []).filter((track) => track?.id)
+  } catch (loadError) {
+    if (previewTracks.length) {
+      return previewTracks
+    }
+
+    throw loadError
+  }
 
   chartTrackCache.set(chartId, tracks)
   return tracks
+}
+
+function getChartDetailTarget(chart) {
+  const id = String(chart?.id ?? '')
+
+  return id
+    ? { name: 'playlist', params: { id } }
+    : { name: 'discover', params: { tab: 'charts' } }
 }
 </script>

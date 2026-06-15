@@ -74,7 +74,7 @@ function normalizeParams(path, params) {
       const knownSong = getKnownSong(normalized.id)
       normalized.hash = normalized.hash || knownSong?.hash || hashFromId(normalized.id)
       delete normalized.id
-    } else if (path === '/rank/audio') {
+    } else if (path === '/rank/audio' || path === '/rank/info') {
       normalized.rankid ??= normalized.id
       delete normalized.id
     } else if (path === '/youth/channel/detail' || path === '/youth/channel/song') {
@@ -226,33 +226,65 @@ function normalizeArtistName(song = {}) {
 }
 
 function normalizeSongName(song = {}) {
-  const file = splitFilename(song.filename || song.name || song.songname)
+  const source = song.filename || song.songname || song.name
+  const file = splitFilename(source)
+  const plainName = song.name && !splitFilename(song.name).artist ? song.name : ''
 
-  return song.songname || file.name || song.name || song.remark || '未知歌曲'
+  return plainName || file.name || song.songname || song.name || song.remark || '未知歌曲'
 }
 
 function normalizeSong(song = {}, index = 0) {
   const artistName = normalizeArtistName(song)
   const artistId = song.author_id ?? song.authors?.[0]?.author_id ?? song.singerinfo?.[0]?.id ?? ''
-  const albumId = song.album_id ?? song.albuminfo?.id ?? ''
-  const albumName = song.album_name ?? song.albuminfo?.name ?? song.remark ?? ''
+  const albumId = song.album_id ?? song.albuminfo?.id ?? song.album_info?.album_id ?? ''
+  const albumName = song.album_name ?? song.albuminfo?.name ?? song.album_info?.album_name ?? song.remark ?? ''
   const cover = normalizeKugouImage(
     song.cover ||
       song.album_sizable_cover ||
+      song.album_info?.sizable_cover ||
+      song.album_info?.album_cover ||
       song.imgurl ||
       song.pic ||
+      song.album_cover ||
       song.trans_param?.union_cover,
     480
   )
   const id = song.album_audio_id ?? song.mixsongid ?? song.add_mixsongid ?? song.audio_id ?? song.id ?? song.hash
-  const duration = toMilliseconds(song.timelength ?? song.timelen ?? song.duration ?? song.video_timelength)
-  const mvId = song.video_id || song.mv_id || song.mvid || song.mvhash || song.video_hash || song.mv_hash || ''
+  const duration = toMilliseconds(
+    song.timelength ??
+      song.timelen ??
+      song.duration ??
+      song.audio_info?.duration_128 ??
+      song.audio_info?.duration_320 ??
+      song.audio_info?.duration_high ??
+      song.deprecated?.duration ??
+      song.video_timelength
+  )
+  const mvId =
+    song.video_id ||
+    song.video_info?.video_id ||
+    song.mv_id ||
+    song.mvid ||
+    song.mvhash ||
+    song.video_hash ||
+    song.video_info?.video_hash ||
+    song.mv_hash ||
+    ''
   const normalized = {
     ...song,
     id,
     name: normalizeSongName(song),
     songname: song.songname ?? normalizeSongName(song),
-    hash: song.hash ?? song.file_hash ?? song.audio_hash ?? song.hash_128 ?? song['128hash'] ?? '',
+    hash:
+      song.hash ??
+      song.file_hash ??
+      song.audio_hash ??
+      song.hash_128 ??
+      song['128hash'] ??
+      song.audio_info?.hash_128 ??
+      song.audio_info?.hash_320 ??
+      song.deprecated?.hash ??
+      '',
     album_audio_id: song.album_audio_id ?? song.mixsongid ?? song.add_mixsongid ?? id,
     mixsongid: song.mixsongid ?? song.add_mixsongid ?? song.album_audio_id ?? id,
     audio_id: song.audio_id ?? song.rp_id ?? '',
@@ -400,7 +432,7 @@ function normalizeRank(rank = {}, index = 0) {
     playCount: rank.play_times ?? 0,
     trackCount: rank.extra?.resp?.all_total ?? rank.songinfo?.length ?? 0,
     tracks: firstArray(rank.songinfo).map((song, songIndex) => ({
-      first: song.name || normalizeSongName(song),
+      first: normalizeSongName(song),
       second: song.author || normalizeArtistName(song),
       ...normalizeSong(song, songIndex)
     })),
@@ -614,10 +646,12 @@ function toPlaylistTracksResponse(response = {}, id) {
   }
 }
 
-function toRankTracksResponse(response = {}, id) {
+function toRankTracksResponse(response = {}, id, metaResponse = {}) {
   const data = response.data ?? response
-  const songs = firstArray(data.songs, data.info, data.list, data).map(normalizeSong)
-  const rankInfo = firstObject(data.rankinfo, data.rank_info, data)
+  const meta = metaResponse.data ?? metaResponse
+  const songs = firstArray(data.songlist, data.songs, data.info, data.list, data).map(normalizeSong)
+  const rankInfo = firstObject(data.rankinfo, data.rank_info, meta.rankinfo, meta.rank_info, meta, data)
+  const total = data.total ?? data.count ?? rankInfo.extra?.resp?.all_total ?? songs.length
 
   return {
     ...response,
@@ -625,15 +659,27 @@ function toRankTracksResponse(response = {}, id) {
       id,
       name: data.rankname || rankInfo.rankname || rankInfo.name || '酷狗榜单',
       description: data.intro || rankInfo.intro || '',
+      playCount: data.play_times ?? rankInfo.play_times ?? 0,
+      updateTime: normalizeTimestamp(data.rank_id_publish_date ?? rankInfo.rank_id_publish_date),
+      tags: ['排行榜', rankInfo.update_frequency || data.update_frequency].filter(Boolean),
+      rankCid: data.rank_cid ?? rankInfo.rank_cid ?? '',
+      zone: data.zone ?? rankInfo.zone ?? '',
       coverImgUrl: normalizeKugouImage(
-        data.imgurl || data.img_cover || data.banner_9 || rankInfo.imgurl || rankInfo.img_cover,
+        data.imgurl ||
+          data.img_cover ||
+          data.banner_9 ||
+          data.album_img_9 ||
+          rankInfo.imgurl ||
+          rankInfo.img_cover ||
+          rankInfo.banner_9 ||
+          rankInfo.album_img_9,
         480
       ),
       tracks: songs,
-      trackCount: data.total ?? data.count ?? songs.length
+      trackCount: total
     },
     songs,
-    total: data.total ?? data.count ?? songs.length,
+    total,
     more: Boolean(data.has_next || data.more)
   }
 }
@@ -1069,21 +1115,26 @@ async function loadLyricResponse(searchParams = {}) {
   const lyricResponse = await getKugouRaw('/lyric', {
     id: lyricId,
     accesskey: accessKey,
-    fmt: 'lrc',
+    fmt: 'krc',
     decode: true
   }).catch(() => ({}))
   const lyricData = lyricResponse.data ?? lyricResponse
+  const lyricContent =
+    lyricData.decodeContent ||
+    lyricData.decode_content ||
+    lyricData.krc ||
+    lyricData.lrc ||
+    lyricData.lyric ||
+    decodeBase64Utf8(lyricData.content) ||
+    ''
 
   return {
     ...lyricResponse,
+    krc: {
+      lyric: lyricContent
+    },
     lrc: {
-      lyric:
-        lyricData.decodeContent ||
-        lyricData.decode_content ||
-        lyricData.lrc ||
-        lyricData.lyric ||
-        decodeBase64Utf8(lyricData.content) ||
-        ''
+      lyric: lyricContent
     },
     tlyric: {
       lyric: ''
@@ -1251,9 +1302,22 @@ export const getSongDownloadList = (params = {}) => getKugou('/user/cloud', para
 // Playlists and charts
 export const getPlaylistDetail = (params = {}) => {
   if (/^\d+$/.test(String(params.id ?? ''))) {
-    return getKugou('/rank/audio', { ...params, rankid: params.id }).then((response) =>
-      toRankTracksResponse(response, params.id)
-    )
+    return Promise.all([
+      getKugou('/rank/info', { ...params, rankid: params.id }).catch(() => ({})),
+      getKugou('/rank/list').catch(() => ({})),
+      getKugou('/rank/audio', { ...params, rankid: params.id })
+    ]).then(([infoResponse, listResponse, audioResponse]) => {
+      const infoData = infoResponse.data ?? infoResponse
+      const listRank = firstArray(listResponse.data?.info, listResponse.info, listResponse.data)
+        .find((rank) => String(rank?.rankid ?? rank?.id ?? '') === String(params.id)) ?? {}
+
+      return toRankTracksResponse(audioResponse, params.id, {
+        data: {
+          ...listRank,
+          ...infoData
+        }
+      })
+    })
   }
 
   return getKugou('/playlist/detail', params).then(toPlaylistDetailResponse)

@@ -138,6 +138,7 @@
             variant="full"
             :lines="lyricLines"
             :active-index="playbackLyricIndex"
+            :current-time="player.state.currentTime"
             :playing="player.state.isPlaying"
             :danmaku-active="danmakuActive"
             :breath="visualizerMode === 'breath'"

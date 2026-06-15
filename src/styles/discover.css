@@ -1441,7 +1441,7 @@
   flex: 0 0 100%;
   width: 100%;
   height: auto;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   padding: 0;
   box-sizing: border-box;
@@ -1450,7 +1450,7 @@
 .hero__slide {
   position: relative;
   width: 100%;
-  aspect-ratio: 27 / 10;
+  aspect-ratio: 476 / 173;
   min-width: 0;
   overflow: hidden;
   border-radius: 8px;
@@ -1662,11 +1662,17 @@
 
 .hero__dots {
   position: absolute;
-  right: 28px;
-  bottom: 24px;
+  left: 18px;
+  bottom: 16px;
   z-index: 3;
   display: flex;
   gap: 8px;
+  padding: 5px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.18);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(10px);
 }
 
 .hero__dots button {
@@ -2497,35 +2503,27 @@
 
 .skeleton-hero {
   position: relative;
-  display: flex;
+  display: grid;
   width: 100%;
-  aspect-ratio: 4 / 1;
-  flex-direction: column;
-  justify-content: center;
-  gap: 13px;
-  margin: 34px 0 44px;
-  overflow: hidden;
-  padding: 36px;
-  border-radius: 12px;
-  background:
-    linear-gradient(90deg, rgba(0, 0, 0, 0.22), transparent 54%),
-    var(--skeleton-base);
-  box-shadow: 0 18px 40px var(--shadow-color);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 14px 0 40px;
 }
 
-.skeleton-hero::after {
+.skeleton-hero-card {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 476 / 173;
+  box-shadow: 0 12px 26px var(--shadow-color);
+}
+
+.skeleton-hero-card__tag {
   position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    105deg,
-    transparent 24%,
-    rgba(255, 255, 255, 0.08) 42%,
-    transparent 58%
-  );
-  background-size: 180% 100%;
-  content: '';
-  pointer-events: none;
-  animation: skeleton-shimmer 1500ms ease-in-out infinite;
+  right: 12px;
+  bottom: 10px;
+  width: 76px;
+  height: 22px;
+  border-radius: 4px;
 }
 
 .skeleton-section {
@@ -2582,6 +2580,8 @@
 .skeleton-line,
 .skeleton-pill,
 .skeleton-button,
+.skeleton-hero-card,
+.skeleton-hero-card__tag,
 .skeleton-cover,
 .skeleton-title,
 .skeleton-tabs,
@@ -2803,6 +2803,8 @@
   .skeleton-line,
   .skeleton-pill,
   .skeleton-button,
+  .skeleton-hero-card,
+  .skeleton-hero-card__tag,
   .skeleton-cover,
   .skeleton-title,
   .skeleton-tabs,
@@ -2904,7 +2906,10 @@
 
   .hero__page {
     grid-template-columns: 1fr;
-    grid-template-rows: repeat(3, minmax(0, 1fr));
+  }
+
+  .skeleton-hero {
+    grid-template-columns: 1fr;
   }
 
   .hero__content {

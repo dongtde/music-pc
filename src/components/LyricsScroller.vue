@@ -49,7 +49,19 @@
         :data-lyric-index="line.index"
         @click="selectLyric(line.index)"
       >
-        <span :class="textClass">{{ line.text }}</span>
+        <span :class="textClass">
+          <template v-if="line.words?.length">
+            <span
+              v-for="(word, wordIndex) in line.words"
+              :key="`${line.index}-${wordIndex}-${word.text}`"
+              class="lyric-word"
+              :class="{ active: isWordActive(line, word), sung: isWordSung(line, word) }"
+            >
+              {{ word.text }}
+            </span>
+          </template>
+          <template v-else>{{ line.text }}</template>
+        </span>
         <component
           :is="variant === 'home' ? 'small' : 'span'"
           v-if="line.translation"
@@ -72,6 +84,10 @@ const props = defineProps({
     default: () => []
   },
   activeIndex: {
+    type: Number,
+    default: 0
+  },
+  currentTime: {
     type: Number,
     default: 0
   },
@@ -209,6 +225,41 @@ function getLineClass(line) {
         'full-player__lyric-line': true,
         ...stateClass
       }
+}
+
+function isWordActive(line, word) {
+  if (line.index !== props.activeIndex) {
+    return false
+  }
+
+  const { start, end } = getWordBounds(word)
+
+  return props.currentTime >= start && props.currentTime < end
+}
+
+function isWordSung(line, word) {
+  if (line.index < props.activeIndex) {
+    return true
+  }
+
+  if (line.index !== props.activeIndex) {
+    return false
+  }
+
+  const { end } = getWordBounds(word)
+
+  return props.currentTime >= end
+}
+
+function getWordBounds(word) {
+  const start = Number(word.seconds)
+  const duration = Math.max(0.08, Number(word.duration) || 0)
+
+  return {
+    start,
+    duration,
+    end: start + duration
+  }
 }
 
 function startDrag(event) {

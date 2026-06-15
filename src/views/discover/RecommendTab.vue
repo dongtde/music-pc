@@ -7,11 +7,13 @@
       aria-label="Loading home content"
     >
       <div class="skeleton-hero">
-        <span class="skeleton-pill skeleton-line--tag" />
-        <span class="skeleton-line skeleton-line--hero-title" />
-        <span class="skeleton-line skeleton-line--hero-copy" />
-        <span class="skeleton-line skeleton-line--hero-copy skeleton-line--hero-copy-short" />
-        <span class="skeleton-button" />
+        <article
+          v-for="item in 2"
+          :key="`hero-skeleton-${item}`"
+          class="skeleton-hero-card"
+        >
+          <span class="skeleton-hero-card__tag" />
+        </article>
       </div>
 
       <section class="skeleton-section">
@@ -134,8 +136,8 @@
           class="hero__page"
         >
           <article
-            v-for="slide in page"
-            :key="slide.id"
+            v-for="(slide, slideIndex) in page"
+            :key="`${slide.id}-${pageIndex}-${slideIndex}`"
             class="hero__slide"
             :class="`hero__slide--${slide.tone}`"
             role="button"
@@ -369,7 +371,7 @@ import { usePlayerStore } from '../../stores/player';
 
 const HOME_SKELETON_MIN_MS = 360;
 const RECOMMENDED_SINGLE_DISPLAY_LIMIT = 12;
-const HERO_SLIDES_PER_PAGE = 3;
+const HERO_SLIDES_PER_PAGE = 2;
 const RECOMMEND_CAROUSEL_ROWS = 2;
 const LATEST_CAROUSEL_ROWS = 1;
 const PLAYLIST_CAROUSEL_SMALL_QUERY = '(max-width: 1400px)';
@@ -465,10 +467,17 @@ let heroTimer;
 let playlistCarouselMediaQuery;
 
 function chunkItems(items, size) {
+  const sourceItems = items.filter(Boolean);
   const chunks = [];
 
-  for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size));
+  for (let index = 0; index < sourceItems.length; index += size) {
+    const page = sourceItems.slice(index, index + size);
+
+    for (let fillIndex = 0; page.length < size; fillIndex += 1) {
+      page.push(sourceItems[fillIndex % sourceItems.length]);
+    }
+
+    chunks.push(page);
   }
 
   return chunks.length ? chunks : [[]];

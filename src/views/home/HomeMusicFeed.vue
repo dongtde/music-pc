@@ -82,6 +82,7 @@
             variant="home"
             :lines="displayLyricLines"
             :active-index="activeLyricIndex"
+            :current-time="player.state.currentTime"
             :loading="isLyricLoading"
             require-seekable
             @seek="seekToLyric"

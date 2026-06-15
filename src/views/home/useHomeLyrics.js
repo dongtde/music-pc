@@ -60,6 +60,7 @@ export function useHomeLyrics({ player }) {
 
   async function getCachedTrackLyrics(track) {
     const cacheKey = [
+      'krc',
       track?.id ?? track ?? '',
       track?.hash ?? '',
       track?.album_audio_id ?? track?.mixsongid ?? ''

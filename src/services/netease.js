@@ -809,9 +809,12 @@ export async function getTrackLyricData(track) {
     : { id: track }
 
   try {
-    return await getCachedData(cacheKey('track-lyric', getTrackLyricCachePayload(params)), CACHE_TTL.lyrics, async () => {
+    return await getCachedData(cacheKey('track-krc-lyric', getTrackLyricCachePayload(params)), CACHE_TTL.lyrics, async () => {
       const response = await getLyric(params)
-      const lines = parseLyricLines(response.lrc?.lyric, response.tlyric?.lyric)
+      const lines = parseLyricLines(
+        response.krc?.lyric ?? response.lrc?.lyric,
+        response.tlyric?.lyric
+      )
 
       if (!lines.length) {
         const error = new Error('NO_LYRIC_LINES')
@@ -1013,17 +1016,10 @@ function getPlaylistCategoryMeta() {
 }
 
 export async function getChartsDiscoveryData() {
-  const toplistResponse = await getToplist()
+  const toplistResponse = await getToplist({ withsong: 1 })
   const toplists = (toplistResponse.list ?? []).map(mapToplist)
   const featured = toplists.slice(0, 6)
-  const detailTargets = featured
-  const detailResponses = await Promise.all(
-    detailTargets.map((board) => getPlaylistDetail({ id: board.id }).catch(() => ({ playlist: null })))
-  )
-  const boards = detailTargets.map((board, index) => ({
-    ...board,
-    tracks: (detailResponses[index].playlist?.tracks ?? []).slice(0, 5).map(mapChartTrack)
-  }))
+  const boards = await hydrateChartPreviewTracks(featured)
 
   return {
     boards,
@@ -1031,6 +1027,30 @@ export async function getChartsDiscoveryData() {
     globalCharts: toplists.slice(6),
     chartSections: groupToplists(toplists.slice(6))
   }
+}
+
+async function hydrateChartPreviewTracks(charts) {
+  const previewResponses = await Promise.all(
+    charts.map((chart) => {
+      if (Array.isArray(chart.tracks) && chart.tracks.length >= 3) {
+        return Promise.resolve(null)
+      }
+
+      return getPlaylistTracks({ id: chart.id, limit: 3, offset: 0 }).catch(() => null)
+    })
+  )
+
+  return charts.map((chart, index) => {
+    const previewSongs = previewResponses[index]?.songs ?? []
+    const tracks = previewSongs.length
+      ? previewSongs.slice(0, 3).map(mapChartTrack)
+      : (chart.tracks ?? []).slice(0, 3)
+
+    return {
+      ...chart,
+      tracks
+    }
+  })
 }
 
 function groupToplists(charts) {
@@ -1890,25 +1910,51 @@ function mapToplist(item, index) {
     listeners: formatPlayCount(item.playCount),
     trackCount: item.trackCount ?? item.tracks?.length ?? 0,
     type: coverType(index),
-    tracks: (item.tracks ?? []).map((track, trackIndex) => ({
-      rank: String(trackIndex + 1).padStart(2, '0'),
-      name: track.first,
-      artist: track.second,
-      change: trackIndex === 0 ? 'HOT' : ''
-    }))
+    tracks: (item.tracks ?? []).slice(0, 3).map(mapChartTrack)
   }
 }
 
 function mapChartTrack(song, index) {
   const artists = song.ar ?? song.artists ?? []
+  const titleSource = [song.name, song.first, song.songname]
+    .find((value) => String(value || '').includes(' - ')) ||
+    song.name ||
+    song.first ||
+    song.songname
+  const parsedTitle = splitChartTrackTitle(titleSource)
+  const explicitArtist =
+    artists.map((artist) => artist.name).filter(Boolean).join(' / ') ||
+    song.second ||
+    song.author ||
+    ''
+  const artist = explicitArtist && explicitArtist !== '未知歌手'
+    ? explicitArtist
+    : parsedTitle.artist || explicitArtist || '未知歌手'
 
   return {
-    id: song.id,
+    id: song.id ?? song.album_audio_id ?? song.mixsongid ?? song.hash ?? '',
     ...getKugouTrackMeta(song),
     rank: String(index + 1).padStart(2, '0'),
-    name: song.name,
-    artist: artists.map((artist) => artist.name).filter(Boolean).join(' / ') || '未知歌手',
+    name: parsedTitle.name || song.first || song.name || song.songname || '未知歌曲',
+    artist,
     change: index === 0 ? 'HOT' : index < 3 ? 'UP' : ''
+  }
+}
+
+function splitChartTrackTitle(value = '') {
+  const text = String(value || '').trim()
+  const [artist, ...nameParts] = text.split(' - ')
+
+  if (!artist || !nameParts.length) {
+    return {
+      artist: '',
+      name: text
+    }
+  }
+
+  return {
+    artist: artist.trim(),
+    name: nameParts.join(' - ').trim()
   }
 }
 
@@ -2879,8 +2925,9 @@ function parseLyricLines(lyric = '', translatedLyric = '') {
   const translatedByTime = new Map(
     translatedLines.map((line) => [line.seconds.toFixed(3), line.text])
   )
+  const lines = isKrcLyric(lyric) ? parseKrc(lyric) : parseLrc(lyric)
 
-  return parseLrc(lyric).map((line) => {
+  return lines.map((line) => {
     const translatedText = translatedByTime.get(line.seconds.toFixed(3))
 
     return {
@@ -2888,6 +2935,72 @@ function parseLyricLines(lyric = '', translatedLyric = '') {
       translation: translatedText && translatedText !== line.text ? translatedText : ''
     }
   })
+}
+
+function isKrcLyric(lyric = '') {
+  return /\[\d+\s*,\s*\d+\]/.test(lyric) && /<\d+\s*,\s*\d+\s*,\s*\d+>/.test(lyric)
+}
+
+function parseKrc(lyric = '') {
+  return lyric
+    .split(/\r?\n/)
+    .flatMap((line) => {
+      const lineMatch = line.match(/^\[(\d+)\s*,\s*(\d+)\]/)
+
+      if (!lineMatch) {
+        return []
+      }
+
+      const startMs = Number(lineMatch[1])
+      const durationMs = Number(lineMatch[2])
+      const payload = line.slice(lineMatch[0].length).trim()
+
+      if (!Number.isFinite(startMs) || !payload || isLyricMetadata(payload)) {
+        return []
+      }
+
+      const words = parseKrcWords(payload, startMs)
+      const text = words.map((word) => word.text).join('').trim()
+
+      if (!text || isLyricMetadata(text)) {
+        return []
+      }
+
+      return {
+        time: formatLyricTime(startMs / 1000),
+        text,
+        seconds: startMs / 1000,
+        duration: Number.isFinite(durationMs) ? durationMs / 1000 : 0,
+        words
+      }
+    })
+    .sort((current, next) => current.seconds - next.seconds)
+}
+
+function parseKrcWords(payload = '', lineStartMs = 0) {
+  const words = []
+  const pattern = /<(\d+)\s*,\s*(\d+)\s*,\s*(\d+)>([^<]*)/g
+  let match
+
+  while ((match = pattern.exec(payload)) !== null) {
+    const offsetMs = Number(match[1])
+    const durationMs = Number(match[2])
+    const text = match[4] ?? ''
+
+    if (!text) {
+      continue
+    }
+
+    const absoluteStartMs = lineStartMs + (Number.isFinite(offsetMs) ? offsetMs : 0)
+
+    words.push({
+      text,
+      seconds: absoluteStartMs / 1000,
+      duration: Number.isFinite(durationMs) ? durationMs / 1000 : 0
+    })
+  }
+
+  return words
 }
 
 function parseLrc(lyric = '') {
