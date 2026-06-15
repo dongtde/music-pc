@@ -430,6 +430,8 @@ function normalizeTrack(track = {}, index = 0) {
 function normalizePlaylist(playlist = {}) {
   return {
     id: playlist.id || createPlaylistId(playlist.title),
+    globalCollectionId: playlist.globalCollectionId || playlist.global_collection_id || '',
+    listid: playlist.listid || playlist.listId || playlist.list_id || '',
     title: playlist.title || '新建歌单',
     description: playlist.description || '',
     trackIds: Array.isArray(playlist.trackIds)

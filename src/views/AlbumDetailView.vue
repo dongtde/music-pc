@@ -20,7 +20,7 @@
         <div class="album-meta">
           <span>{{ album.artist }}</span>
           <span>{{ album.publishTime }}</span>
-          <span>{{ album.company || '网易云音乐' }}</span>
+          <span>{{ album.company || '酷狗音乐' }}</span>
           <span>{{ album.size }} 首歌</span>
         </div>
 
@@ -133,7 +133,7 @@ const album = computed(() =>
     id: route.params.id,
     title: '专辑详情',
     description: '当前专辑暂无本地回退数据',
-    artist: '网易云音乐',
+    artist: '酷狗音乐',
     publishTime: '',
     company: '',
     size: 0,

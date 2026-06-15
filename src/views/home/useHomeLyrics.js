@@ -26,7 +26,8 @@ export function useHomeLyrics({ player }) {
       }))
   )
 
-  async function loadActiveLyrics(trackId) {
+  async function loadActiveLyrics(track) {
+    const trackId = String(track?.id ?? track ?? '')
     lyricRequestId += 1
     const requestId = lyricRequestId
     isLyricLoading.value = false
@@ -40,7 +41,7 @@ export function useHomeLyrics({ player }) {
     isLyricLoading.value = true
 
     try {
-      const lines = await getCachedTrackLyrics(trackId)
+      const lines = await getCachedTrackLyrics(track && typeof track === 'object' ? track : trackId)
 
       if (requestId === lyricRequestId) {
         lyricLines.value = lines
@@ -57,15 +58,19 @@ export function useHomeLyrics({ player }) {
     }
   }
 
-  async function getCachedTrackLyrics(trackId) {
-    const cacheKey = String(trackId)
+  async function getCachedTrackLyrics(track) {
+    const cacheKey = [
+      track?.id ?? track ?? '',
+      track?.hash ?? '',
+      track?.album_audio_id ?? track?.mixsongid ?? ''
+    ].join(':')
     const cachedLyrics = lyricCache.get(cacheKey)
 
     if (cachedLyrics) {
       return cachedLyrics
     }
 
-    const lyricsRequest = loadTrackLyricsWithTimeout(trackId)
+    const lyricsRequest = loadTrackLyricsWithTimeout(track)
       .then((lines) => {
         lyricCache.set(cacheKey, lines)
         return lines
@@ -79,7 +84,7 @@ export function useHomeLyrics({ player }) {
     return lyricsRequest
   }
 
-  function loadTrackLyricsWithTimeout(trackId) {
+  function loadTrackLyricsWithTimeout(track) {
     let timeoutId = 0
 
     const timeout = new Promise((_, reject) => {
@@ -89,7 +94,7 @@ export function useHomeLyrics({ player }) {
     })
 
     return Promise.race([
-      getTrackLyricData(trackId),
+      getTrackLyricData(track),
       timeout
     ]).finally(() => {
       window.clearTimeout(timeoutId)

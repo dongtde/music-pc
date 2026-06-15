@@ -73,11 +73,6 @@ async function playPlaylist() {
     return
   }
 
-  if (!isNeteasePlaylistId(playlistId)) {
-    message.error('这张歌单暂无可播放歌曲')
-    return
-  }
-
   playingPlaylist.value = true
 
   try {
@@ -108,14 +103,13 @@ async function resolvePlaylistTracks(playlistId) {
     return cachedTracks.value
   }
 
-  const detail = await getPlaylistDetailData(playlistId)
+  const detail = await getPlaylistDetailData(playlistId, {
+    listid: props.playlist.listid,
+    fallbackPlaylist: props.playlist
+  })
   const tracks = (detail.tracks ?? []).filter((track) => track?.id)
 
   cachedTracks.value = tracks
   return tracks
-}
-
-function isNeteasePlaylistId(playlistId) {
-  return /^\d+$/.test(String(playlistId ?? ''))
 }
 </script>

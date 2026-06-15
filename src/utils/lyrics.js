@@ -27,5 +27,5 @@ export function findCurrentLyricIndex(lines, currentTime) {
 }
 
 export function isNeteaseTrackId(trackId) {
-  return /^\d+$/.test(String(trackId ?? ''))
+  return /^\d+$/.test(String(trackId ?? '')) || /^[a-f0-9]{32}$/i.test(String(trackId ?? ''))
 }

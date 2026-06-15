@@ -1,502 +1,1366 @@
 import http from '../http'
 
-function getNetease(path, params = {}, config = {}) {
+/**
+ * KuGouMusic API compatibility layer.
+ *
+ * The rest of the application still imports the original function names so the
+ * UI can stay unchanged. Each function below now targets an endpoint documented
+ * in KuGouMusic-API.md and translates the app's existing pagination/id params.
+ */
+
+function getKugou(path, params = {}, config = {}) {
   return http.get(path, {
     ...config,
-    params
+    noCookie: config.noCookie ?? params.noCookie,
+    params: normalizeParams(path, params)
+  }).then(parseKugouPayload)
+}
+
+function getKugouRaw(path, params = {}, config = {}) {
+  return http.get(path, {
+    ...config,
+    noCookie: config.noCookie ?? params.noCookie,
+    params: normalizeParams(path, params)
+  }).then(parseKugouPayload)
+}
+
+const songRegistry = new Map()
+const lyricRequestRegistry = new Map()
+
+function normalizeParams(path, params) {
+  const normalized = { ...params }
+
+  if (normalized.limit !== undefined && normalized.pagesize === undefined) {
+    normalized.pagesize = normalized.limit
+  }
+
+  if (normalized.offset !== undefined && normalized.page === undefined) {
+    const pageSize = Number(normalized.pagesize) || 30
+    normalized.page = Math.floor(Number(normalized.offset) / pageSize) + 1
+  }
+
+  delete normalized.limit
+  delete normalized.offset
+  delete normalized.level
+  delete normalized.noCookie
+
+  if (normalized.keywords === undefined && normalized.keyword !== undefined) {
+    normalized.keywords = normalized.keyword
+  }
+
+  if (normalized.id !== undefined) {
+    if (path === '/playlist/detail' || path === '/playlist/similar') {
+      normalized.ids ??= normalized.id
+      delete normalized.id
+    } else if (path === '/playlist/track/all/new') {
+      normalized.listid ??= normalized.id
+      delete normalized.id
+    } else if (path === '/song/url' || path === '/song/url/new') {
+      const knownSong = getKnownSong(normalized.id)
+      normalized.hash = normalized.hash || knownSong?.hash || hashFromId(normalized.id)
+      normalized.album_audio_id = normalized.album_audio_id || knownSong?.album_audio_id || knownSong?.mixsongid
+      normalized.album_id = normalized.album_id || knownSong?.album_id
+      delete normalized.id
+    } else if (path === '/search/lyric') {
+      const knownSong = getKnownSong(normalized.id)
+      normalized.hash = normalized.hash || knownSong?.hash || hashFromId(normalized.id)
+      normalized.album_audio_id = normalized.album_audio_id || knownSong?.album_audio_id
+      normalized.keywords = normalized.keywords || knownSong?.name || knownSong?.songname
+      delete normalized.id
+    } else if (path === '/comment/music') {
+      normalized.mixsongid ??= normalized.id
+      delete normalized.id
+    } else if (path === '/comment/count') {
+      const knownSong = getKnownSong(normalized.id)
+      normalized.hash = normalized.hash || knownSong?.hash || hashFromId(normalized.id)
+      delete normalized.id
+    } else if (path === '/rank/audio') {
+      normalized.rankid ??= normalized.id
+      delete normalized.id
+    } else if (path === '/youth/channel/detail' || path === '/youth/channel/song') {
+      normalized.global_collection_id ??= normalized.id
+      delete normalized.id
+    }
+  }
+
+  if (normalized.phone !== undefined) {
+    normalized.mobile ??= normalized.phone
+    delete normalized.phone
+  }
+
+  if (normalized.captcha !== undefined) {
+    normalized.code ??= normalized.captcha
+    delete normalized.captcha
+  }
+
+  if (path === '/login/cellphone' || path === '/captcha/sent' || path === '/login') {
+    delete normalized.countrycode
+  }
+
+  if (path === '/search') {
+    normalized.type = normalizeSearchType(normalized.type)
+  }
+
+  if (path === '/artist/audios' || path === '/artist/albums') {
+    normalized.sort = normalized.order === 'time' ? 'new' : normalized.sort || 'hot'
+    delete normalized.order
+  }
+
+  if (path === '/personal/fm' && normalized.action === undefined && normalized.mode === 'TRASH') {
+    normalized.action = 'garbage'
+  }
+
+  return Object.fromEntries(
+    Object.entries(normalized).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  )
+}
+
+function normalizeSearchType(type) {
+  const typeMap = {
+    1: 'song',
+    10: 'album',
+    100: 'author',
+    1000: 'special',
+    1004: 'mv',
+    2000: 'lyric'
+  }
+
+  return typeMap[type] || type || 'song'
+}
+
+function parseKugouPayload(payload) {
+  if (typeof payload !== 'string') {
+    return payload
+  }
+
+  const match = payload.match(/<!--KG_TAG_RES_START-->([\s\S]*?)<!--KG_TAG_RES_END-->/)
+  const json = match?.[1] ?? payload
+
+  try {
+    return JSON.parse(json)
+  } catch {
+    return payload
+  }
+}
+
+function getKnownSong(id) {
+  return songRegistry.get(String(id ?? ''))
+}
+
+function hashFromId(id) {
+  const value = String(id ?? '').trim()
+
+  return value && !/^\d+$/.test(value) ? value : ''
+}
+
+function rememberSong(song) {
+  if (!song?.id) {
+    return song
+  }
+
+  songRegistry.set(String(song.id), {
+    id: song.id,
+    name: song.name,
+    songname: song.songname,
+    hash: song.hash,
+    album_audio_id: song.album_audio_id,
+    mixsongid: song.mixsongid,
+    album_id: song.album_id,
+    audio_id: song.audio_id
+  })
+
+  return song
+}
+
+function firstArray(...values) {
+  return values.find((value) => Array.isArray(value)) ?? []
+}
+
+function firstObject(...values) {
+  return values.find((value) => value && typeof value === 'object' && !Array.isArray(value)) ?? {}
+}
+
+function firstNonEmptyArray(...values) {
+  return values.find((value) => Array.isArray(value) && value.length) ?? []
+}
+
+function toMilliseconds(value) {
+  const number = Number(value)
+
+  if (!Number.isFinite(number) || number <= 0) {
+    return 0
+  }
+
+  return number > 10000 ? number : number * 1000
+}
+
+function normalizeKugouImage(url, size = 480) {
+  if (typeof url !== 'string') {
+    return ''
+  }
+
+  return url.replace('{size}', String(size))
+}
+
+function splitFilename(value = '') {
+  const [artist, ...nameParts] = String(value).split(' - ')
+
+  if (!nameParts.length) {
+    return { artist: '', name: String(value || '') }
+  }
+
+  return {
+    artist: artist.trim(),
+    name: nameParts.join(' - ').trim()
+  }
+}
+
+function normalizeArtistName(song = {}) {
+  return (
+    song.author_name ||
+    song.singername ||
+    firstArray(song.authors, song.singerinfo).map((artist) => artist.author_name || artist.name).filter(Boolean).join(' / ') ||
+    splitFilename(song.filename || song.name || song.songname).artist ||
+    '未知歌手'
+  )
+}
+
+function normalizeSongName(song = {}) {
+  const file = splitFilename(song.filename || song.name || song.songname)
+
+  return song.songname || file.name || song.name || song.remark || '未知歌曲'
+}
+
+function normalizeSong(song = {}, index = 0) {
+  const artistName = normalizeArtistName(song)
+  const artistId = song.author_id ?? song.authors?.[0]?.author_id ?? song.singerinfo?.[0]?.id ?? ''
+  const albumId = song.album_id ?? song.albuminfo?.id ?? ''
+  const albumName = song.album_name ?? song.albuminfo?.name ?? song.remark ?? ''
+  const cover = normalizeKugouImage(
+    song.cover ||
+      song.album_sizable_cover ||
+      song.imgurl ||
+      song.pic ||
+      song.trans_param?.union_cover,
+    480
+  )
+  const id = song.album_audio_id ?? song.mixsongid ?? song.add_mixsongid ?? song.audio_id ?? song.id ?? song.hash
+  const duration = toMilliseconds(song.timelength ?? song.timelen ?? song.duration ?? song.video_timelength)
+  const mvId = song.video_id || song.mv_id || song.mvid || song.mvhash || song.video_hash || song.mv_hash || ''
+  const normalized = {
+    ...song,
+    id,
+    name: normalizeSongName(song),
+    songname: song.songname ?? normalizeSongName(song),
+    hash: song.hash ?? song.file_hash ?? song.audio_hash ?? song.hash_128 ?? song['128hash'] ?? '',
+    album_audio_id: song.album_audio_id ?? song.mixsongid ?? song.add_mixsongid ?? id,
+    mixsongid: song.mixsongid ?? song.add_mixsongid ?? song.album_audio_id ?? id,
+    audio_id: song.audio_id ?? song.rp_id ?? '',
+    album_id: albumId,
+    duration,
+    dt: duration,
+    mv: mvId,
+    fee: song.pay_type || song.feetype || 0,
+    ar: [{
+      id: artistId,
+      name: artistName
+    }],
+    artists: [{
+      id: artistId,
+      name: artistName
+    }],
+    al: {
+      id: albumId,
+      name: albumName || '未知专辑',
+      picUrl: cover
+    },
+    album: {
+      id: albumId,
+      name: albumName || '未知专辑',
+      picUrl: cover,
+      blurPicUrl: cover
+    },
+    picUrl: cover,
+    rank: index + 1
+  }
+
+  return rememberSong(normalized)
+}
+
+function normalizePlaylist(playlist = {}, index = 0) {
+  const globalCollectionId =
+    playlist.global_collection_id ??
+    playlist.globalCollectionId ??
+    playlist.collection_id ??
+    playlist.collectionid ??
+    playlist.gid ??
+    playlist.list_create_gid ??
+    playlist.list_create_gid_v2 ??
+    ''
+  const listId = playlist.listid ?? playlist.list_id ?? playlist.listId ?? ''
+  const specialId = playlist.specialid ?? playlist.special_id ?? ''
+  const id = globalCollectionId || playlist.id || specialId || listId
+  const cover = normalizeKugouImage(
+    playlist.imgurl ||
+      playlist.flexible_cover ||
+      playlist.pic ||
+      playlist.cover ||
+      playlist.sizable_cover ||
+      playlist.cover_img ||
+      playlist.image,
+    480
+  )
+  const objectTags = firstNonEmptyArray(playlist.tags, playlist.tag_list, playlist.special_tag)
+    .map((tag) => tag.tag_name || tag.name || tag.title || tag)
+    .filter(Boolean)
+  const stringTags = String(playlist.tags || playlist.tag_names || '').split(',').filter(Boolean)
+
+  return {
+    ...playlist,
+    id,
+    globalCollectionId,
+    listid: listId,
+    listId,
+    specialId,
+    name: playlist.specialname || playlist.name || playlist.title || playlist.listname || '未命名歌单',
+    description: playlist.intro || playlist.desc || playlist.description || '',
+    copywriter: playlist.show || playlist.recommend_reason || playlist.copywriter || '',
+    picUrl: cover,
+    coverImgUrl: cover,
+    playCount:
+      playlist.play_count ??
+      playlist.playcount ??
+      playlist.playCount ??
+      playlist.play_cnt ??
+      playlist.listen_count ??
+      playlist.heat ??
+      0,
+    trackCount:
+      playlist.songcount ??
+      playlist.song_count ??
+      playlist.count ??
+      playlist.total ??
+      playlist.trackCount ??
+      playlist.audio_count ??
+      0,
+    subscribedCount: playlist.collectcount ?? playlist.collect_total ?? playlist.subscribedCount ?? 0,
+    commentCount: playlist.commentcount ?? playlist.comment_count ?? playlist.commentCount ?? 0,
+    shareCount: playlist.sharecount ?? playlist.share_count ?? playlist.shareCount ?? 0,
+    updateTime: normalizeTimestamp(playlist.update_time ?? playlist.updateTime),
+    createTime: normalizeTimestamp(playlist.create_time ?? playlist.createTime),
+    tags: objectTags.length ? objectTags : stringTags,
+    creator: {
+      userId: playlist.userid ?? playlist.user_id ?? playlist.list_create_userid ?? '',
+      nickname: playlist.nickname || playlist.username || playlist.list_create_username || '酷狗音乐用户',
+      avatarUrl: normalizeKugouImage(
+        playlist.user_avatar || playlist.create_user_pic || playlist.avatar || playlist.pic,
+        120
+      )
+    },
+    rank: index + 1,
+    tracks: firstArray(playlist.songs, playlist.songinfo, playlist.tracks).map(normalizeSong)
+  }
+}
+
+function normalizeTimestamp(value) {
+  const number = Number(value)
+
+  if (!Number.isFinite(number) || number <= 0) {
+    return value
+  }
+
+  return number < 10000000000 ? number * 1000 : number
+}
+
+function normalizeRank(rank = {}, index = 0) {
+  const cover = normalizeKugouImage(rank.imgurl || rank.img_cover || rank.banner_9 || rank.album_img_9, 480)
+
+  return {
+    ...rank,
+    id: rank.rankid ?? rank.id,
+    name: rank.rankname || rank.name || '酷狗榜单',
+    description: rank.intro || '',
+    updateFrequency: rank.update_frequency || rank.updateFrequency || '',
+    coverImgUrl: cover,
+    playCount: rank.play_times ?? 0,
+    trackCount: rank.extra?.resp?.all_total ?? rank.songinfo?.length ?? 0,
+    tracks: firstArray(rank.songinfo).map((song, songIndex) => ({
+      first: song.name || normalizeSongName(song),
+      second: song.author || normalizeArtistName(song),
+      ...normalizeSong(song, songIndex)
+    })),
+    rank: index + 1
+  }
+}
+
+function normalizeArtist(artist = {}, index = 0) {
+  const base = artist.base ?? artist
+  const id = base.author_id ?? base.id ?? base.singerid ?? base.userid
+  const cover = normalizeKugouImage(base.avatar || base.sizable_avatar || base.imgurl || base.pic || base.picUrl, 360)
+
+  return {
+    ...base,
+    id,
+    name: base.author_name || base.singername || base.name || '未知歌手',
+    picUrl: cover,
+    img1v1Url: cover,
+    cover,
+    briefDesc: base.intro || base.desc || base.description || '',
+    musicSize: base.audio_count ?? base.song_count ?? base.musicSize ?? 0,
+    albumSize: base.album_count ?? base.albumSize ?? 0,
+    mvSize: base.video_count ?? base.mvSize ?? 0,
+    fansCount: base.fans_count ?? base.fansCount ?? 0,
+    score: base.heat ?? base.score ?? 0,
+    rank: index + 1
+  }
+}
+
+function normalizeAlbum(album = {}, index = 0) {
+  const id = album.album_id ?? album.id
+  const cover = normalizeKugouImage(album.cover || album.sizable_cover || album.pic || album.picUrl, 480)
+  const artistName = album.author_name || album.singername || album.artist_name || album.authors?.[0]?.author_name || '未知歌手'
+
+  return {
+    ...album,
+    id,
+    name: album.album_name || album.name || '未知专辑',
+    picUrl: cover,
+    blurPicUrl: cover,
+    publishTime: normalizeTimestamp(album.publish_time || album.publish_date),
+    company: album.publish_company || album.company || '',
+    description: album.intro || album.description || '',
+    size: album.audio_count ?? album.song_count ?? album.size ?? 0,
+    artists: [{
+      id: album.author_id ?? album.authors?.[0]?.author_id ?? '',
+      name: artistName
+    }],
+    artist: {
+      id: album.author_id ?? album.authors?.[0]?.author_id ?? '',
+      name: artistName
+    },
+    rank: index + 1
+  }
+}
+
+function normalizeComment(comment = {}) {
+  return {
+    commentId: comment.id ?? comment.commentId,
+    content: comment.content || '',
+    time: normalizeTimestamp(comment.addtime || comment.time),
+    likedCount: comment.like?.count ?? comment.like?.likenum ?? comment.likedCount ?? 0,
+    user: {
+      userId: comment.user_id,
+      nickname: comment.user_name || '匿名用户',
+      avatarUrl: normalizeKugouImage(comment.user_pic, 120)
+    }
+  }
+}
+
+function extractSongItems(source = {}) {
+  const data = source.data ?? source
+  const items = firstArray(
+    data.songs,
+    data.list,
+    data.info,
+    data.recommend,
+    data.resources,
+    data.song_list,
+    data.lists,
+    data
+  )
+
+  return items.map((item) => item.song ?? item.resource ?? item.audio ?? item.audio_info ?? item)
+}
+
+function toSongListResponse(response = {}) {
+  const data = response.data ?? response
+  const songs = extractSongItems(data).map(normalizeSong)
+
+  return {
+    ...response,
+    result: songs,
+    songs,
+    data: songs,
+    total: response.total ?? data.total ?? data.count ?? songs.length,
+    more: Boolean(data.has_next || data.more || response.more)
+  }
+}
+
+function toPlaylistListResponse(response = {}) {
+  const data = response.data ?? response
+  const playlistItems = firstArray(
+    data.special_list,
+    data.list,
+    data.lists,
+    data.info,
+    data.playlists,
+    data
+  ).flatMap((item) => {
+    const nestedItems = firstArray(item?.special_list, item?.list, item?.lists)
+
+    return nestedItems.length ? nestedItems : item
+  })
+  const playlists = playlistItems.filter(Boolean).map(normalizePlaylist)
+
+  return {
+    ...response,
+    result: playlists,
+    playlists,
+    data: playlists,
+    total: data.total ?? data.count ?? data.total_count ?? playlists.length,
+    more: Boolean(data.has_next || data.more)
+  }
+}
+
+function toBannerResponse(response = {}) {
+  const ads = firstArray(response.data?.ads, response.ads, response.data)
+
+  return {
+    ...response,
+    banners: ads.map((banner, index) => ({
+      imageUrl: normalizeKugouImage(banner.img_url || banner.image || banner.pic, 1200),
+      bigImageUrl: normalizeKugouImage(banner.img_url || banner.image || banner.pic, 1200),
+      typeTitle: banner.title || '酷狗推荐',
+      targetType: 0,
+      targetId: banner.id ?? index,
+      url: banner.extra?.url || banner.url || ''
+    }))
+  }
+}
+
+function toToplistResponse(response = {}) {
+  const ranks = firstArray(response.data?.info, response.info, response.data).map(normalizeRank)
+
+  return {
+    ...response,
+    list: ranks
+  }
+}
+
+function toPlaylistDetailResponse(response = {}) {
+  const data = response.data ?? response
+  const playlist = normalizePlaylist(
+    firstObject(
+      data.list_info,
+      data.info,
+      data.playlist,
+      data.special,
+      Array.isArray(data.info) ? data.info[0] : undefined,
+      Array.isArray(data) ? data[0] : undefined,
+      data
+    ),
+    0
+  )
+  const songs = firstArray(
+    data.songs,
+    data.songinfo,
+    data.tracks,
+    data.list_info?.songs,
+    data.list_info?.songinfo,
+    playlist.songs,
+    playlist.songinfo,
+    playlist.tracks
+  ).map(normalizeSong)
+
+  return {
+    ...response,
+    playlist: {
+      ...playlist,
+      tracks: songs
+    },
+    songs
+  }
+}
+
+function toPlaylistTracksResponse(response = {}, id) {
+  const data = response.data ?? response
+  const songs = extractSongItems(data).map(normalizeSong)
+  const total = data.total ?? data.count ?? data.songcount ?? response.total ?? songs.length
+  const page = Number(data.page ?? response.page ?? 1)
+  const pageSize = Number(data.pagesize ?? data.page_size ?? response.pagesize ?? songs.length)
+
+  return {
+    ...response,
+    playlist: {
+      id,
+      tracks: songs,
+      trackCount: total
+    },
+    songs,
+    total,
+    more: Boolean(data.has_next || data.more || (total && pageSize && page * pageSize < total))
+  }
+}
+
+function toRankTracksResponse(response = {}, id) {
+  const data = response.data ?? response
+  const songs = firstArray(data.songs, data.info, data.list, data).map(normalizeSong)
+  const rankInfo = firstObject(data.rankinfo, data.rank_info, data)
+
+  return {
+    ...response,
+    playlist: {
+      id,
+      name: data.rankname || rankInfo.rankname || rankInfo.name || '酷狗榜单',
+      description: data.intro || rankInfo.intro || '',
+      coverImgUrl: normalizeKugouImage(
+        data.imgurl || data.img_cover || data.banner_9 || rankInfo.imgurl || rankInfo.img_cover,
+        480
+      ),
+      tracks: songs,
+      trackCount: data.total ?? data.count ?? songs.length
+    },
+    songs,
+    total: data.total ?? data.count ?? songs.length,
+    more: Boolean(data.has_next || data.more)
+  }
+}
+
+function toArtistListResponse(response = {}) {
+  const data = response.data ?? response
+  const groups = firstArray(data.info, data.list, data.artists, data)
+  const artists = groups
+    .flatMap((group) => Array.isArray(group?.singer) ? group.singer : group)
+    .map(normalizeArtist)
+
+  return {
+    ...response,
+    artists,
+    list: {
+      artists
+    },
+    more: Boolean(data.has_next)
+  }
+}
+
+function toArtistDetailResponse(response = {}) {
+  const data = response.data ?? response
+  const artist = normalizeArtist(firstObject(data.base, data.info, data.author, data), 0)
+
+  return {
+    ...response,
+    data: {
+      ...data,
+      artist
+    },
+    artist
+  }
+}
+
+function toArtistSongsResponse(response = {}) {
+  const data = response.data ?? response
+  const songs = firstArray(data.songs, data.list, data).map(normalizeSong)
+
+  return {
+    ...response,
+    songs,
+    hotSongs: songs,
+    total: data.total ?? data.count ?? songs.length,
+    more: Boolean(data.has_next)
+  }
+}
+
+function toArtistAlbumsResponse(response = {}) {
+  const data = response.data ?? response
+  const albums = firstArray(data.albums, data.list, data).map(normalizeAlbum)
+
+  return {
+    ...response,
+    hotAlbums: albums,
+    albums,
+    artist: albums[0]?.artist ?? null,
+    more: Boolean(data.has_next)
+  }
+}
+
+function toArtistVideosResponse(response = {}) {
+  const data = response.data ?? response
+  const videos = firstArray(data.videos, data.list, data).map((item, index) => ({
+    id: item.id ?? item.video_id ?? item.hash,
+    name: item.name || item.title || item.filename || '视频',
+    cover: normalizeKugouImage(item.cover || item.imgurl || item.sizable_cover, 640),
+    artistName: item.author_name || item.singername || '',
+    duration: toMilliseconds(item.duration || item.timelength),
+    playCount: item.play_count ?? item.playCount ?? 0,
+    rank: index + 1,
+    hash: item.hash
+  }))
+
+  return {
+    ...response,
+    data: {
+      page: {
+        cursor: data.next || '',
+        more: Boolean(data.has_next)
+      },
+      records: videos
+    }
+  }
+}
+
+function toMvListResponse(response = {}) {
+  const data = response.data ?? response
+  const items = firstArray(data.videos, data.list, data.mvs, data.info, data)
+  const mvs = items
+    .flatMap((item) => Array.isArray(item?.videos) ? item.videos : item)
+    .map((item, index) => ({
+      ...item,
+      id: item.id ?? item.video_id ?? item.mvid ?? item.hash,
+      name: item.name || item.title || item.filename || '未命名 MV',
+      picUrl: normalizeKugouImage(item.cover || item.imgurl || item.pic || item.sizable_cover, 640),
+      cover: normalizeKugouImage(item.cover || item.imgurl || item.pic || item.sizable_cover, 640),
+      artistName: item.author_name || item.singername || item.artist_name || '',
+      playCount: item.play_count ?? item.playCount ?? item.heat ?? 0,
+      duration: toMilliseconds(item.duration || item.timelength || item.video_timelength),
+      hash: item.hash || item.video_hash || item.mvhash,
+      rank: index + 1
+    }))
+
+  return {
+    ...response,
+    result: mvs,
+    mvs,
+    data: mvs,
+    count: data.total ?? data.count ?? mvs.length,
+    total: data.total ?? data.count ?? mvs.length
+  }
+}
+
+function toAlbumListResponse(response = {}) {
+  const data = response.data ?? response
+  const albums = firstArray(data.albums, data.list, data).map(normalizeAlbum)
+
+  return {
+    ...response,
+    albums,
+    total: data.total ?? data.count ?? albums.length,
+    more: Boolean(data.has_next)
+  }
+}
+
+function toAlbumDetailResponse(response = {}) {
+  const data = response.data ?? response
+  const album = normalizeAlbum(firstObject(data.info, data.album, data), 0)
+  const songs = firstArray(data.songs, data.list).map(normalizeSong)
+
+  return {
+    ...response,
+    album,
+    songs
+  }
+}
+
+function toCommentResponse(response = {}) {
+  const comments = firstArray(response.list, response.comments, response.data?.list).map(normalizeComment)
+
+  return {
+    ...response,
+    comments,
+    hotComments: response.current_page <= 1 ? comments.slice(0, 3) : [],
+    total: response.count ?? response.total ?? response.data?.count ?? comments.length,
+    more: Boolean(response.maxPage && response.current_page < response.maxPage)
+  }
+}
+
+function toCommentCountResponse(response = {}) {
+  const data = response.data ?? response
+  const keyedCount = Object.values(data).find((value) => Number.isFinite(Number(value)))
+
+  return {
+    ...response,
+    data: {
+      count: data.count ?? data.comment_count ?? response.count ?? keyedCount ?? 0,
+      countDesc: ''
+    }
+  }
+}
+
+function toHotSearchResponse(response = {}) {
+  const items = firstArray(response.data?.info, response.data?.list, response.data, response.list)
+
+  return {
+    ...response,
+    data: items.map((item, index) => ({
+      searchWord: item.keyword || item.searchWord || item.HintInfo || item.name || item.title || `hot-${index}`,
+      score: item.score ?? item.Hot ?? item.hot ?? 0,
+      content: item.content || item.desc || ''
+    }))
+  }
+}
+
+function toSuggestResponse(response = {}) {
+  const groups = firstArray(response.data, response.list)
+  const suggestions = groups.flatMap((group) => firstArray(group.RecordDatas, group.records, group.list))
+
+  return {
+    ...response,
+    data: {
+      suggests: suggestions.map((item) => ({
+        keyword: item.HintInfo || item.keyword || item.name,
+        showText: item.HintInfo || item.keyword || item.name,
+        resourceName: item.LableName || item.subtitle || '相关搜索'
+      }))
+    },
+    result: {
+      songs: [],
+      artists: [],
+      albums: [],
+      playlists: []
+    }
+  }
+}
+
+function toSearchResponse(response = {}, type = 1) {
+  const data = response.data ?? response
+  const lists = firstArray(data.lists)
+  const byType = new Map(lists.map((item) => [item.type, item]))
+  const songItems = firstArray(data.songs, data.info, byType.get('song')?.lists, data.list)
+  const albumItems = firstArray(byType.get('album')?.lists, data.albums)
+  const artistItems = firstArray(byType.get('author')?.lists, data.artists)
+  const playlistItems = firstArray(byType.get('collect')?.lists, data.playlists)
+  const mvItems = firstArray(byType.get('mv')?.lists, data.mvs)
+
+  return {
+    ...response,
+    result: {
+      songs: songItems.map(normalizeSong),
+      songCount: byType.get('song')?.total ?? songItems.length,
+      albums: albumItems.map(normalizeAlbum),
+      albumCount: byType.get('album')?.total ?? albumItems.length,
+      artists: artistItems.map(normalizeArtist),
+      artistCount: byType.get('author')?.total ?? artistItems.length,
+      playlists: playlistItems.map(normalizePlaylist),
+      playlistCount: byType.get('collect')?.total ?? playlistItems.length,
+      mvs: mvItems,
+      mvCount: byType.get('mv')?.total ?? mvItems.length,
+      hasMore: Boolean(data.has_next || data.more)
+    },
+    type
+  }
+}
+
+function emptySearchResponse(type = 1) {
+  return toSearchResponse({ data: { lists: [] } }, type)
+}
+
+function toSongUrlResponse(response = {}) {
+  const data = response.data ?? response
+  const entries = Array.isArray(data) ? data : [data]
+  const url = entries
+    .flatMap((entry) => collectAudioUrlCandidates(entry))
+    .map(normalizeAudioUrl)
+    .find(Boolean) || ''
+
+  return {
+    ...response,
+    data: url ? [{ url }] : []
+  }
+}
+
+function collectAudioUrlCandidates(source, depth = 0) {
+  if (!source || depth > 4) {
+    return []
+  }
+
+  if (typeof source === 'string') {
+    return [source]
+  }
+
+  if (Array.isArray(source)) {
+    return source.flatMap((item) => collectAudioUrlCandidates(item, depth + 1))
+  }
+
+  if (typeof source !== 'object') {
+    return []
+  }
+
+  const directKeys = [
+    'url',
+    'play_url',
+    'playUrl',
+    'backup_url',
+    'backupUrl',
+    'download_url',
+    'downloadUrl',
+    'audio_url',
+    'audioUrl'
+  ]
+  const nestedKeys = ['data', 'urls', 'url_info', 'urlInfo']
+
+  return [
+    ...directKeys.flatMap((key) => collectAudioUrlCandidates(source[key], depth + 1)),
+    ...nestedKeys.flatMap((key) => collectAudioUrlCandidates(source[key], depth + 1))
+  ]
+}
+
+function normalizeAudioUrl(url = '') {
+  if (typeof url !== 'string') {
+    return ''
+  }
+
+  if (url.startsWith('//')) {
+    return `https:${url}`
+  }
+
+  return url
+}
+
+function decodeBase64Utf8(value = '') {
+  if (typeof value !== 'string' || !value) {
+    return ''
+  }
+
+  try {
+    const binary = atob(value)
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0))
+
+    return new TextDecoder('utf-8').decode(bytes)
+  } catch {
+    return value
+  }
+}
+
+function toLoginProfileResponse(response = {}) {
+  const data = response.data ?? response
+  const user = firstObject(data.user, data.profile, data)
+  const userId = user.userid ?? user.user_id ?? user.id ?? data.userid ?? data.user_id ?? response.userid ?? ''
+  const nickname = user.nickname ?? user.username ?? user.user_name ?? data.nickname ?? '酷狗用户'
+  const avatarUrl = normalizeKugouImage(
+    user.pic || user.avatar || user.avatarUrl || user.user_pic || data.pic,
+    240
+  )
+  const token = data.token ?? user.token ?? response.token ?? ''
+  const dfid = data.dfid ?? user.dfid ?? response.dfid ?? ''
+  const cookie = response.cookie || [
+    token ? `token=${token}` : '',
+    userId ? `userid=${userId}` : '',
+    dfid ? `dfid=${dfid}` : ''
+  ].filter(Boolean).join(';')
+
+  return {
+    ...response,
+    cookie,
+    account: userId ? {
+      id: userId,
+      userName: nickname
+    } : null,
+    profile: userId ? {
+      userId,
+      nickname,
+      avatarUrl
+    } : null,
+    data: {
+      ...data,
+      account: userId ? {
+        id: userId,
+        userName: nickname
+      } : null,
+      profile: userId ? {
+        userId,
+        nickname,
+        avatarUrl
+      } : null
+    }
+  }
+}
+
+function toQrKeyResponse(response = {}) {
+  const data = response.data ?? response
+
+  return {
+    ...response,
+    data: {
+      ...data,
+      unikey: data.key || data.qrcode || data.uuid || data.unikey || ''
+    }
+  }
+}
+
+function toQrCreateResponse(response = {}) {
+  const data = response.data ?? response
+
+  return {
+    ...response,
+    data: {
+      ...data,
+      qrimg: data.qrcode_img || data.qrimg || data.base64 || ''
+    }
+  }
+}
+
+function toQrCheckResponse(response = {}) {
+  const data = response.data ?? {}
+  const rawCode = Number(
+    data.status ??
+      data.code ??
+      response.status ??
+      (data.token || response.token ? 4 : response.code) ??
+      0
+  )
+  const codeMap = {
+    0: 800,
+    1: 801,
+    2: 802,
+    4: 803
+  }
+
+  return {
+    ...toLoginProfileResponse(response),
+    code: codeMap[rawCode] ?? rawCode,
+    message: response.message || response.msg || response.errmsg || ''
+  }
+}
+
+async function toLyricResponse(params = {}) {
+  const knownSong = getKnownSong(params.id)
+  const searchParams = createLyricSearchParams(params, knownSong)
+  const requestKey = getLyricRequestKey(searchParams)
+  const pendingRequest = lyricRequestRegistry.get(requestKey)
+
+  if (pendingRequest) {
+    return pendingRequest
+  }
+
+  const request = loadLyricResponse(searchParams).finally(() => {
+    lyricRequestRegistry.delete(requestKey)
+  })
+  lyricRequestRegistry.set(requestKey, request)
+
+  return request
+}
+
+async function loadLyricResponse(searchParams = {}) {
+  if (!searchParams.hash && !searchParams.keywords) {
+    return createEmptyLyricResponse()
+  }
+
+  const lyricSearch = await getKugouRaw('/search/lyric', searchParams).catch(() => ({}))
+  const candidate = getLyricCandidate(lyricSearch)
+
+  const lyricId = candidate?.id ?? candidate?.lyricid ?? candidate?.lyric_id ?? candidate?.download_id
+  const accessKey = candidate?.accesskey ?? candidate?.access_key ?? candidate?.accessKey
+
+  if (!lyricId || !accessKey) {
+    return createEmptyLyricResponse(lyricSearch)
+  }
+
+  const lyricResponse = await getKugouRaw('/lyric', {
+    id: lyricId,
+    accesskey: accessKey,
+    fmt: 'lrc',
+    decode: true
+  }).catch(() => ({}))
+  const lyricData = lyricResponse.data ?? lyricResponse
+
+  return {
+    ...lyricResponse,
+    lrc: {
+      lyric:
+        lyricData.decodeContent ||
+        lyricData.decode_content ||
+        lyricData.lrc ||
+        lyricData.lyric ||
+        decodeBase64Utf8(lyricData.content) ||
+        ''
+    },
+    tlyric: {
+      lyric: ''
+    }
+  }
+}
+
+function createLyricSearchParams(params = {}, knownSong = {}) {
+  const hash = String(params.hash ?? knownSong?.hash ?? '').trim()
+  const keywords = String(params.keywords ?? params.keyword ?? knownSong?.songname ?? knownSong?.name ?? '').trim()
+  const albumAudioId = params.album_audio_id ?? params.mixsongid ?? knownSong?.album_audio_id ?? knownSong?.mixsongid
+  const duration = params.duration ?? knownSong?.duration
+  const searchParams = {
+    album_audio_id: albumAudioId,
+    duration,
+    man: params.man ?? 'no'
+  }
+
+  if (hash) {
+    searchParams.hash = hash
+  } else {
+    searchParams.keywords = keywords
+  }
+
+  return searchParams
+}
+
+function createEmptyLyricResponse(response = {}) {
+  const base = response && typeof response === 'object' && !Array.isArray(response) ? response : {}
+
+  return {
+    ...base,
+    lrc: {
+      lyric: ''
+    },
+    tlyric: {
+      lyric: ''
+    }
+  }
+}
+
+function getLyricRequestKey(params = {}) {
+  const hash = params.hash || ''
+  const albumAudioId = params.album_audio_id || params.mixsongid || ''
+  const id = hash || albumAudioId ? '' : params.id || ''
+  const keywords = normalizeLyricKeyword(params.keywords || params.keyword || '')
+
+  return [hash, albumAudioId, id, keywords, params.duration || '', params.man || 'no'].join('|')
+}
+
+function normalizeLyricKeyword(value = '') {
+  return String(value).trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+function getLyricCandidate(lyricSearch = {}) {
+  return firstNonEmptyArray(
+    lyricSearch.candidates,
+    lyricSearch.data?.candidates,
+    lyricSearch.data?.info,
+    lyricSearch.data?.list,
+    lyricSearch.data?.ugcandidates,
+    lyricSearch.data?.ai_candidates,
+    lyricSearch.info,
+    lyricSearch.list,
+    lyricSearch.ugcandidates,
+    lyricSearch.ai_candidates
+  )[0]
+}
+
+// Discovery and recommendations
+export const getPersonalizedPlaylists = (params = {}) =>
+  getKugou('/top/playlist', { category_id: 0, ...params }).then(toPlaylistListResponse)
+export const getBanners = (params = {}) => getKugou('/yueku/banner', params).then(toBannerResponse)
+export const getPersonalizedMvs = (params = {}) => getKugou('/brush', params).then(toMvListResponse)
+export const getDailyRecommend = (params = {}) => getKugou('/everyday/recommend', params).then(toSongListResponse)
+export const getPersonalizedNewSongs = (params = {}) => getDailyRecommend(params)
+export const getPersonalFm = (params = {}) => getKugou('/personal/fm', params).then(toSongListResponse)
+export const getPersonalFmByMode = (params = {}) => getKugou('/personal/fm', params).then(toSongListResponse)
+export const sendFmTrash = (params = {}) => getKugou('/personal/fm', { ...params, action: 'garbage' })
+
+// MV and video
+export const subscribeMv = (params = {}) => getKugou('/youth/channel/sub', params)
+export const getSubscribedMvs = (params = {}) => getKugou('/user/video/collect', params)
+export const getMvComments = (params = {}) => getKugou('/comment/music', params).then(toCommentResponse)
+export const likeResource = (params = {}) => getKugou('/youth/channel/sub', params)
+export const getSimilarMvs = (params = {}) => getKugou('/ai/recommend', params).then(toSongListResponse)
+export const getAllMvs = (params = {}) => getKugou('/brush', params).then(toMvListResponse)
+export const getFirstMvs = (params = {}) => getKugou('/brush', params).then(toMvListResponse)
+export const getExclusiveMvs = (params = {}) => getKugou('/brush', params).then(toMvListResponse)
+export const getTopMvs = (params = {}) => getKugou('/brush', params).then(toMvListResponse)
+export const getMvDetail = (params = {}) => getKugou('/video/detail', params)
+export const getMvDetailInfo = (params = {}) => getKugou('/video/privilege', params)
+export const getMvUrl = (params = {}) => getKugou('/video/url', params)
+export const getFollowArtistNewMvs = (params = {}) => getKugou('/artist/follow/newsongs', params).then(toSongListResponse)
+export const getUgcMv = (params = {}) => getKugou('/video/detail', params)
+
+// Podcasts, radio, channels, and scenes
+export const getPersonalizedDjPrograms = (params = {}) => getKugou('/longaudio/daily/recommend', params).then(toSongListResponse)
+export const getDjBanner = (params = {}) => getKugou('/yueku/banner', params).then(toBannerResponse)
+export const getDjPersonalizeRecommend = (params = {}) => getKugou('/longaudio/daily/recommend', params)
+export const getDjHot = (params = {}) => getKugou('/longaudio/week/recommend', params)
+export const getDjProgramToplist = (params = {}) => getKugou('/longaudio/rank/recommend', params)
+export const getDjProgramHoursToplist = (params = {}) => getKugou('/longaudio/rank/recommend', params)
+export const getDjToplist = (params = {}) => getKugou('/longaudio/rank/recommend', params)
+export const getDjToplistPay = (params = {}) => getKugou('/longaudio/vip/recommend', params)
+export const getDjToplistHours = (params = {}) => getKugou('/longaudio/rank/recommend', params)
+export const getDjToplistNewcomer = (params = {}) => getKugou('/longaudio/daily/recommend', params)
+export const getDjToplistPopular = (params = {}) => getKugou('/longaudio/week/recommend', params)
+export const getDjRadioHot = (params = {}) => getKugou('/fm/recommend', params)
+export const getDjRecommend = (params = {}) => getKugou('/fm/recommend', params)
+export const getDjCatelist = (params = {}) => getKugou('/fm/class', params)
+export const getDjRecommendType = (params = {}) => getKugou('/fm/recommend', params)
+export const updateDjSubscribe = (params = {}) => getKugou('/youth/channel/sub', params)
+export const getDjSublist = (params = {}) => getKugou('/youth/channel/all', params)
+export const getDjPaygift = (params = {}) => getKugou('/longaudio/vip/recommend', params)
+export const getDjCategoryExcludehot = (params = {}) => getKugou('/fm/class', params)
+export const getDjCategoryRecommend = (params = {}) => getKugou('/fm/recommend', params)
+export const getDjTodayPreferred = (params = {}) => getKugou('/longaudio/daily/recommend', params)
+export const getDjDetail = (params = {}) => getKugou('/longaudio/album/detail', { album_id: params.rid ?? params.id, ...params })
+export const getDjPrograms = (params = {}) => getKugou('/longaudio/album/audios', { album_id: params.rid ?? params.id, ...params })
+export const getDjProgramDetail = (params = {}) => getKugou('/longaudio/album/detail', { album_id: params.id, ...params })
+export const getDjComments = (params = {}) => getKugou('/comment/album', params).then(toCommentResponse)
+export const getRecentDj = (params = {}) => getKugou('/lastest/songs/listen', params).then(toSongListResponse)
+export const searchVoiceLists = (params = {}) =>
+  getKugou('/search', { ...params, type: 'album' }).then((response) => toSearchResponse(response, 10))
+export const searchVoiceListPrograms = (params = {}) =>
+  getKugou('/search', { ...params, type: 'song' }).then((response) => toSearchResponse(response, 1))
+export const getVoiceListDetail = (params = {}) => getKugou('/longaudio/album/detail', { album_id: params.id, ...params })
+export const getVoiceListPrograms = (params = {}) => getKugou('/longaudio/album/audios', { album_id: params.id, ...params })
+export const getVoiceDetail = (params = {}) => getKugou('/krm/audio', { album_audio_id: params.id, ...params })
+export const getVoiceLyric = (params = {}) => {
+  const hash = params.hash ?? hashFromId(params.id)
+
+  return toLyricResponse({
+    ...params,
+    ...(hash ? { hash } : {})
   })
 }
-
-export function getPersonalizedPlaylists(params = {}) {
-  return getNetease('/personalized', params)
-}
-
-export function getBanners(params = {}) {
-  return getNetease('/banner', params)
-}
-
-export function getPersonalizedMvs(params = {}) {
-  return getNetease('/personalized/mv', params)
-}
-
-export function subscribeMv(params = {}) {
-  return getNetease('/mv/sub', params)
-}
-
-export function getSubscribedMvs(params = {}) {
-  return getNetease('/mv/sublist', params)
-}
-
-export function getMvComments(params = {}) {
-  return getNetease('/comment/mv', params)
-}
-
-export function likeResource(params = {}) {
-  return getNetease('/resource/like', params)
-}
-
-export function getSimilarMvs(params = {}) {
-  return getNetease('/simi/mv', params)
-}
-
-export function getAllMvs(params = {}) {
-  return getNetease('/mv/all', params)
-}
-
-export function getFirstMvs(params = {}) {
-  return getNetease('/mv/first', params)
-}
-
-export function getExclusiveMvs(params = {}) {
-  return getNetease('/mv/exclusive/rcmd', params)
-}
-
-export function getTopMvs(params = {}) {
-  return getNetease('/top/mv', params)
-}
-
-export function getMvDetail(params = {}) {
-  return getNetease('/mv/detail', params)
-}
-
-export function getMvDetailInfo(params = {}) {
-  return getNetease('/mv/detail/info', params)
-}
-
-export function getMvUrl(params = {}) {
-  return getNetease('/mv/url', params)
-}
-
-export function getFollowArtistNewMvs(params = {}) {
-  return getNetease('/artist/new/mv', params)
-}
-
-export function getUgcMv(params = {}) {
-  return getNetease('/ugc/mv/get', params)
-}
-
-export function getPersonalizedNewSongs(params = {}) {
-  return getNetease('/personalized/newsong', params)
-}
-
-export function getPersonalFm(params = {}) {
-  return getNetease('/personal_fm', params)
-}
-
-export function getPersonalFmByMode(params = {}) {
-  return getNetease('/personal/fm/mode', params)
-}
-
-export function sendFmTrash(params = {}) {
-  return getNetease('/fm_trash', params)
-}
-
-export function getPersonalizedDjPrograms(params = {}) {
-  return getNetease('/personalized/djprogram', params)
-}
-
-export function getDjBanner(params = {}) {
-  return getNetease('/dj/banner', params)
-}
-
-export function getDjPersonalizeRecommend(params = {}) {
-  return getNetease('/dj/personalize/recommend', params)
-}
-
-export function getDjHot(params = {}) {
-  return getNetease('/dj/hot', params)
-}
-
-export function getDjProgramToplist(params = {}) {
-  return getNetease('/dj/program/toplist', params)
-}
-
-export function getDjProgramHoursToplist(params = {}) {
-  return getNetease('/dj/program/toplist/hours', params)
-}
-
-export function getDjToplist(params = {}) {
-  return getNetease('/dj/toplist', params)
-}
-
-export function getDjToplistPay(params = {}) {
-  return getNetease('/dj/toplist/pay', params)
-}
-
-export function getDjToplistHours(params = {}) {
-  return getNetease('/dj/toplist/hours', params)
-}
-
-export function getDjToplistNewcomer(params = {}) {
-  return getNetease('/dj/toplist/newcomer', params)
-}
-
-export function getDjToplistPopular(params = {}) {
-  return getNetease('/dj/toplist/popular', params)
-}
-
-export function getDjRadioHot(params = {}) {
-  return getNetease('/dj/radio/hot', params)
-}
-
-export function getDjRecommend(params = {}) {
-  return getNetease('/dj/recommend', params)
-}
-
-export function getDjCatelist(params = {}) {
-  return getNetease('/dj/catelist', params)
-}
-
-export function getDjRecommendType(params = {}) {
-  return getNetease('/dj/recommend/type', params)
-}
-
-export function updateDjSubscribe(params = {}) {
-  return getNetease('/dj/sub', params)
-}
-
-export function getDjSublist(params = {}) {
-  return getNetease('/dj/sublist', params)
-}
-
-export function getDjPaygift(params = {}) {
-  return getNetease('/dj/paygift', params)
-}
-
-export function getDjCategoryExcludehot(params = {}) {
-  return getNetease('/dj/category/excludehot', params)
-}
-
-export function getDjCategoryRecommend(params = {}) {
-  return getNetease('/dj/category/recommend', params)
-}
-
-export function getDjTodayPreferred(params = {}) {
-  return getNetease('/dj/today/perfered', params)
-}
-
-export function getDjDetail(params = {}) {
-  return getNetease('/dj/detail', params)
-}
-
-export function getDjPrograms(params = {}) {
-  return getNetease('/dj/program', params)
-}
-
-export function getDjProgramDetail(params = {}) {
-  return getNetease('/dj/program/detail', params)
-}
-
-export function getDjComments(params = {}) {
-  return getNetease('/comment/dj', params)
-}
-
-export function getRecentDj(params = {}) {
-  return getNetease('/record/recent/dj', params)
-}
-
-export function searchVoiceLists(params = {}) {
-  return getNetease('/voicelist/search', params)
-}
-
-export function searchVoiceListPrograms(params = {}) {
-  return getNetease('/voicelist/list/search', params)
-}
-
-export function getVoiceListDetail(params = {}) {
-  return getNetease('/voicelist/detail', params)
-}
-
-export function getVoiceListPrograms(params = {}) {
-  return getNetease('/voicelist/list', params)
-}
-
-export function getVoiceDetail(params = {}) {
-  return getNetease('/voice/detail', params)
-}
-
-export function getVoiceLyric(params = {}) {
-  return getNetease('/voice/lyric', params)
-}
-
-export function getMyCreatedVoiceList(params = {}) {
-  return getNetease('/voicelist/my/created', params)
-}
-
-export function getBroadcastCategoryRegion(params = {}) {
-  return getNetease('/broadcast/category/region/get', params)
-}
-
-export function getBroadcastCollectList(params = {}) {
-  return getNetease('/broadcast/channel/collect/list', params)
-}
-
-export function getBroadcastCurrentInfo(params = {}) {
-  return getNetease('/broadcast/channel/currentinfo', params)
-}
-
-export function getBroadcastChannelList(params = {}) {
-  return getNetease('/broadcast/channel/list', params)
-}
-
-export function updateBroadcastSubscribe(params = {}) {
-  return getNetease('/broadcast/sub', params)
-}
-
-export function getDifmStyleChannels(params = {}) {
-  return getNetease('/dj/difm/all/style/channel', params)
-}
-
-export function getDifmSubscribedChannels(params = {}) {
-  return getNetease('/dj/difm/subscribe/channels/get', params)
-}
-
-export function subscribeDifmChannel(params = {}) {
-  return getNetease('/dj/difm/channel/subscribe', params)
-}
-
-export function unsubscribeDifmChannel(params = {}) {
-  return getNetease('/dj/difm/channel/unsubscribe', params)
-}
-
-export function getDifmPlayingTracks(params = {}) {
-  return getNetease('/dj/difm/playing/tracks/list', params)
-}
-
-export function getSatiTimeSceneResources(params = {}) {
-  return getNetease('/sati/timescene/resources/get', params)
-}
-
-export function getSatiTags(params = {}) {
-  return getNetease('/sati/tag/list', params)
-}
-
-export function getSatiResources(params = {}) {
-  return getNetease('/sati/resource/list', params)
-}
-
-export function getSatiMoreResources(params = {}) {
-  return getNetease('/sati/resource/list/more', params)
-}
-
-export function getSatiSubscribedResources(params = {}) {
-  return getNetease('/sati/resource/sub/list', params)
-}
-
-export function updateSatiSubscribe(params = {}) {
-  return getNetease('/sati/resource/sub', params)
-}
-
-export function getSportRadio(params = {}) {
-  return getNetease('/radio/sport/get', params)
-}
-
-export function checkSongLike(params = {}) {
-  return getNetease('/song/like/check', params)
-}
-
-export function updateSongLike(params = {}) {
-  return getNetease('/song/like', params)
-}
-
-export function getUserCreatedPlaylists(params = {}) {
-  return getNetease('/user/playlist/create', params)
-}
-
-export function getUserCollectedPlaylists(params = {}) {
-  return getNetease('/user/playlist/collect', params)
-}
-
-export function getSongDownloadList(params = {}) {
-  return getNetease('/song/downlist', params)
-}
-
-export function getPlaylistDetail(params = {}) {
-  return getNetease('/playlist/detail', params)
-}
-
-export function getPlaylistTracks(params = {}) {
-  return getNetease('/playlist/track/all', params)
-}
-
-export function getPlaylistHotCategories(params = {}) {
-  return getNetease('/playlist/hot', params)
-}
-
-export function getPlaylistCategories(params = {}) {
-  return getNetease('/playlist/catlist', params)
-}
-
-export function getTopPlaylists(params = {}) {
-  return getNetease('/top/playlist', params)
-}
-
-export function getHighQualityPlaylists(params = {}) {
-  return getNetease('/top/playlist/highquality', params)
-}
-
-export function getToplist(params = {}) {
-  return getNetease('/toplist', params)
-}
-
-export function getArtistList(params = {}) {
-  return getNetease('/artist/list', params)
-}
-
-export function getArtistToplist(params = {}) {
-  return getNetease('/toplist/artist', params)
-}
-
-export function getArtistDetail(params = {}) {
-  return getNetease('/artist/detail', params)
-}
-
-export function getArtistHotSongs(params = {}) {
-  return getNetease('/artists', params)
-}
-
-export function getArtistTopSongs(params = {}) {
-  return getNetease('/artist/top/song', params)
-}
-
-export function getArtistSongs(params = {}) {
-  return getNetease('/artist/songs', params)
-}
-
-export function getArtistAlbums(params = {}) {
-  return getNetease('/artist/album', params)
-}
-
-export function getArtistMvs(params = {}) {
-  return getNetease('/artist/mv', params)
-}
-
-export function getArtistVideos(params = {}) {
-  return getNetease('/artist/video', params)
-}
-
-export function getArtistDesc(params = {}) {
-  return getNetease('/artist/desc', params)
-}
-
-export function getArtistDynamic(params = {}) {
-  return getNetease('/artist/detail/dynamic', params)
-}
-
-export function getAlbumNewest(params = {}) {
-  return getNetease('/album/newest', params)
-}
-
-export function getNewAlbums(params = {}) {
-  return getNetease('/album/new', params)
-}
-
-export function getTopAlbums(params = {}) {
-  return getNetease('/top/album', params)
-}
-
-export function getAlbumDetail(params = {}) {
-  return getNetease('/album', params)
-}
-
-export function getAlbumDynamic(params = {}) {
-  return getNetease('/album/detail/dynamic', params)
-}
-
-export function getAlbumComments(params = {}) {
-  return getNetease('/comment/album', params)
-}
-
-export function getPlaylistComments(params = {}) {
-  return getNetease('/comment/playlist', params)
-}
-
-export function getCommentInfoList(params = {}) {
-  return getNetease('/comment/info/list', params)
-}
-
-export function getLoginStatus(params = {}) {
-  return getNetease('/login/status', params)
-}
-
-export function loginByCellphone(params = {}) {
-  return getNetease('/login/cellphone', params)
-}
-
-export function loginByEmail(params = {}) {
-  return getNetease('/login', params)
-}
-
-export function registerAnonymous(params = {}) {
-  return getNetease('/register/anonimous', params)
-}
-
-export function refreshLogin(params = {}) {
-  return getNetease('/login/refresh', params)
-}
-
-export function sendCaptcha(params = {}) {
-  return getNetease('/captcha/sent', params)
-}
-
-export function verifyCaptcha(params = {}) {
-  return getNetease('/captcha/verify', params)
-}
-
-export function getLoginQrKey(params = {}) {
-  return getNetease('/login/qr/key', params)
-}
-
-export function getLoginQrCreate(params = {}) {
-  return getNetease('/login/qr/create', params)
-}
-
-export function getLoginQrCheck(params = {}) {
-  return getNetease('/login/qr/check', params, {
-    acceptCodes: [800, 801, 802, 803]
+export const getMyCreatedVoiceList = (params = {}) => getKugou('/youth/channel/all', params)
+export const getBroadcastCategoryRegion = (params = {}) => getKugou('/fm/class', params)
+export const getBroadcastCollectList = (params = {}) => getKugou('/youth/channel/all', params)
+export const getBroadcastCurrentInfo = (params = {}) => getKugou('/youth/channel/detail', params)
+export const getBroadcastChannelList = (params = {}) => getKugou('/fm/recommend', params)
+export const updateBroadcastSubscribe = (params = {}) => getKugou('/youth/channel/sub', params)
+export const getDifmStyleChannels = (params = {}) => getKugou('/scene/lists', params)
+export const getDifmSubscribedChannels = (params = {}) => getKugou('/youth/channel/all', params)
+export const subscribeDifmChannel = (params = {}) => getKugou('/youth/channel/sub', { ...params, t: 1 })
+export const unsubscribeDifmChannel = (params = {}) => getKugou('/youth/channel/sub', { ...params, t: 0 })
+export const getDifmPlayingTracks = (params = {}) => getKugou('/fm/songs', params).then(toSongListResponse)
+export const getSatiTimeSceneResources = (params = {}) => getKugou('/scene/lists', params)
+export const getSatiTags = (params = {}) => getKugou('/scene/module/info', params)
+export const getSatiResources = (params = {}) => getKugou('/scene/audio/list', params)
+export const getSatiMoreResources = (params = {}) => getKugou('/scene/module', params)
+export const getSatiSubscribedResources = (params = {}) => getKugou('/youth/channel/all', params)
+export const updateSatiSubscribe = (params = {}) => getKugou('/youth/channel/sub', params)
+export const getSportRadio = (params = {}) => getKugou('/fm/recommend', params)
+
+// User library
+export const checkSongLike = (params = {}) => getKugou('/favorite/count', { mixsongids: params.ids, ...params })
+export const updateSongLike = (params = {}) => getKugou('/playlist/tracks/add', params)
+export const getUserCreatedPlaylists = (params = {}) => getKugou('/user/playlist', params).then(toPlaylistListResponse)
+export const getUserCollectedPlaylists = (params = {}) => getKugou('/user/playlist', params).then(toPlaylistListResponse)
+export const getSongDownloadList = (params = {}) => getKugou('/user/cloud', params).then(toSongListResponse)
+
+// Playlists and charts
+export const getPlaylistDetail = (params = {}) => {
+  if (/^\d+$/.test(String(params.id ?? ''))) {
+    return getKugou('/rank/audio', { ...params, rankid: params.id }).then((response) =>
+      toRankTracksResponse(response, params.id)
+    )
+  }
+
+  return getKugou('/playlist/detail', params).then(toPlaylistDetailResponse)
+}
+export const getPlaylistTracks = (params = {}) => {
+  if (params.listid || params.listId) {
+    const listid = params.listid ?? params.listId
+
+    return getKugou('/playlist/track/all/new', { ...params, listid }).then((response) =>
+      toPlaylistTracksResponse(response, listid)
+    )
+  }
+
+  if (/^\d+$/.test(String(params.id ?? ''))) {
+    return getKugou('/rank/audio', { ...params, rankid: params.id }).then((response) =>
+      toRankTracksResponse(response, params.id)
+    )
+  }
+
+  return getKugou('/playlist/track/all', params).then((response) =>
+    toPlaylistTracksResponse(response, params.id)
+  )
+}
+export const getPlaylistHotCategories = (params = {}) => getKugou('/playlist/tags', params)
+export const getPlaylistCategories = (params = {}) => getKugou('/playlist/tags', params)
+export const getSimilarPlaylists = (params = {}) => getKugou('/playlist/similar', params).then(toPlaylistListResponse)
+export const getTopPlaylists = (params = {}) =>
+  getKugou('/top/playlist', { category_id: 0, ...params }).then(toPlaylistListResponse)
+export const getHighQualityPlaylists = (params = {}) =>
+  getKugou('/top/playlist', { category_id: 11292, ...params }).then(toPlaylistListResponse)
+export const getToplist = (params = {}) => getKugou('/rank/list', params).then(toToplistResponse)
+
+// Artists
+export const getArtistList = (params = {}) => getKugou('/artist/lists', params).then(toArtistListResponse)
+export const getArtistToplist = (params = {}) => getKugou('/artist/lists', params).then(toArtistListResponse)
+export const getArtistDetail = (params = {}) => getKugou('/artist/detail', params).then(toArtistDetailResponse)
+export const getArtistHotSongs = (params = {}) => getKugou('/artist/audios', params).then(toArtistSongsResponse)
+export const getArtistTopSongs = (params = {}) =>
+  getKugou('/artist/audios', { ...params, sort: 'hot' }).then(toArtistSongsResponse)
+export const getArtistSongs = (params = {}) => getKugou('/artist/audios', params).then(toArtistSongsResponse)
+export const getArtistAlbums = (params = {}) => getKugou('/artist/albums', params).then(toArtistAlbumsResponse)
+export const getArtistMvs = (params = {}) => getKugou('/artist/videos', params)
+export const getArtistVideos = (params = {}) => getKugou('/artist/videos', params).then(toArtistVideosResponse)
+export const getArtistDesc = (params = {}) => getKugou('/artist/detail', params).then(toArtistDetailResponse)
+export const getArtistDynamic = (params = {}) => getKugou('/artist/detail', params).then(toArtistDetailResponse)
+
+// Albums
+export const getAlbumNewest = (params = {}) => getKugou('/top/album', params).then(toAlbumListResponse)
+export const getNewAlbums = (params = {}) => getKugou('/top/album', params).then(toAlbumListResponse)
+export const getTopAlbums = (params = {}) => getKugou('/top/album', params).then(toAlbumListResponse)
+export const getAlbumDetail = (params = {}) => getKugou('/album/detail', params).then(toAlbumDetailResponse)
+export const getAlbumSongs = (params = {}) => getKugou('/album/songs', params).then(toSongListResponse)
+export const getAlbumDynamic = (params = {}) => getKugou('/album/detail', params).then(toAlbumDetailResponse)
+export const getAlbumComments = (params = {}) => getKugou('/comment/album', params).then(toCommentResponse)
+export const getPlaylistComments = (params = {}) => getKugou('/comment/playlist', params).then(toCommentResponse)
+export const getCommentInfoList = (params = {}) => getKugou('/comment/floor', params)
+
+// Authentication
+export const getLoginStatus = (params = {}) => getKugou('/user/detail', params).then(toLoginProfileResponse)
+export const loginByCellphone = (params = {}) => {
+  if (params.password && !params.captcha && !params.code) {
+    return getKugou('/login', {
+      username: params.phone ?? params.mobile,
+      password: params.password,
+      ...params
+    }).then(toLoginProfileResponse)
+  }
+
+  return getKugou('/login/cellphone', params).then(toLoginProfileResponse)
+}
+export const loginByEmail = (params = {}) =>
+  getKugou('/login', { username: params.email, ...params }).then(toLoginProfileResponse)
+export const registerAnonymous = (params = {}) =>
+  getKugou('/register/dev', params).then((response) => {
+    const data = response.data ?? response
+    const dfid = data.dfid ?? response.dfid ?? ''
+
+    return {
+      ...response,
+      userId: '',
+      cookie: dfid ? `dfid=${dfid}` : '',
+      data: {
+        ...data,
+        userId: ''
+      }
+    }
   })
-}
+export const refreshLogin = (params = {}) => getKugou('/login/token', params).then(toLoginProfileResponse)
+export const sendCaptcha = (params = {}) => getKugou('/captcha/sent', params)
+export const verifyCaptcha = (params = {}) => getKugou('/login/cellphone', params)
+export const getLoginQrKey = (params = {}) => getKugou('/login/qr/key', params).then(toQrKeyResponse)
+export const getLoginQrCreate = (params = {}) => getKugou('/login/qr/create', params).then(toQrCreateResponse)
+export const getLoginQrCheck = (params = {}) =>
+  getKugou('/login/qr/check', params, { acceptCodes: [0, 1, 2, 4, 200] }).then(toQrCheckResponse)
+export const getUserAccount = (params = {}) => getKugou('/user/detail', params).then(toLoginProfileResponse)
+export const logout = (params = {}) => getKugou('/login/token', params)
 
-export function getUserAccount(params = {}) {
-  return getNetease('/user/account', params)
-}
+// Songs, comments, lyrics, and search
+export const getSongComments = (params = {}) => getKugou('/comment/music', params).then(toCommentResponse)
+export const getSongRedCount = (params = {}) => {
+  const knownSong = getKnownSong(params.id)
 
-export function logout(params = {}) {
-  return getNetease('/logout', params)
+  return getKugou('/comment/count', {
+    ...params,
+    hash: params.hash ?? knownSong?.hash
+  }).then(toCommentCountResponse)
 }
+export const getSongUrl = (params = {}) =>
+  getKugou('/song/url', params)
+    .then(toSongUrlResponse)
+    .catch(() => ({ data: [] }))
+    .then((response) => {
+      if (response.data?.[0]?.url) {
+        return response
+      }
 
-export function getSongComments(params = {}) {
-  return getNetease('/comment/music', params)
-}
-
-export function getSongRedCount(params = {}) {
-  return getNetease('/song/red/count', params)
-}
-
-export function getSongUrl(params = {}) {
-  return getNetease('/song/url/v1', params)
-}
-
-export function getLyric(params = {}) {
-  return getNetease('/lyric', params)
-}
-
-export function getSearchDefault(params = {}) {
-  return getNetease('/search/default', params)
-}
-
-export function getSearchHotDetail(params = {}) {
-  return getNetease('/search/hot/detail', params)
-}
-
-export function getSearchSuggestPc(params = {}) {
-  return getNetease('/search/suggest/pc', params)
-}
-
-export function getSearchMultiMatch(params = {}) {
-  return getNetease('/search/multimatch', params)
-}
-
-export function getCloudSearch(params = {}) {
-  return getNetease('/cloudsearch', params)
-}
+      return getKugou('/song/url/new', params)
+        .then(toSongUrlResponse)
+        .catch(() => response)
+    })
+export const getLyric = (params = {}) => toLyricResponse(params)
+export const getSearchDefault = (params = {}) => getKugou('/search/default', params)
+export const getSearchHotDetail = (params = {}) => getKugou('/search/hot', params).then(toHotSearchResponse)
+export const getSearchSuggestPc = (params = {}) => getKugou('/search/suggest', params).then(toSuggestResponse)
+export const getSearchMultiMatch = (params = {}) =>
+  getKugou('/search/complex', params)
+    .then((response) => toSearchResponse(response, 1))
+    .catch(() => emptySearchResponse(1))
+export const getCloudSearch = (params = {}) =>
+  getKugou('/search', params)
+    .then((response) => toSearchResponse(response, params.type))
+    .catch(() => emptySearchResponse(params.type))

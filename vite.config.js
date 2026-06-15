@@ -10,7 +10,7 @@ export default defineConfig({
     // 新增代理配置
     proxy: {
       '^/api': {
-        target: 'http://localhost:3000', // 后端地址
+        target: 'http://localhost:4000', // 后端地址
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },

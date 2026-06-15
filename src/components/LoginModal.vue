@@ -9,7 +9,7 @@
   >
     <template #header>
       <div class="login-modal__title">
-        <span>{{ auth.state.isLoggedIn ? '账号信息' : '登录账号' }}</span>
+        <span>{{ auth.state.isLoggedIn ? '账号信息' : '登录酷狗账号' }}</span>
         <small>{{ headerSubtitle }}</small>
       </div>
     </template>
@@ -78,12 +78,12 @@
           class="login-qr__status"
           :class="{
             'login-qr__status--confirm': auth.state.qr.status === 802,
-            'login-qr__status--expired': auth.state.qr.status === 800 || auth.state.error,
+            'login-qr__status--expired': auth.state.qr.status === 800 || auth.state.error
           }"
         >
           {{ auth.state.error || auth.state.qr.message || '等待扫码' }}
         </strong>
-        <p>打开 App，扫描二维码完成登录。</p>
+        <p>使用酷狗音乐 App 扫码，确认后会自动完成登录。</p>
 
         <button class="login-modal__button" type="button" :disabled="auth.state.qr.loading" @click="refreshQr">
           <RefreshCw :size="15" :class="{ spin: auth.state.qr.loading }" />
@@ -113,6 +113,10 @@
               {{ captchaButtonText }}
             </button>
           </n-input-group>
+        </label>
+        <label class="login-field">
+          <span>用户 ID</span>
+          <n-input v-model:value="phoneForm.userid" placeholder="多账号时填写，可留空" clearable />
         </label>
         <button class="login-modal__button login-modal__button--primary" type="submit" :disabled="auth.state.formLoading">
           <LogIn :size="15" />
@@ -145,15 +149,15 @@
         </button>
       </form>
 
-      <form v-else-if="loginMethod === 'email'" class="login-form" @submit.prevent="submitEmailLogin">
+      <form v-else-if="loginMethod === 'account'" class="login-form" @submit.prevent="submitAccountLogin">
         <label class="login-field">
-          <span>邮箱</span>
-          <n-input v-model:value="emailForm.email" placeholder="请输入 163 邮箱" clearable />
+          <span>用户名</span>
+          <n-input v-model:value="accountForm.email" placeholder="酷狗账号或邮箱" clearable />
         </label>
         <label class="login-field">
           <span>密码</span>
           <n-input
-            v-model:value="emailForm.password"
+            v-model:value="accountForm.password"
             type="password"
             show-password-on="click"
             placeholder="请输入密码"
@@ -162,7 +166,7 @@
         </label>
         <button class="login-modal__button login-modal__button--primary" type="submit" :disabled="auth.state.formLoading">
           <Mail :size="15" />
-          <span>{{ auth.state.formLoading ? '登录中...' : '邮箱登录' }}</span>
+          <span>{{ auth.state.formLoading ? '登录中...' : '账号登录' }}</span>
         </button>
       </form>
 
@@ -172,7 +176,7 @@
           <n-input
             v-model:value="cookieValue"
             type="textarea"
-            placeholder="MUSIC_U=..."
+            placeholder="token=...;userid=...;dfid=..."
             :autosize="{ minRows: 3, maxRows: 5 }"
             clearable
           />
@@ -198,9 +202,9 @@
 <script setup>
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import {
+  KeyRound,
   LogIn,
   LogOut,
-  KeyRound,
   Mail,
   MessageCircle,
   QrCode,
@@ -225,9 +229,10 @@ const phoneForm = reactive({
   countrycode: '86',
   phone: '',
   password: '',
-  captcha: ''
+  captcha: '',
+  userid: ''
 })
-const emailForm = reactive({
+const accountForm = reactive({
   email: '',
   password: ''
 })
@@ -239,7 +244,7 @@ const loginMethods = [
   { label: '扫码', value: 'qr', icon: QrCode },
   { label: '验证码', value: 'sms', icon: MessageCircle },
   { label: '手机号', value: 'phone', icon: Smartphone },
-  { label: '邮箱', value: 'email', icon: Mail },
+  { label: '账号', value: 'account', icon: Mail },
   { label: 'Cookie', value: 'cookie', icon: KeyRound }
 ]
 
@@ -250,23 +255,27 @@ const modalVisible = computed({
 
 const headerSubtitle = computed(() => {
   if (auth.state.isLoggedIn) {
-    return auth.isGuest.value ? '已连接游客凭证' : '已连接账号'
+    return auth.isGuest.value ? '已连接游客凭证' : '已连接酷狗账号'
   }
 
   const subtitles = {
-    qr: '使用 App 扫码',
-    sms: '使用手机短信验证码',
+    qr: '使用 App 扫码授权',
+    sms: '使用手机号和短信验证码',
     phone: '使用手机号和密码',
-    email: '使用网易邮箱和密码',
-    cookie: '导入已有 MUSIC_U 凭证'
+    account: '使用酷狗账号和密码',
+    cookie: '导入 token、userid、dfid'
   }
 
   return subtitles[loginMethod.value]
 })
 
-const captchaButtonText = computed(() =>
-  captchaCooldown.value > 0 ? `${captchaCooldown.value}s` : auth.state.captchaLoading ? '发送中...' : '发送验证码'
-)
+const captchaButtonText = computed(() => {
+  if (captchaCooldown.value > 0) {
+    return `${captchaCooldown.value}s`
+  }
+
+  return auth.state.captchaLoading ? '发送中...' : '发送验证码'
+})
 
 watch(
   () => props.show,
@@ -337,7 +346,8 @@ async function submitSmsLogin() {
   await auth.loginWithCellphone({
     phone: phoneForm.phone,
     countrycode: phoneForm.countrycode,
-    captcha: phoneForm.captcha
+    captcha: phoneForm.captcha,
+    userid: phoneForm.userid
   })
 }
 
@@ -349,8 +359,8 @@ async function submitPhoneLogin() {
   })
 }
 
-async function submitEmailLogin() {
-  await auth.loginWithEmail(emailForm)
+async function submitAccountLogin() {
+  await auth.loginWithEmail(accountForm)
 }
 
 async function submitCookieLogin() {

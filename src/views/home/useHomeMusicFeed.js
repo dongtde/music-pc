@@ -92,16 +92,16 @@ export function useHomeMusicFeed({ active }) {
 
       if (trackId && String(trackId) === String(activeSong.value?.id)) {
         await nextTick()
-        lyrics.loadActiveLyrics(trackId)
+        lyrics.loadActiveLyrics(activeSong.value)
       }
     }
   )
 
   watch(
-    () => activeSong.value?.id,
+    () => activeSong.value,
     (trackId) => {
       lyrics.loadActiveLyrics(trackId)
-      engagement.loadActiveSongStats(trackId)
+      engagement.loadActiveSongStats(trackId?.id)
       engagement.resetSongDanmakuStream()
       engagement.loadMoreSongDanmaku()
       hydrateVisibleCoverTints()
@@ -531,7 +531,7 @@ export function useHomeMusicFeed({ active }) {
         }
       }
 
-      lyrics.loadActiveLyrics(song.id)
+      lyrics.loadActiveLyrics(song)
       return
     }
 
@@ -543,7 +543,7 @@ export function useHomeMusicFeed({ active }) {
     showPlaybackError(toggled)
 
     if (toggled) {
-      lyrics.loadActiveLyrics(song.id)
+      lyrics.loadActiveLyrics(song)
     }
   }
 

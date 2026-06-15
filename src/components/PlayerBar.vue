@@ -610,8 +610,8 @@ function resetProgressLyrics() {
   progressLyricLines.value = []
 }
 
-async function loadProgressLyrics(trackId) {
-  const normalizedTrackId = String(trackId ?? '')
+async function loadProgressLyrics(track) {
+  const normalizedTrackId = String(track?.id ?? track ?? '')
 
   if (
     !normalizedTrackId ||
@@ -633,7 +633,7 @@ async function loadProgressLyrics(trackId) {
   }
 
   try {
-    const lines = await getTrackLyricData(normalizedTrackId)
+    const lines = await getTrackLyricData(track && typeof track === 'object' ? track : normalizedTrackId)
 
     if (requestId !== progressLyricRequestId) {
       return
@@ -858,7 +858,7 @@ function updateProgressPreview(event) {
     return
   }
 
-  loadProgressLyrics(currentTrack.value.id)
+  loadProgressLyrics(currentTrack.value)
   progressPreviewVisible.value = true
   progressPreviewPercent.value = progress.percent
   progressPreviewTime.value = progress.time
@@ -932,7 +932,7 @@ function findLyricLineAt(time) {
 }
 
 function isNeteaseTrackId(trackId) {
-  return /^\d+$/.test(String(trackId ?? ''))
+  return /^\d+$/.test(String(trackId ?? '')) || /^[a-f0-9]{32}$/i.test(String(trackId ?? ''))
 }
 
 async function playPreviousTrack() {

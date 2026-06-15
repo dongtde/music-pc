@@ -10,8 +10,14 @@ const http = axios.create({
 
 http.interceptors.request.use((config) => {
   const cookie = getStoredCookie();
+  const skipCookie = Boolean(config.noCookie || config.params?.noCookie);
 
-  if (cookie && !config.params?.cookie && !config.params?.noCookie) {
+  if (config.params?.noCookie) {
+    const { noCookie, ...params } = config.params;
+    config.params = params;
+  }
+
+  if (cookie && !config.params?.cookie && !skipCookie) {
     config.params = {
       ...(config.params ?? {}),
       cookie,
@@ -24,12 +30,30 @@ http.interceptors.request.use((config) => {
 http.interceptors.response.use(
   (response) => {
     const data = response.data;
-    const acceptCodes = response.config.acceptCodes ?? [200];
+    const acceptCodes = response.config.acceptCodes;
+    const responseCode = data?.code;
+    const errorCode = data?.error_code ?? data?.errcode ?? data?.err_code;
 
-    if (data?.code && !acceptCodes.includes(data.code)) {
+    if (acceptCodes && responseCode !== undefined && responseCode !== null && !acceptCodes.includes(responseCode)) {
       return Promise.reject(
         new Error(
-          data.message ?? `Netease API responded with code ${data.code}`,
+          data.message ?? data.errmsg ?? `KuGouMusic API responded with code ${responseCode}`,
+        ),
+      );
+    }
+
+    const normalizedErrorCode = Number(errorCode);
+
+    if (
+      errorCode !== undefined &&
+      errorCode !== null &&
+      Number.isFinite(normalizedErrorCode) &&
+      normalizedErrorCode !== 0 &&
+      normalizedErrorCode !== 200
+    ) {
+      return Promise.reject(
+        new Error(
+          data.message ?? data.error_msg ?? data.errmsg ?? `KuGouMusic API responded with error ${errorCode}`,
         ),
       );
     }

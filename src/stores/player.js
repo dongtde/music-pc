@@ -2,6 +2,7 @@ import { reactive } from 'vue'
 import { getSongUrl } from '../api/modules/netease'
 import { STORAGE_KEYS } from '../config/app'
 import { currentTrack as fallbackTrack, newSongs } from '../data/music'
+import { useAuthStore } from './auth'
 import { useLibraryStore } from './library'
 import { readJsonStorage, writeJsonStorage } from '../utils/storage'
 import { clampTime, formatTime, parseDuration, toFiniteNumber } from '../utils/time'
@@ -202,7 +203,19 @@ async function resolvePlaybackUrl(track) {
     throw new Error('本地文件需要重新导入后播放')
   }
 
-  const response = await getSongUrl({ id: track.id, level: 'standard' })
+  const auth = useAuthStore()
+  if (!auth.state.cookie) {
+    await auth.loginAsGuest()
+  }
+
+  const response = await getSongUrl({
+    id: track.id,
+    hash: track.hash,
+    album_audio_id: track.album_audio_id ?? track.mixsongid ?? track.audio_id,
+    mixsongid: track.mixsongid,
+    album_id: track.album_id ?? track.albumId,
+    level: 'standard'
+  })
   return response.data?.[0]?.url || ''
 }
 
@@ -321,6 +334,11 @@ function serializeTrack(track) {
     source: track.source,
     artistId: track.artistId,
     albumId: track.albumId,
+    hash: track.hash,
+    album_audio_id: track.album_audio_id,
+    mixsongid: track.mixsongid,
+    album_id: track.album_id,
+    audio_id: track.audio_id,
     likedCount: track.likedCount,
     likedCountLabel: track.likedCountLabel,
     commentCount: track.commentCount,

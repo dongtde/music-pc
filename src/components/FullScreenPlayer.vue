@@ -440,9 +440,9 @@ watch(
 );
 
 watch(
-  () => props.track.id,
-  (trackId) => {
-    loadTrackLyrics(trackId);
+  () => props.track,
+  (track) => {
+    loadTrackLyrics(track);
   },
   { immediate: true },
 );
@@ -496,7 +496,8 @@ function clearDanmakuActivation() {
   }
 }
 
-async function loadTrackLyrics(trackId) {
+async function loadTrackLyrics(track) {
+  const trackId = String(track?.id ?? track ?? '');
   lyricRequestId += 1;
   const requestId = lyricRequestId;
   playbackLyricIndex.value = 0;
@@ -512,7 +513,7 @@ async function loadTrackLyrics(trackId) {
   lyricLines.value = createLyricPlaceholder('歌词加载中...');
 
   try {
-    const lines = await getTrackLyricData(trackId);
+    const lines = await getTrackLyricData(track && typeof track === 'object' ? track : trackId);
 
     if (requestId !== lyricRequestId) {
       return;

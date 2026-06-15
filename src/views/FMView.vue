@@ -44,7 +44,7 @@
     <section v-if="!auth.state.isLoggedIn" class="fm-login-panel">
       <LockKeyhole :size="28" />
       <div>
-        <strong>私人 FM 需要登录网易云账号</strong>
+        <strong>私人 FM 需要登录酷狗账号</strong>
         <small>登录后可获取推荐、切换模式、喜欢歌曲以及把不想听的歌移入垃圾桶。</small>
       </div>
       <button class="fm-action fm-action--primary" type="button" @click="auth.openLoginModal">

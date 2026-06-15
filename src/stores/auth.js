@@ -1,17 +1,16 @@
 import { computed, reactive } from 'vue'
 import {
-  loginByCellphone,
-  loginByEmail,
   getLoginQrCheck,
   getLoginQrCreate,
   getLoginQrKey,
   getLoginStatus,
   getUserAccount,
+  loginByCellphone,
+  loginByEmail,
+  logout as requestLogout,
   refreshLogin,
   registerAnonymous,
-  sendCaptcha,
-  verifyCaptcha,
-  logout as requestLogout
+  sendCaptcha
 } from '../api/modules/netease'
 import { DEFAULT_COUNTRY_CODE, STORAGE_KEYS } from '../config/app'
 import { readStorage, writeStorage } from '../utils/storage'
@@ -63,37 +62,35 @@ export function useAuthStore() {
   }
 
   async function refreshLoginStatus() {
+    if (!state.cookie) {
+      clearAccountState(false)
+      return false
+    }
+
     try {
-      const response = await getLoginStatus({
-        timestamp: Date.now()
-      })
+      const response = await getLoginStatus({ timestamp: Date.now() })
       const data = response.data ?? response
-      const profile = data.profile ?? null
-      const account = data.account ?? null
+      const profile = response.profile ?? data.profile ?? null
+      const account = response.account ?? data.account ?? null
 
       if (profile || account) {
         setAccountState({ profile, account, loginType: 'account' })
         return true
       }
 
-      if (state.cookie) {
-        return await loadUserAccount()
-      }
-
-      clearAccountState(false)
-      return false
+      return await loadUserAccount()
     } catch (error) {
       console.warn('Failed to refresh login status:', error)
-      if (state.cookie) {
-        return await loadUserAccount()
-      }
-
-      clearAccountState(false)
-      return false
+      return await loadUserAccount()
     }
   }
 
   async function loadUserAccount() {
+    if (!state.cookie) {
+      clearAccountState(false)
+      return false
+    }
+
     try {
       const response = await getUserAccount({ timestamp: Date.now() })
 
@@ -116,6 +113,7 @@ export function useAuthStore() {
   async function createQrLogin() {
     state.qr.loading = true
     state.error = ''
+    state.notice = ''
 
     try {
       const keyResponse = await getLoginQrKey({ timestamp: Date.now(), noCookie: true })
@@ -133,7 +131,7 @@ export function useAuthStore() {
       })
 
       state.qr.key = key
-      state.qr.image = qrResponse.data?.qrimg || ''
+      state.qr.image = normalizeQrImage(qrResponse.data?.qrimg || '')
       state.qr.status = 801
       state.qr.message = '等待扫码'
     } catch (error) {
@@ -160,8 +158,12 @@ export function useAuthStore() {
       state.qr.message = response.message || getQrStatusText(response.code)
 
       if (response.code === 803) {
-        await completeLogin(response, 'account')
-        state.loginModalVisible = false
+        const loggedIn = await completeLogin(response, 'account')
+        if (loggedIn) {
+          state.loginModalVisible = false
+        } else {
+          setError('登录成功但无法获取账号信息')
+        }
       }
 
       return response.code
@@ -172,10 +174,17 @@ export function useAuthStore() {
     }
   }
 
-  async function loginWithCellphone({ phone, countrycode = DEFAULT_COUNTRY_CODE, password = '', captcha = '' }) {
+  async function loginWithCellphone({
+    phone,
+    countrycode = DEFAULT_COUNTRY_CODE,
+    password = '',
+    captcha = '',
+    userid = ''
+  }) {
     const normalizedPhone = String(phone ?? '').trim()
     const normalizedPassword = String(password ?? '')
     const normalizedCaptcha = String(captcha ?? '').trim()
+    const normalizedUserId = String(userid ?? '').trim()
 
     if (!normalizedPhone) {
       setError('请输入手机号')
@@ -197,10 +206,14 @@ export function useAuthStore() {
         countrycode: normalizeCountryCode(countrycode),
         password: normalizedCaptcha ? undefined : normalizedPassword,
         captcha: normalizedCaptcha || undefined,
+        userid: normalizedUserId || undefined,
         timestamp: Date.now(),
         noCookie: true
       })
-      await completeLogin(response, 'account')
+      const loggedIn = await completeLogin(response, 'account')
+      if (!loggedIn) {
+        throw new Error('登录失败，未获取到账号信息')
+      }
       state.loginModalVisible = false
       return true
     } catch (error) {
@@ -217,7 +230,7 @@ export function useAuthStore() {
     const normalizedPassword = String(password ?? '')
 
     if (!normalizedEmail || !normalizedPassword) {
-      setError('请输入邮箱和密码')
+      setError('请输入账号和密码')
       return false
     }
 
@@ -232,12 +245,15 @@ export function useAuthStore() {
         timestamp: Date.now(),
         noCookie: true
       })
-      await completeLogin(response, 'account')
+      const loggedIn = await completeLogin(response, 'account')
+      if (!loggedIn) {
+        throw new Error('登录失败，未获取到账号信息')
+      }
       state.loginModalVisible = false
       return true
     } catch (error) {
-      console.warn('Failed to login with email:', error)
-      setError(error?.message || '邮箱登录失败')
+      console.warn('Failed to login with account:', error)
+      setError(error?.message || '账号登录失败')
       return false
     } finally {
       state.formLoading = false
@@ -259,7 +275,7 @@ export function useAuthStore() {
     try {
       await sendCaptcha({
         phone: normalizedPhone,
-        ctcode: normalizeCountryCode(countrycode),
+        countrycode: normalizeCountryCode(countrycode),
         timestamp: Date.now(),
         noCookie: true
       })
@@ -283,20 +299,7 @@ export function useAuthStore() {
       return false
     }
 
-    try {
-      await verifyCaptcha({
-        phone: normalizedPhone,
-        captcha: normalizedCaptcha,
-        ctcode: normalizeCountryCode(countrycode),
-        timestamp: Date.now(),
-        noCookie: true
-      })
-      return true
-    } catch (error) {
-      console.warn('Failed to verify captcha:', error)
-      setError(error?.message || '验证码校验失败')
-      return false
-    }
+    return true
   }
 
   async function loginAsGuest() {
@@ -312,7 +315,7 @@ export function useAuthStore() {
       saveCookie(response.cookie || state.cookie)
       setAccountState({
         profile: {
-          userId: response.userId || response.data?.userId || '',
+          userId: response.userId || response.data?.userId || 'guest',
           nickname: '游客账号',
           avatarUrl: ''
         },
@@ -370,9 +373,7 @@ export function useAuthStore() {
     state.notice = ''
 
     try {
-      const response = await refreshLogin({
-        timestamp: Date.now()
-      })
+      const response = await refreshLogin({ timestamp: Date.now() })
 
       if (response.cookie) {
         saveCookie(response.cookie)
@@ -473,7 +474,9 @@ function saveCookie(cookie) {
 }
 
 async function completeLogin(response, loginType) {
-  saveCookie(response.cookie || state.cookie)
+  if (response.cookie) {
+    saveCookie(response.cookie)
+  }
 
   if (response.profile || response.account) {
     setAccountState({
@@ -498,6 +501,14 @@ function normalizeCountryCode(value) {
 
 function readStoredCookie() {
   return readStorage(STORAGE_KEYS.neteaseCookie, '')
+}
+
+function normalizeQrImage(value) {
+  if (!value || value.startsWith('data:image')) {
+    return value
+  }
+
+  return `data:image/png;base64,${value}`
 }
 
 function getQrStatusText(code) {

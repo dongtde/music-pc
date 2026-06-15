@@ -3,6 +3,7 @@ import {
   getAlbumComments,
   getAlbumDetail,
   getAlbumDynamic,
+  getAlbumSongs,
   getAllMvs,
   getArtistAlbums,
   getArtistDesc,
@@ -68,6 +69,7 @@ import {
   getPlaylistHotCategories,
   getPlaylistComments,
   getPlaylistTracks,
+  getSimilarPlaylists,
   getSongDownloadList,
   getSearchDefault,
   getSearchHotDetail,
@@ -111,10 +113,10 @@ let artistToplistPromise = null
 export async function getHomeDiscoverData() {
   return getCachedData('home-discover', CACHE_TTL.discovery, async () => {
   const [bannerResponse, playlistResponse, newsongResponse, mvResponse] = await Promise.all([
-    getBanners({ type: 0 }),
-    getPersonalizedPlaylists({ limit: 18 }),
-    getPersonalizedNewSongs({ limit: 100 }),
-    getPersonalizedMvs()
+    getBanners({ type: 0 }).catch(() => ({})),
+    getPersonalizedPlaylists({ limit: 18 }).catch(() => ({})),
+    getPersonalizedNewSongs({ limit: 100 }).catch(() => ({})),
+    getPersonalizedMvs().catch(() => ({}))
   ])
 
   const banners = (bannerResponse.banners ?? []).map(mapBanner)
@@ -642,10 +644,12 @@ export async function toggleMvLikeData({ id, like }) {
   })
 }
 
-export async function getPlaylistDetailData(id) {
-  return getCachedData(cacheKey('playlist-detail', { id }), CACHE_TTL.playlistDetail, async () => {
-    const detailResponse = await getPlaylistDetail({ id })
-    const rawPlaylist = detailResponse.playlist
+export async function getPlaylistDetailData(id, { listid = '', fallbackPlaylist = null } = {}) {
+  return getCachedData(cacheKey('playlist-detail', { id, listid }), CACHE_TTL.playlistDetail, async () => {
+    const detailResponse = listid
+      ? { playlist: fallbackPlaylist }
+      : await getPlaylistDetail({ id })
+    const rawPlaylist = detailResponse.playlist ?? fallbackPlaylist
 
     if (!rawPlaylist) {
       throw new Error('Playlist detail is empty')
@@ -656,6 +660,7 @@ export async function getPlaylistDetailData(id) {
     try {
       const trackResponse = await getPlaylistTracks({
         id,
+        listid,
         limit: rawPlaylist.trackCount || 1000,
         offset: 0
       })
@@ -674,44 +679,74 @@ export async function getPlaylistDetailData(id) {
   })
 }
 
-export async function getPlaylistOverviewData(id, { trackLimit = 60 } = {}) {
+export async function getPlaylistOverviewData(id, { trackLimit = 60, listid = '', fallbackPlaylist = null } = {}) {
   return getCachedData(
-    cacheKey('playlist-overview', { id, trackLimit }),
+    cacheKey('playlist-overview', { id, listid, trackLimit }),
     CACHE_TTL.playlistDetail,
     async () => {
-      const detailResponse = await getPlaylistDetail({ id })
-      const rawPlaylist = detailResponse.playlist
+      const [detailResponse, trackResponse] = await Promise.all([
+        listid ? Promise.resolve({ playlist: fallbackPlaylist }) : getPlaylistDetail({ id }),
+        getPlaylistTracks({
+          id,
+          listid,
+          limit: trackLimit,
+          offset: 0
+        }).catch(() => ({}))
+      ])
+      const rawPlaylist = detailResponse.playlist ?? fallbackPlaylist
 
       if (!rawPlaylist) {
         throw new Error('Playlist detail is empty')
       }
 
-      const tracks = Array.isArray(rawPlaylist.tracks)
-        ? rawPlaylist.tracks.slice(0, trackLimit)
-        : []
+      const responseTracks = Array.isArray(trackResponse.songs) ? trackResponse.songs : []
+      const detailTracks = Array.isArray(rawPlaylist.tracks) ? rawPlaylist.tracks.slice(0, trackLimit) : []
+      const tracks = responseTracks.length ? responseTracks : detailTracks
+      const total = Number(trackResponse.total ?? rawPlaylist.trackCount ?? tracks.length) || tracks.length
 
       return {
-        playlist: mapPlaylistDetail(rawPlaylist),
-        tracks: tracks.map(mapPlaylistTrack)
+        playlist: mapPlaylistDetail({
+          ...rawPlaylist,
+          trackCount: total || rawPlaylist.trackCount
+        }),
+        tracks: tracks.map(mapPlaylistTrack),
+        total,
+        more: Boolean(trackResponse.more || (total && tracks.length < total))
       }
     }
   )
 }
 
-export async function getPlaylistTracksData({ id, limit = 100, offset = 0 }) {
+export async function getPlaylistTracksData({ id, listid = '', limit = 100, offset = 0 }) {
   return getCachedData(
-    cacheKey('playlist-tracks', { id, limit, offset }),
+    cacheKey('playlist-tracks', { id, listid, limit, offset }),
     CACHE_TTL.playlistDetail,
     async () => {
-      const response = await getPlaylistTracks({ id, limit, offset })
+      const response = await getPlaylistTracks({ id, listid, limit, offset })
       const songs = Array.isArray(response.songs) ? response.songs : []
+      const total = Number(response.total) || 0
 
       return {
         tracks: songs.map((song, index) => mapPlaylistTrack(song, offset + index)),
-        more: songs.length >= limit
+        total,
+        more: Boolean(response.more || (total && offset + songs.length < total) || songs.length >= limit)
       }
     }
   )
+}
+
+export async function getPlaylistSimilarData(id, { limit = 6 } = {}) {
+  if (!isKugouCollectionId(id)) {
+    return []
+  }
+
+  const response = await getSimilarPlaylists({ id, limit })
+  const playlists = response.playlists ?? response.result ?? []
+
+  return playlists
+    .filter((playlist) => String(playlist.id) !== String(id))
+    .map(mapPlaylist)
+    .slice(0, limit)
 }
 
 export async function getUserPlaylistLibraryData(uid, { limit = 100, offset = 0 } = {}) {
@@ -730,8 +765,18 @@ export async function getUserPlaylistLibraryData(uid, { limit = 100, offset = 0 
   ])
 
   return {
-    createdPlaylists: mapUserPlaylists(createdResponse.playlist ?? createdResponse.playlists),
-    collectedPlaylists: mapUserPlaylists(collectedResponse.playlist ?? collectedResponse.playlists)
+    createdPlaylists: mapUserPlaylists(
+      createdResponse.playlist ??
+        createdResponse.playlists ??
+        createdResponse.result ??
+        createdResponse.data
+    ),
+    collectedPlaylists: mapUserPlaylists(
+      collectedResponse.playlist ??
+        collectedResponse.playlists ??
+        collectedResponse.result ??
+        collectedResponse.data
+    )
   }
 }
 
@@ -744,15 +789,81 @@ export async function getDownloadedSongsData({ limit = 50, offset = 0 } = {}) {
     : []
 }
 
-export async function getTrackLyricData(id) {
-  return getCachedData(cacheKey('track-lyric', { id }), CACHE_TTL.lyrics, async () => {
-  const response = await getLyric({ id })
-  const lines = parseLyricLines(response.lrc?.lyric, response.tlyric?.lyric)
+export async function getTrackLyricData(track) {
+  const params = typeof track === 'object' && track !== null
+    ? {
+        id: track.id,
+        hash: track.hash,
+        album_audio_id: track.album_audio_id ?? track.mixsongid ?? track.audio_id,
+        duration: getTrackLyricDuration(track),
+        keywords: getTrackLyricKeywords(track)
+      }
+    : { id: track }
 
-  return lines.length
-    ? lines
-    : [{ time: '--:--', text: '暂无歌词', seconds: 0, placeholder: true }]
-  })
+  try {
+    return await getCachedData(cacheKey('track-lyric', getTrackLyricCachePayload(params)), CACHE_TTL.lyrics, async () => {
+      const response = await getLyric(params)
+      const lines = parseLyricLines(response.lrc?.lyric, response.tlyric?.lyric)
+
+      if (!lines.length) {
+        const error = new Error('NO_LYRIC_LINES')
+        error.noLyrics = true
+        throw error
+      }
+
+      return lines
+    })
+  } catch (error) {
+    if (!error?.noLyrics) {
+      throw error
+    }
+
+    return [{ time: '--:--', text: '暂无歌词', seconds: 0, placeholder: true }]
+  }
+}
+
+function getTrackLyricKeywords(track = {}) {
+  return track.name || track.songname || track.title || ''
+}
+
+function getTrackLyricDuration(track = {}) {
+  const value =
+    track.dt ??
+    track.timelength ??
+    track.timelen ??
+    track.rawDuration ??
+    track.duration ??
+    track.time
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value > 0
+      ? value > 10000 ? Math.round(value) : Math.round(value * 1000)
+      : undefined
+  }
+
+  if (typeof value === 'string') {
+    const parts = value.split(':').map((part) => Number(part))
+
+    if (parts.length >= 2 && parts.every((part) => Number.isFinite(part))) {
+      return Math.round(parts.reduce((total, part) => total * 60 + part, 0) * 1000)
+    }
+  }
+
+  return undefined
+}
+
+function getTrackLyricCachePayload(params = {}) {
+  const hash = params.hash || ''
+  const albumAudioId = params.album_audio_id || params.mixsongid || ''
+  const id = hash || albumAudioId ? '' : params.id || ''
+
+  return {
+    hash,
+    album_audio_id: albumAudioId,
+    id,
+    duration: params.duration || '',
+    keywords: params.keywords || params.keyword || ''
+  }
 }
 
 export async function getSongInteractionStatsData(id) {
@@ -777,10 +888,10 @@ export async function getSongInteractionStatsData(id) {
     : {}
 
   return {
-    likedCount: toFiniteCount(redData.count),
-    likedCountLabel: redData.countDesc || '',
-    commentCount: toFiniteCount(commentInfo.commentCount),
-    commentCountLabel: commentInfo.commentCountDesc || ''
+    likedCount: 0,
+    likedCountLabel: '',
+    commentCount: toFiniteCount(redData.count ?? commentInfo.commentCount),
+    commentCountLabel: redData.countDesc || commentInfo.commentCountDesc || ''
   }
 }
 
@@ -1096,9 +1207,10 @@ export async function getAlbumsDiscoveryData({ area = 'ALL', limit = 36, offset 
 }
 
 export async function getAlbumDetailData(id) {
-  const [response, dynamicResponse] = await Promise.all([
+  const [response, dynamicResponse, songsResponse] = await Promise.all([
     getAlbumDetail({ id }),
-    getAlbumDynamic({ id }).catch(() => ({}))
+    getAlbumDynamic({ id }).catch(() => ({})),
+    getAlbumSongs({ id, limit: 100, offset: 0 }).catch(() => ({}))
   ])
   const album = response.album
 
@@ -1108,7 +1220,9 @@ export async function getAlbumDetailData(id) {
 
   const songs = Array.isArray(response.songs) && response.songs.length
     ? response.songs
-    : album.songs ?? []
+    : Array.isArray(songsResponse.songs) && songsResponse.songs.length
+      ? songsResponse.songs
+      : album.songs ?? []
 
   return {
     album: mapAlbumDetail(album, dynamicResponse),
@@ -1640,7 +1754,7 @@ function mapBanner(banner, index) {
     targetKind: getBannerTargetKind(targetType),
     target,
     tag: banner.typeTitle || '推荐',
-    title: target?.name || banner.typeTitle || '网易云音乐推荐',
+    title: target?.name || banner.typeTitle || '酷狗音乐推荐',
     desc: getBannerDescription(banner, target, targetType),
     action: getBannerAction(targetType),
     link: getBannerLink(targetType, targetId),
@@ -1657,6 +1771,7 @@ function mapBannerSong(song, index) {
 
   return {
     id: song.id,
+    ...getKugouTrackMeta(song),
     name: song.name,
     artistId: artistIds[0] ?? '',
     artistIds,
@@ -1699,7 +1814,7 @@ function getBannerDescription(banner, target, targetType) {
     return '点击查看活动详情'
   }
 
-  return '来自网易云音乐的精选内容'
+  return '来自酷狗音乐的精选内容'
 }
 
 function getBannerAction(targetType) {
@@ -1732,14 +1847,17 @@ function getBannerLink(targetType, targetId) {
 function mapPlaylist(playlist, index) {
   return {
     id: playlist.id,
+    globalCollectionId: playlist.globalCollectionId,
+    listid: playlist.listid ?? playlist.listId,
     title: playlist.name,
     desc: playlist.copywriter || playlist.description || '',
     listeners: formatPlayCount(playlist.playCount),
-    type: coverType(index),
+    type: coverType(stableCoverIndex(playlist.id ?? index)),
     coverUrl: playlist.picUrl ?? playlist.coverImgUrl,
     trackCount: playlist.trackCount ?? 0,
     creator: playlist.creator?.nickname || '',
-    subscribedCount: playlist.subscribedCount ?? 0
+    subscribedCount: playlist.subscribedCount ?? 0,
+    commentCount: playlist.commentCount ?? 0
   }
 }
 
@@ -1778,6 +1896,7 @@ function mapChartTrack(song, index) {
 
   return {
     id: song.id,
+    ...getKugouTrackMeta(song),
     rank: String(index + 1).padStart(2, '0'),
     name: song.name,
     artist: artists.map((artist) => artist.name).filter(Boolean).join(' / ') || '未知歌手',
@@ -1909,6 +2028,16 @@ function getArtistIds(artists = []) {
     .filter((id) => id !== undefined && id !== null && id !== '')
 }
 
+function getKugouTrackMeta(song = {}) {
+  return {
+    hash: song.hash || song.file_hash || song.audio_hash || song.hash_128 || song['128hash'] || '',
+    album_audio_id: song.album_audio_id ?? song.mixsongid ?? song.add_mixsongid ?? song.audio_id ?? '',
+    mixsongid: song.mixsongid ?? song.add_mixsongid ?? song.album_audio_id ?? '',
+    album_id: song.album_id ?? song.album?.id ?? song.al?.id ?? '',
+    audio_id: song.audio_id ?? song.rp_id ?? ''
+  }
+}
+
 function mapAlbumDetail(album, dynamic = {}) {
   const artist = getArtistNames(album.artists) || album.artist?.name || '未知歌手'
 
@@ -1971,19 +2100,30 @@ function formatCommentTime(value) {
 
 function mapPlaylistDetail(playlist) {
   const creator = playlist.creator ?? {}
+  const playlistId = playlist.id ?? playlist.globalCollectionId ?? playlist.listid ?? playlist.listId ?? ''
+  const trackCount = Number(playlist.trackCount ?? playlist.tracks?.length ?? 0) || 0
+  const playCount = Number(playlist.playCount ?? 0) || 0
+  const subscribedCount = Number(playlist.subscribedCount ?? 0) || 0
+  const commentCount = Number(playlist.commentCount ?? 0) || 0
+  const shareCount = Number(playlist.shareCount ?? 0) || 0
 
   return {
-    id: playlist.id,
+    id: playlistId,
+    globalCollectionId: playlist.globalCollectionId || (isKugouCollectionId(playlistId) ? playlistId : ''),
+    listid: playlist.listid ?? playlist.listId ?? '',
     title: playlist.name,
     description: playlist.description || playlist.copywriter || '这个歌单暂时没有简介',
-    creator: creator.nickname || '网易云音乐用户',
+    creator: creator.nickname || '酷狗音乐用户',
     creatorAvatarUrl: resizeNeteaseImage(creator.avatarUrl, 80),
     updated: formatDate(playlist.updateTime),
-    trackCount: playlist.trackCount ?? playlist.tracks?.length ?? 0,
-    listeners: formatPlayCount(playlist.playCount),
-    commentCount: playlist.commentCount ?? 0,
+    trackCount,
+    listeners: formatPlayCount(playCount),
+    playCount,
+    subscribedCount,
+    commentCount,
+    shareCount,
     tags: playlist.tags ?? [],
-    type: coverType(Number(playlist.id) || 0),
+    type: coverType(stableCoverIndex(playlistId)),
     coverUrl: resizeNeteaseImage(playlist.coverImgUrl, 480)
   }
 }
@@ -1992,6 +2132,8 @@ function mapUserPlaylists(playlists = []) {
   return Array.isArray(playlists)
     ? playlists.map((playlist) => ({
       id: playlist.id,
+      globalCollectionId: playlist.globalCollectionId,
+      listid: playlist.listid ?? playlist.listId,
       title: playlist.name || '未命名歌单',
       description: playlist.description || playlist.copywriter || '',
       trackIds: [],
@@ -2008,9 +2150,11 @@ function mapPlaylistTrack(song, index) {
   const album = song.al ?? song.album ?? {}
   const artists = song.ar ?? song.artists ?? []
   const artistIds = getArtistIds(artists)
+  const trackId = song.id ?? song.album_audio_id ?? song.mixsongid ?? song.hash ?? `track-${index + 1}`
 
   return {
-    id: song.id,
+    id: trackId,
+    ...getKugouTrackMeta(song),
     name: song.name,
     artistId: artistIds[0] ?? '',
     artistIds,
@@ -2022,7 +2166,7 @@ function mapPlaylistTrack(song, index) {
     time: formatDuration(song.dt ?? song.duration),
     coverUrl: album.picUrl,
     thumbnailUrl: resizeNeteaseImage(album.picUrl, 96),
-    to: `/playlist/song-${song.id}`,
+    to: `/playlist/song-${trackId}`,
     vip: Boolean(song.fee && song.fee !== 0),
     hasVideo: Boolean(song.mv),
     mvId: song.mv || ''
@@ -2037,6 +2181,7 @@ function mapFmTrack(song, index) {
 
   return {
     id: song.id,
+    ...getKugouTrackMeta(song),
     name: song.name,
     artistId: artistIds[0] ?? '',
     artistIds,
@@ -2171,6 +2316,7 @@ function mapSearchSong(song, index = 0) {
 
   return {
     id: song.id,
+    ...getKugouTrackMeta(song),
     type: 'song',
     name: song.name,
     title: song.name,
@@ -2271,6 +2417,7 @@ function mapNewsong(item, index) {
 
   return {
     id: song.id ?? item.id,
+    ...getKugouTrackMeta(song),
     name: song.name ?? item.name,
     artistId: artistIds[0] ?? '',
     artistIds,
@@ -2580,11 +2727,31 @@ function mapArtistVideo(record, index) {
   }
 }
 
+function isKugouCollectionId(id) {
+  return /^collection_/i.test(String(id ?? ''))
+}
+
+function stableCoverIndex(value = 0) {
+  const numericValue = Number(value)
+
+  if (Number.isFinite(numericValue) && numericValue > 0) {
+    return numericValue
+  }
+
+  return String(value ?? '')
+    .split('')
+    .reduce((total, char) => total + char.charCodeAt(0), 0)
+}
+
 function coverType(index) {
-  return COVER_TYPES[index % COVER_TYPES.length]
+  return COVER_TYPES[Math.abs(Number(index) || 0) % COVER_TYPES.length]
 }
 
 function resizeNeteaseImage(url, size) {
+  if (typeof url === 'string' && url.includes('{size}')) {
+    return url.replace('{size}', String(size))
+  }
+
   if (!url || !/music\.126\.net/.test(url)) {
     return url
   }

@@ -180,7 +180,7 @@
             <header class="podcast-detail-section-head">
               <div>
                 <h2>主播</h2>
-                <small>{{ podcast.creator || '网易云音乐播客' }}</small>
+                <small>{{ podcast.creator || '酷狗音乐播客' }}</small>
               </div>
               <UserRound :size="18" />
             </header>
