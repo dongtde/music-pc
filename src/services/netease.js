@@ -646,9 +646,9 @@ export async function toggleMvLikeData({ id, like }) {
 
 export async function getPlaylistDetailData(id, { listid = '', fallbackPlaylist = null } = {}) {
   return getCachedData(cacheKey('playlist-detail', { id, listid }), CACHE_TTL.playlistDetail, async () => {
-    const detailResponse = listid
-      ? { playlist: fallbackPlaylist }
-      : await getPlaylistDetail({ id })
+    const detailResponse = canLoadRemotePlaylistDetail(id, listid)
+      ? await getPlaylistDetail({ id })
+      : { playlist: fallbackPlaylist }
     const rawPlaylist = detailResponse.playlist ?? fallbackPlaylist
 
     if (!rawPlaylist) {
@@ -685,7 +685,9 @@ export async function getPlaylistOverviewData(id, { trackLimit = 60, listid = ''
     CACHE_TTL.playlistDetail,
     async () => {
       const [detailResponse, trackResponse] = await Promise.all([
-        listid ? Promise.resolve({ playlist: fallbackPlaylist }) : getPlaylistDetail({ id }),
+        canLoadRemotePlaylistDetail(id, listid)
+          ? getPlaylistDetail({ id })
+          : Promise.resolve({ playlist: fallbackPlaylist }),
         getPlaylistTracks({
           id,
           listid,
@@ -733,6 +735,12 @@ export async function getPlaylistTracksData({ id, listid = '', limit = 100, offs
       }
     }
   )
+}
+
+export function isRemotePlaylistId(id) {
+  const playlistId = String(id ?? '')
+
+  return isKugouCollectionId(playlistId) || /^\d+$/.test(playlistId)
 }
 
 export async function getPlaylistSimilarData(id, { limit = 6 } = {}) {
@@ -2729,6 +2737,12 @@ function mapArtistVideo(record, index) {
 
 function isKugouCollectionId(id) {
   return /^collection_/i.test(String(id ?? ''))
+}
+
+function canLoadRemotePlaylistDetail(id, listid = '') {
+  const playlistId = String(id ?? '')
+
+  return isKugouCollectionId(playlistId) || (!listid && /^\d+$/.test(playlistId))
 }
 
 function stableCoverIndex(value = 0) {

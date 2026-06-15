@@ -195,6 +195,7 @@ import {
   getPlaylistCommentsData,
   getPlaylistOverviewData,
   getPlaylistTracksData,
+  isRemotePlaylistId,
 } from '../services/netease';
 import { SKELETON_MIN_MS } from '../config/app';
 import { useLoadMoreTrigger } from '../composables/useLoadMoreTrigger';
@@ -277,7 +278,8 @@ const commentTotal = commentState.displayTotal;
 const commentsHasMore = commentState.hasMore;
 const commentsLoading = commentState.loading;
 const commentsError = commentState.error;
-const isRemotePlaylist = computed(() => /^\d+$/.test(String(route.params.id ?? '')));
+const playlistRequestMeta = computed(() => getPlaylistRequestMeta(route.params.id));
+const isRemotePlaylist = computed(() => playlistRequestMeta.value.remote);
 const showTrackLoadMore = computed(
   () => isRemotePlaylist.value && (trackHasMore.value || trackLoading.value || Boolean(trackError.value)),
 );
@@ -322,8 +324,10 @@ watch(
   (id) => {
     loadPlaylistDetail(id);
     commentState.reset();
-    if (commentsModalVisible.value && /^\d+$/.test(String(id ?? ''))) {
-      commentState.load(id, { reset: true });
+    const meta = getPlaylistRequestMeta(id);
+
+    if (commentsModalVisible.value && meta.remote) {
+      commentState.load(meta.remoteId, { reset: true });
     }
   },
   { immediate: true },
@@ -352,13 +356,17 @@ async function loadPlaylistDetail(id) {
   isLoading.value = true;
 
   try {
-    if (!/^\d+$/.test(String(id ?? ''))) {
+    const meta = getPlaylistRequestMeta(id);
+
+    if (!meta.remote) {
       loadLocalPlaylist(id);
       return;
     }
 
-    const data = await getPlaylistOverviewData(id, {
+    const data = await getPlaylistOverviewData(meta.remoteId, {
       trackLimit: PLAYLIST_INITIAL_TRACK_LIMIT,
+      listid: meta.listid,
+      fallbackPlaylist: meta.fallbackPlaylist,
     });
 
     if (loadToken !== playlistLoadToken) {
@@ -453,8 +461,9 @@ async function loadMoreTracks({ force = false, token = playlistLoadToken } = {})
 
 async function runLoadMoreTracks({ force = false, token = playlistLoadToken } = {}) {
   const id = String(route.params.id ?? '');
+  const meta = playlistRequestMeta.value;
 
-  if (!/^\d+$/.test(id) || token !== playlistLoadToken) {
+  if (!meta.remote || token !== playlistLoadToken) {
     return null;
   }
 
@@ -467,7 +476,8 @@ async function runLoadMoreTracks({ force = false, token = playlistLoadToken } = 
 
   try {
     const data = await getPlaylistTracksData({
-      id,
+      id: meta.remoteId,
+      listid: meta.listid,
       limit: PLAYLIST_TRACK_PAGE_SIZE,
       offset: remoteTracks.value.length,
     });
@@ -519,15 +529,17 @@ async function loadAllRemainingTracks() {
   await activeTrackRequest;
 
   const id = String(route.params.id ?? '');
+  const meta = playlistRequestMeta.value;
   const total = Number(playlist.value.trackCount) || 0;
 
-  if (trackHasMore.value && /^\d+$/.test(id) && total > remoteTracks.value.length) {
+  if (trackHasMore.value && meta.remote && total > remoteTracks.value.length) {
     trackLoading.value = true;
     trackError.value = '';
 
     try {
       const data = await getPlaylistTracksData({
-        id,
+        id: meta.remoteId,
+        listid: meta.listid,
         limit: total,
         offset: 0,
       });
@@ -648,7 +660,38 @@ function openCommentsModal() {
     return null;
   }
 
-  return commentState.open(route.params.id);
+  return commentState.open(playlistRequestMeta.value.remoteId);
+}
+
+function getPlaylistRequestMeta(routeId) {
+  const routePlaylistId = String(routeId ?? '');
+  const localPlaylist = library.getPlaylist(routePlaylistId);
+  const remoteId = localPlaylist?.globalCollectionId || routePlaylistId;
+  const listid = localPlaylist?.listid || '';
+
+  return {
+    remote: isRemotePlaylistId(remoteId) || Boolean(localPlaylist?.remote && (localPlaylist.globalCollectionId || localPlaylist.listid)),
+    remoteId,
+    listid,
+    fallbackPlaylist: localPlaylist
+      ? {
+          id: localPlaylist.globalCollectionId || localPlaylist.id,
+          globalCollectionId: localPlaylist.globalCollectionId,
+          listid: localPlaylist.listid,
+          name: localPlaylist.title,
+          description: localPlaylist.description,
+          coverImgUrl: localPlaylist.coverUrl,
+          trackCount: localPlaylist.trackCount || localPlaylist.tracks.length,
+          updateTime: localPlaylist.updatedAt,
+          subscribed: Boolean(localPlaylist.collectedAt),
+          creator: {
+            nickname: localPlaylist.collectedAt ? '收藏的歌单' : '本地创建',
+            avatarUrl: '',
+          },
+          tracks: localPlaylist.tracks,
+        }
+      : null,
+  };
 }
 
 function formatLocalDate(value) {

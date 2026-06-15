@@ -291,19 +291,23 @@ function normalizePlaylist(playlist = {}, index = 0) {
   const globalCollectionId =
     playlist.global_collection_id ??
     playlist.globalCollectionId ??
+    playlist.global_collectionid ??
     playlist.collection_id ??
     playlist.collectionid ??
     playlist.gid ??
     playlist.list_create_gid ??
     playlist.list_create_gid_v2 ??
     ''
-  const listId = playlist.listid ?? playlist.list_id ?? playlist.listId ?? ''
+  const listId = playlist.listid ?? playlist.list_id ?? playlist.listId ?? playlist.list_create_listid ?? ''
   const specialId = playlist.specialid ?? playlist.special_id ?? ''
   const id = globalCollectionId || playlist.id || specialId || listId
   const cover = normalizeKugouImage(
     playlist.imgurl ||
       playlist.flexible_cover ||
       playlist.pic ||
+      playlist.picUrl ||
+      playlist.coverImgUrl ||
+      playlist.coverUrl ||
       playlist.cover ||
       playlist.sizable_cover ||
       playlist.cover_img ||
@@ -323,7 +327,7 @@ function normalizePlaylist(playlist = {}, index = 0) {
     listId,
     specialId,
     name: playlist.specialname || playlist.name || playlist.title || playlist.listname || '未命名歌单',
-    description: playlist.intro || playlist.desc || playlist.description || '',
+    description: playlist.intro || playlist.desc || playlist.description || playlist.copywriter || '',
     copywriter: playlist.show || playlist.recommend_reason || playlist.copywriter || '',
     picUrl: cover,
     coverImgUrl: cover,
@@ -341,6 +345,7 @@ function normalizePlaylist(playlist = {}, index = 0) {
       playlist.count ??
       playlist.total ??
       playlist.trackCount ??
+      playlist.track_count ??
       playlist.audio_count ??
       0,
     subscribedCount: playlist.collectcount ?? playlist.collect_total ?? playlist.subscribedCount ?? 0,
@@ -351,9 +356,19 @@ function normalizePlaylist(playlist = {}, index = 0) {
     tags: objectTags.length ? objectTags : stringTags,
     creator: {
       userId: playlist.userid ?? playlist.user_id ?? playlist.list_create_userid ?? '',
-      nickname: playlist.nickname || playlist.username || playlist.list_create_username || '酷狗音乐用户',
+      nickname:
+        playlist.nickname ||
+        playlist.username ||
+        playlist.list_create_username ||
+        (typeof playlist.creator === 'string' ? playlist.creator : playlist.creator?.nickname) ||
+        '酷狗音乐用户',
       avatarUrl: normalizeKugouImage(
-        playlist.user_avatar || playlist.create_user_pic || playlist.avatar || playlist.pic,
+        playlist.user_avatar ||
+          playlist.create_user_pic ||
+          playlist.avatar ||
+          playlist.creator?.avatarUrl ||
+          playlist.creatorAvatarUrl ||
+          playlist.pic,
         120
       )
     },
@@ -539,16 +554,21 @@ function toToplistResponse(response = {}) {
 
 function toPlaylistDetailResponse(response = {}) {
   const data = response.data ?? response
+  const detailCandidates = [
+    data.list_info,
+    data.info,
+    data.playlist,
+    data.special,
+    data.list,
+    data.lists,
+    data
+  ]
+  const rawPlaylist =
+    detailCandidates.find((item) => item && typeof item === 'object' && !Array.isArray(item)) ??
+    detailCandidates.find((item) => Array.isArray(item))?.[0] ??
+    {}
   const playlist = normalizePlaylist(
-    firstObject(
-      data.list_info,
-      data.info,
-      data.playlist,
-      data.special,
-      Array.isArray(data.info) ? data.info[0] : undefined,
-      Array.isArray(data) ? data[0] : undefined,
-      data
-    ),
+    rawPlaylist,
     0
   )
   const songs = firstArray(
@@ -557,6 +577,7 @@ function toPlaylistDetailResponse(response = {}) {
     data.tracks,
     data.list_info?.songs,
     data.list_info?.songinfo,
+    data.list_info?.info,
     playlist.songs,
     playlist.songinfo,
     playlist.tracks
@@ -568,7 +589,8 @@ function toPlaylistDetailResponse(response = {}) {
       ...playlist,
       tracks: songs
     },
-    songs
+    songs,
+    total: data.total ?? data.count ?? data.songcount ?? playlist.trackCount ?? songs.length
   }
 }
 
