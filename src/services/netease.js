@@ -1100,15 +1100,27 @@ export async function getArtistsDiscoveryData({
   limit = 32,
   offset = 0
 } = {}) {
+  const artistListParams = getKugouArtistListParams({
+    area,
+    type,
+    initial,
+    limit,
+    offset
+  })
   const [artistResponse, toplistResponse] = await Promise.all([
-    getArtistList({ area, type, initial, limit, offset }).catch(() => ({})),
+    getArtistList(artistListParams).catch(() => ({})),
     getArtistToplistCached().catch(() => ({}))
   ])
+  const artistPage = getKugouArtistPage(artistResponse, {
+    initial,
+    limit,
+    offset
+  })
 
   return {
-    artists: (artistResponse.artists ?? []).map((artist, index) => mapArtist(artist, offset + index)),
-    topArtists: (toplistResponse.list?.artists ?? toplistResponse.artists ?? []).slice(0, 10).map(mapRankedArtist),
-    more: Boolean(artistResponse.more)
+    artists: artistPage.items.map((artist, index) => mapArtist(artist, offset + index)),
+    topArtists: getKugouHotArtists(toplistResponse).slice(0, 10).map(mapRankedArtist),
+    more: artistPage.more
   }
 }
 
@@ -1166,7 +1178,7 @@ export async function getArtistAlbumsData({ id, limit = 30, offset = 0 } = {}) {
     albums: albums.map((album, index) => mapAlbumCard(album, offset + index)),
     artist: response.artist ? mapArtist(response.artist, 0) : null,
     more: Boolean(response.more),
-    total: response.artist?.albumSize ?? 0
+    total: response.total ?? response.artist?.albumSize ?? albums.length
   }
 }
 
@@ -1189,26 +1201,93 @@ export async function getArtistVideosData({ id, size = 24, cursor = 0, order = 0
 
 export async function getArtistIntroData(id) {
   const response = await getArtistDesc({ id })
+  const detail = response.data ?? response
+  const artist = response.artist ?? detail.artist ?? {}
+  const sections = Array.isArray(detail.long_intro)
+    ? detail.long_intro
+    : Array.isArray(artist.longIntro)
+      ? artist.longIntro
+      : []
 
   return {
-    briefDesc: response.briefDesc || '',
-    sections: (response.introduction ?? []).map((section, index) => ({
-      id: `${section.ti || 'intro'}-${index}`,
+    briefDesc: artist.briefDesc || detail.intro || response.briefDesc || '',
+    sections: sections.map((section, index) => ({
+      id: `${section.title || section.ti || 'intro'}-${index}`,
       title: section.ti || '详情',
-      text: section.txt || ''
+      title: section.title || section.ti || '详情',
+      text: section.content || section.txt || ''
     })).filter((section) => section.text)
   }
 }
 
 function getArtistToplistCached() {
   if (!artistToplistPromise) {
-    artistToplistPromise = getArtistToplist({ type: 1 }).catch((error) => {
+    artistToplistPromise = getArtistToplist({ type: 0, sextypes: 0, hotsize: 10 }).catch((error) => {
       artistToplistPromise = null
       throw error
     })
   }
 
   return artistToplistPromise
+}
+
+function getKugouArtistListParams({ area = -1, type = -1, initial = -1, limit = 32, offset = 0 } = {}) {
+  const isHot = String(initial) === '-1'
+
+  return {
+    type: mapKugouArtistArea(area),
+    sextypes: mapKugouArtistSex(type),
+    musician: 0,
+    hotsize: isHot ? offset + limit + 1 : Math.max(limit, 30)
+  }
+}
+
+function mapKugouArtistArea(area) {
+  const areaMap = {
+    '-1': 0,
+    7: 1,
+    96: 2,
+    8: 5,
+    16: 6,
+    0: 4
+  }
+
+  return areaMap[String(area)] ?? 0
+}
+
+function mapKugouArtistSex(type) {
+  const sexMap = {
+    '-1': 0,
+    1: 1,
+    2: 2,
+    3: 3
+  }
+
+  return sexMap[String(type)] ?? 0
+}
+
+function getKugouArtistPage(response = {}, { initial = -1, limit = 32, offset = 0 } = {}) {
+  const source = getKugouArtistGroup(response, initial)
+  const items = source.slice(offset, offset + limit)
+
+  return {
+    items,
+    more: source.length > offset + limit
+  }
+}
+
+function getKugouHotArtists(response = {}) {
+  return getKugouArtistGroup(response, -1)
+}
+
+function getKugouArtistGroup(response = {}, initial = -1) {
+  const groups = Array.isArray(response.groups) ? response.groups : []
+  const target = String(initial).toUpperCase()
+  const group = String(initial) === '-1'
+    ? groups.find((item) => item.title === '热门') || groups[0]
+    : groups.find((item) => String(item.title).toUpperCase() === target)
+
+  return group?.artists ?? response.artists ?? []
 }
 
 export async function getAlbumsDiscoveryData({ area = 'ALL', limit = 36, offset = 0 } = {}) {
@@ -2417,7 +2496,8 @@ function mapSearchAlbum(album) {
       album.size ? `${album.size} 首歌` : '',
       formatDate(album.publishTime)
     ].filter(Boolean).join(' · '),
-    coverUrl: album.picUrl
+    coverUrl: album.picUrl,
+    to: `/album/${album.id}`
   }
 }
 
@@ -2459,7 +2539,8 @@ function mapSearchMv(mv) {
       mv.playCount ? `${formatPlayCount(mv.playCount)}播放` : '',
       formatDuration(mv.duration)
     ].filter(Boolean).join(' · '),
-    coverUrl: mv.cover ?? mv.imgurl ?? mv.picUrl
+    coverUrl: mv.cover ?? mv.imgurl ?? mv.picUrl,
+    to: mv.id ? { name: 'video', query: { mvId: mv.id } } : { name: 'video' }
   }
 }
 
@@ -2767,13 +2848,14 @@ function mapArtistVideo(record, index) {
   return {
     id,
     title: base.text || base.originalTitle || ext.song?.name || '视频',
-    description: base.desc || '',
-    artist: ext.artistName || getArtistNames(artists),
-    coverUrl: resizeNeteaseImage(base.coverUrl, 480),
-    duration: formatDuration(base.duration),
-    playCount: formatPlayCount(ext.playCount ?? 0),
+    title: record.name || record.title || base.text || base.originalTitle || ext.song?.name || '视频',
+    description: record.desc || base.desc || '',
+    artist: record.artistName || ext.artistName || getArtistNames(artists),
+    coverUrl: resizeNeteaseImage(record.cover || record.coverUrl || base.coverUrl, 480),
+    duration: formatDuration(record.duration ?? base.duration),
+    playCount: formatPlayCount(record.playCount ?? ext.playCount ?? 0),
     likedCount: formatPlayCount(ext.likedCount ?? 0),
-    publishTime: formatDate(base.pubTime),
+    publishTime: formatPlainDate(record.publishTime) || formatDate(base.pubTime),
     songName: ext.song?.name || '',
     shareUrl: resource.shareUrl || '',
     type: coverType(index),

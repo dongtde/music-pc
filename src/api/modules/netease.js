@@ -9,19 +9,23 @@ import http from '../http'
  */
 
 function getKugou(path, params = {}, config = {}) {
+  const normalizedParams = normalizeParams(path, params)
+
   return http.get(path, {
     ...config,
     noCookie: config.noCookie ?? params.noCookie,
-    params: normalizeParams(path, params)
-  }).then(parseKugouPayload)
+    params: normalizedParams
+  }).then((payload) => attachKugouParams(parseKugouPayload(payload), normalizedParams))
 }
 
 function getKugouRaw(path, params = {}, config = {}) {
+  const normalizedParams = normalizeParams(path, params)
+
   return http.get(path, {
     ...config,
     noCookie: config.noCookie ?? params.noCookie,
-    params: normalizeParams(path, params)
-  }).then(parseKugouPayload)
+    params: normalizedParams
+  }).then((payload) => attachKugouParams(parseKugouPayload(payload), normalizedParams))
 }
 
 const songRegistry = new Map()
@@ -106,6 +110,21 @@ function normalizeParams(path, params) {
     delete normalized.order
   }
 
+  if (path === '/artist/videos') {
+    if (normalized.size !== undefined && normalized.pagesize === undefined) {
+      normalized.pagesize = normalized.size
+    }
+
+    if (normalized.cursor !== undefined && normalized.page === undefined) {
+      const pageSize = Number(normalized.pagesize) || 30
+      normalized.page = Math.floor(Number(normalized.cursor) / pageSize) + 1
+    }
+
+    delete normalized.size
+    delete normalized.cursor
+    delete normalized.order
+  }
+
   if (path === '/personal/fm' && normalized.action === undefined && normalized.mode === 'TRASH') {
     normalized.action = 'garbage'
   }
@@ -140,6 +159,17 @@ function parseKugouPayload(payload) {
     return JSON.parse(json)
   } catch {
     return payload
+  }
+}
+
+function attachKugouParams(payload, params = {}) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return payload
+  }
+
+  return {
+    ...payload,
+    params
   }
 }
 
@@ -444,6 +474,10 @@ function normalizeArtist(artist = {}, index = 0) {
   const base = artist.base ?? artist
   const id = base.author_id ?? base.id ?? base.singerid ?? base.userid
   const cover = normalizeKugouImage(base.avatar || base.sizable_avatar || base.imgurl || base.pic || base.picUrl, 360)
+  const intro = base.intro || base.briefDesc || base.descibe || base.desc || base.description || ''
+  const musicSize = base.audio_count ?? base.song_count ?? base.songcount ?? base.musicSize ?? 0
+  const albumSize = base.album_count ?? base.albumcount ?? base.albumSize ?? 0
+  const mvSize = base.video_count ?? base.mv_count ?? base.mvcount ?? base.mvSize ?? 0
 
   return {
     ...base,
@@ -452,11 +486,15 @@ function normalizeArtist(artist = {}, index = 0) {
     picUrl: cover,
     img1v1Url: cover,
     cover,
-    briefDesc: base.intro || base.desc || base.description || '',
-    musicSize: base.audio_count ?? base.song_count ?? base.musicSize ?? 0,
-    albumSize: base.album_count ?? base.albumSize ?? 0,
-    mvSize: base.video_count ?? base.mvSize ?? 0,
-    fansCount: base.fans_count ?? base.fansCount ?? 0,
+    avatar: cover,
+    briefDesc: intro,
+    longIntro: firstArray(base.long_intro, base.longIntro),
+    birthday: base.birthday || '',
+    musicSize,
+    albumSize,
+    mvSize,
+    videoCount: mvSize,
+    fansCount: base.fans_count ?? base.fansnums ?? base.fanscount ?? base.fansCount ?? 0,
     score: base.heat ?? base.score ?? 0,
     rank: index + 1
   }
@@ -687,13 +725,17 @@ function toRankTracksResponse(response = {}, id, metaResponse = {}) {
 function toArtistListResponse(response = {}) {
   const data = response.data ?? response
   const groups = firstArray(data.info, data.list, data.artists, data)
-  const artists = groups
-    .flatMap((group) => Array.isArray(group?.singer) ? group.singer : group)
-    .map(normalizeArtist)
+  const groupList = groups.map((group) => ({
+    title: group?.title || '',
+    artists: firstArray(group?.singer, group?.artists, group?.list, Array.isArray(group) ? group : [])
+      .map(normalizeArtist)
+  }))
+  const artists = groupList.flatMap((group) => group.artists)
 
   return {
     ...response,
     artists,
+    groups: groupList,
     list: {
       artists
     },
@@ -718,26 +760,33 @@ function toArtistDetailResponse(response = {}) {
 function toArtistSongsResponse(response = {}) {
   const data = response.data ?? response
   const songs = firstArray(data.songs, data.list, data).map(normalizeSong)
+  const total = response.total ?? data.total ?? data.count ?? response.extra?.page_total ?? data.extra?.page_total ?? songs.length
+  const page = Number(response.params?.page ?? data.page ?? 1)
+  const pageSize = Number(response.params?.pagesize ?? data.pagesize ?? songs.length)
 
   return {
     ...response,
     songs,
     hotSongs: songs,
-    total: data.total ?? data.count ?? songs.length,
-    more: Boolean(data.has_next)
+    total,
+    more: Boolean(data.has_next || data.more || (total && pageSize && page * pageSize < total))
   }
 }
 
 function toArtistAlbumsResponse(response = {}) {
   const data = response.data ?? response
   const albums = firstArray(data.albums, data.list, data).map(normalizeAlbum)
+  const total = response.total ?? data.total ?? data.count ?? response.extra?.page_total ?? data.extra?.page_total ?? albums.length
+  const page = Number(response.params?.page ?? data.page ?? 1)
+  const pageSize = Number(response.params?.pagesize ?? data.pagesize ?? albums.length)
 
   return {
     ...response,
     hotAlbums: albums,
     albums,
     artist: albums[0]?.artist ?? null,
-    more: Boolean(data.has_next)
+    total,
+    more: Boolean(data.has_next || data.more || (total && pageSize && page * pageSize < total))
   }
 }
 
@@ -751,18 +800,29 @@ function toArtistVideosResponse(response = {}) {
     duration: toMilliseconds(item.duration || item.timelength),
     playCount: item.play_count ?? item.playCount ?? 0,
     rank: index + 1,
-    hash: item.hash
+    hash: item.hash,
+    name: item.video_name || item.name || item.title || item.filename || '视频',
+    cover: normalizeKugouImage(item.hdpic || item.cover || item.imgurl || item.sizable_cover, 640),
+    playCount: item.play_count ?? item.playCount ?? item.history_heat ?? item.heat ?? 0,
+    hash: item.hash || item.mkv_sd_hash || item.audio_hash,
+    publishTime: item.publish_date || '',
+    desc: item.remark || item.topic || item.intro || ''
   }))
+  const total = response.total ?? data.total ?? data.count ?? response.extra?.page_total ?? data.extra?.page_total ?? videos.length
+  const page = Number(response.params?.page ?? data.page ?? 1)
+  const pageSize = Number(response.params?.pagesize ?? data.pagesize ?? videos.length)
+  const cursor = pageSize ? page * pageSize : videos.length
 
   return {
     ...response,
     data: {
       page: {
-        cursor: data.next || '',
-        more: Boolean(data.has_next)
+        cursor,
+        more: Boolean(data.has_next || data.more || (total && pageSize && cursor < total))
       },
       records: videos
-    }
+    },
+    total
   }
 }
 

@@ -1,33 +1,53 @@
 .login-modal {
-  width: min(480px, calc(100vw - 32px));
+  width: min(460px, calc(100vw - 32px));
+  color: var(--text-main);
+}
+
+.login-modal.n-card {
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--card-bg);
+  box-shadow: 0 24px 64px var(--shadow-color);
+}
+
+.login-modal.n-card > .n-card-header {
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.login-modal.n-card > .n-card__content,
+.login-modal.n-card > .n-card__content-wrapper > .n-card__content {
+  padding: 20px 24px 24px;
 }
 
 .login-modal__title {
   display: grid;
-  gap: 4px;
+  gap: 6px;
 }
 
 .login-modal__title span {
   color: var(--text-strong);
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 800;
+  line-height: 1.2;
 }
 
 .login-modal__title small {
   color: var(--text-muted);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .login-panel {
   display: grid;
-  gap: 16px;
+  gap: 18px;
 }
 
 .login-methods {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 6px;
+  gap: 4px;
   padding: 4px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
@@ -37,7 +57,7 @@
 .login-methods button {
   display: inline-flex;
   min-width: 0;
-  height: 34px;
+  height: 36px;
   align-items: center;
   justify-content: center;
   gap: 5px;
@@ -47,14 +67,22 @@
   color: var(--text-muted);
   background: transparent;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
 }
 
-.login-methods button:hover,
+.login-methods button:hover {
+  color: var(--text-main);
+  background: var(--control-bg-hover);
+}
+
 .login-methods button.active {
   color: var(--text-strong);
   background: var(--card-bg);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
 .login-methods button.active svg {
@@ -65,7 +93,7 @@
   display: grid;
   justify-items: center;
   gap: 14px;
-  padding: 8px 0 4px;
+  padding: 4px 0 0;
   text-align: center;
 }
 
@@ -86,17 +114,24 @@
 }
 
 .login-qr__loading {
+  display: grid;
+  width: 180px;
+  height: 180px;
+  place-items: center;
   color: #6b7280;
+  background: #ffffff;
   font-size: 13px;
+  font-weight: 600;
 }
 
 .login-qr__status {
   color: var(--text-strong);
   font-size: 15px;
+  font-weight: 800;
 }
 
 .login-qr__status--confirm {
-  color: var(--accent);
+  color: #2bbf8a;
 }
 
 .login-qr__status--expired {
@@ -113,16 +148,23 @@
 
 .login-modal__button {
   display: inline-flex;
-  height: 36px;
+  min-width: 0;
+  height: 38px;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 0 18px;
+  padding: 0 16px;
   border: 1px solid var(--border-subtle);
-  border-radius: 999px;
+  border-radius: 8px;
   color: var(--text-main);
   background: var(--control-bg);
   cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease;
 }
 
 .login-modal__button svg {
@@ -130,7 +172,7 @@
 }
 
 .login-modal__button:hover {
-  border-color: rgba(var(--accent-rgb), 0.48);
+  border-color: rgba(var(--accent-rgb), 0.45);
   color: var(--accent);
   background: var(--control-bg-hover);
 }
@@ -195,6 +237,7 @@
 .login-profile__body strong {
   color: var(--text-strong);
   font-size: 16px;
+  font-weight: 800;
 }
 
 .login-profile__body small {
@@ -212,7 +255,7 @@
 
 .login-form {
   display: grid;
-  gap: 12px;
+  gap: 13px;
 }
 
 .login-field {
@@ -226,9 +269,13 @@
   font-weight: 700;
 }
 
+.login-modal .n-input {
+  --n-border-radius: 8px !important;
+}
+
 .login-send-button {
   display: inline-flex;
-  min-width: 94px;
+  min-width: 96px;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border-subtle);
@@ -252,7 +299,10 @@
 
 .login-feedback {
   margin: -2px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
   color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.08);
   font-size: 13px;
   line-height: 1.5;
   text-align: center;
@@ -260,6 +310,7 @@
 
 .login-feedback.error {
   color: var(--accent-pressed);
+  background: rgba(var(--accent-rgb), 0.12);
 }
 
 .login-guest-button {
@@ -269,6 +320,7 @@
   justify-content: center;
   gap: 7px;
   border: 0;
+  border-radius: 8px;
   color: var(--text-muted);
   background: transparent;
   cursor: pointer;
@@ -278,4 +330,45 @@
 
 .login-guest-button:hover {
   color: var(--accent);
+  background: var(--control-bg);
+}
+
+.login-modal button:focus-visible {
+  outline: 2px solid rgba(var(--accent-rgb), 0.58);
+  outline-offset: 2px;
+}
+
+@media (max-width: 520px) {
+  .login-modal {
+    width: min(400px, calc(100vw - 24px));
+  }
+
+  .login-modal.n-card > .n-card-header {
+    padding: 20px 18px 14px;
+  }
+
+  .login-modal.n-card > .n-card__content,
+  .login-modal.n-card > .n-card__content-wrapper > .n-card__content {
+    padding: 18px;
+  }
+
+  .login-methods {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .login-methods button {
+    height: 36px;
+  }
+
+  .login-profile__actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-modal *,
+  .login-modal *::before,
+  .login-modal *::after {
+    transition: none !important;
+  }
 }
