@@ -1,4 +1,5 @@
 import http from '../http'
+import { readStoredKugouAuth, toKugouAuthCookie } from '../../utils/kugouAuth'
 
 /**
  * KuGouMusic API compatibility layer.
@@ -10,22 +11,64 @@ import http from '../http'
 
 function getKugou(path, params = {}, config = {}) {
   const normalizedParams = normalizeParams(path, params)
+  const requestParams = withStoredKugouAuthCookie(path, normalizedParams, {
+    ...config,
+    noCookie: config.noCookie ?? params.noCookie
+  })
 
   return http.get(path, {
     ...config,
     noCookie: config.noCookie ?? params.noCookie,
-    params: normalizedParams
-  }).then((payload) => attachKugouParams(parseKugouPayload(payload), normalizedParams))
+    params: requestParams
+  }).then((payload) => attachKugouParams(parseKugouPayload(payload), requestParams))
 }
 
 function getKugouRaw(path, params = {}, config = {}) {
   const normalizedParams = normalizeParams(path, params)
+  const requestParams = withStoredKugouAuthCookie(path, normalizedParams, {
+    ...config,
+    noCookie: config.noCookie ?? params.noCookie
+  })
 
   return http.get(path, {
     ...config,
     noCookie: config.noCookie ?? params.noCookie,
-    params: normalizedParams
-  }).then((payload) => attachKugouParams(parseKugouPayload(payload), normalizedParams))
+    params: requestParams
+  }).then((payload) => attachKugouParams(parseKugouPayload(payload), requestParams))
+}
+
+const KUGOU_AUTH_COOKIE_PATHS = new Set([
+  '/favorite/count',
+  '/login/token',
+  '/personal/fm',
+  '/playlist/tracks/add',
+  '/search',
+  '/search/complex',
+  '/song/url',
+  '/song/url/new',
+  '/user/cloud',
+  '/user/detail',
+  '/user/playlist',
+  '/user/video/collect',
+  '/youth/channel/all',
+  '/youth/channel/sub',
+  '/youth/day/vip',
+  '/youth/day/vip/upgrade',
+  '/youth/union/vip'
+])
+
+function withStoredKugouAuthCookie(path, params = {}, config = {}) {
+  if (config.noCookie || params.cookie || !shouldUseStoredKugouAuthCookie(path, config)) {
+    return params
+  }
+
+  const cookie = toKugouAuthCookie(readStoredKugouAuth())
+
+  return cookie ? { ...params, cookie } : params
+}
+
+function shouldUseStoredKugouAuthCookie(path, config = {}) {
+  return Boolean(config.withAuthCookie || KUGOU_AUTH_COOKIE_PATHS.has(path))
 }
 
 const songRegistry = new Map()
@@ -2021,7 +2064,7 @@ export const getSongUrl = (params = {}) =>
         .catch(() => response)
     })
 export const getLyric = (params = {}) => toLyricResponse(params)
-export const getSearchDefault = (params = {}) => getKugou('/search/default', params)
+export const getSearchDefault = (params = {}) => getKugou('/search/default', params, { noCookie: true })
 export const getSearchHotDetail = (params = {}) => getKugou('/search/hot', params).then(toHotSearchResponse)
 export const getSearchSuggestPc = (params = {}) => getKugou('/search/suggest', params).then(toSuggestResponse)
 export const getSearchMultiMatch = (params = {}) =>

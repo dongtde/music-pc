@@ -5,6 +5,7 @@ import { currentTrack as fallbackTrack, newSongs } from '../data/music'
 import { useAuthStore } from './auth'
 import { useLibraryStore } from './library'
 import { readJsonStorage, writeJsonStorage } from '../utils/storage'
+import { mergeKugouAuth, parseCookieString, toKugouAuthCookie } from '../utils/kugouAuth'
 import { clampTime, formatTime, parseDuration, toFiniteNumber } from '../utils/time'
 
 const audio = new Audio()
@@ -372,36 +373,9 @@ function isRestorableTrack(track) {
 }
 
 function parseCookie(cookie = '') {
-  return String(cookie)
-    .split(';')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .reduce((values, part) => {
-      const separatorIndex = part.indexOf('=')
-
-      if (separatorIndex === -1) {
-        return values
-      }
-
-      const key = part.slice(0, separatorIndex).trim()
-      const value = part.slice(separatorIndex + 1).trim()
-
-      if (key && value) {
-        values[key] = value
-      }
-
-      return values
-    }, {})
+  return parseCookieString(cookie)
 }
 
 function mergeCookie(currentCookie = '', nextCookie = '') {
-  const values = {
-    ...parseCookie(currentCookie),
-    ...parseCookie(nextCookie)
-  }
-
-  return Object.entries(values)
-    .filter(([, value]) => value !== undefined && value !== null && value !== '')
-    .map(([key, value]) => `${key}=${value}`)
-    .join(';')
+  return toKugouAuthCookie(mergeKugouAuth(currentCookie, nextCookie))
 }

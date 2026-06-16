@@ -16,9 +16,17 @@ import {
   upgradeYouthDayVip
 } from '../api/modules/netease'
 import { DEFAULT_COUNTRY_CODE, STORAGE_KEYS } from '../config/app'
-import { readJsonStorage, readStorage, writeJsonStorage, writeStorage } from '../utils/storage'
+import { readJsonStorage, writeJsonStorage } from '../utils/storage'
+import {
+  mergeKugouAuth,
+  parseCookieString,
+  readStoredKugouAuth,
+  toKugouAuthCookie,
+  writeStoredKugouAuth
+} from '../utils/kugouAuth'
 
-const storedCookie = readStoredCookie()
+const storedAuth = readStoredKugouAuth()
+const storedCookie = toKugouAuthCookie(storedAuth)
 const storedSession = readStoredSession(storedCookie)
 const initialSession = storedSession.profile || storedSession.account
   ? storedSession
@@ -34,6 +42,7 @@ const state = reactive({
   loginType: storedCookie ? initialSession.loginType : '',
   account: storedCookie ? initialSession.account : null,
   profile: storedCookie ? initialSession.profile : null,
+  auth: storedAuth,
   cookie: storedCookie,
   error: '',
   notice: '',
@@ -511,7 +520,7 @@ async function refreshVipStatus({ force = false } = {}) {
   state.vip.loading = true
   state.vip.error = ''
 
-  const request = getYouthVipStatus({ timestamp: Date.now() })
+  const request = getYouthVipStatus(createAuthRequestParams({ timestamp: Date.now() }))
     .then((response) => {
       if (!state.isLoggedIn || state.loginType === 'guest' || getVipClaimIdentity() !== identity) {
         return false
@@ -625,12 +634,12 @@ async function claimDailyVip() {
 async function claimAndUpgradeYouthVip(receiveDay = getLocalDateString()) {
   const dayResponse = await claimYouthDayVip({
     receive_day: receiveDay,
-    timestamp: Date.now()
+    ...createAuthRequestParams({ timestamp: Date.now() })
   })
   assertVipStepSucceeded(dayResponse, '领取一天 VIP 失败')
 
   const upgradeResponse = await upgradeYouthDayVip({
-    timestamp: Date.now()
+    ...createAuthRequestParams({ timestamp: Date.now() })
   })
   assertVipStepSucceeded(upgradeResponse, '升级 VIP 失败')
 
@@ -683,8 +692,14 @@ function resetQr() {
 }
 
 function saveCookie(cookie) {
-  state.cookie = cookie || ''
-  writeStorage(STORAGE_KEYS.neteaseCookie, state.cookie)
+  if (!cookie) {
+    state.auth = writeStoredKugouAuth({})
+    state.cookie = ''
+    return
+  }
+
+  state.auth = writeStoredKugouAuth(mergeKugouAuth(state.auth, cookie))
+  state.cookie = toKugouAuthCookie(state.auth)
 }
 
 async function completeLogin(response, loginType) {
@@ -722,10 +737,6 @@ function setError(message) {
 
 function normalizeCountryCode(value) {
   return String(value || DEFAULT_COUNTRY_CODE).replace(/^\+/, '').trim() || DEFAULT_COUNTRY_CODE
-}
-
-function readStoredCookie() {
-  return readStorage(STORAGE_KEYS.neteaseCookie, '')
 }
 
 function readStoredSession(cookie) {
@@ -787,6 +798,7 @@ function saveSession() {
 
   writeJsonStorage(STORAGE_KEYS.neteaseSession, {
     cookie: state.cookie,
+    auth: state.auth,
     account: state.account,
     profile: state.profile,
     loginType: state.loginType || 'account',
@@ -799,19 +811,27 @@ function clearSession() {
 }
 
 function createAuthRequestParams(params = {}) {
-  const cookieValues = parseCookie(state.cookie)
+  const cookieValues = mergeKugouAuth(state.auth, state.cookie)
   const fallbackUserId = state.profile?.userId || state.account?.id || ''
 
-  return {
+  const requestParams = {
     ...params,
     token: params.token ?? cookieValues.token,
     userid: params.userid ?? cookieValues.userid ?? fallbackUserId,
     dfid: params.dfid ?? cookieValues.dfid
   }
+
+  Object.keys(requestParams).forEach((key) => {
+    if (requestParams[key] === undefined || requestParams[key] === null || requestParams[key] === '') {
+      delete requestParams[key]
+    }
+  })
+
+  return requestParams
 }
 
 function getVipClaimIdentity() {
-  const cookieValues = parseCookie(state.cookie)
+  const cookieValues = mergeKugouAuth(state.auth, state.cookie)
   return String(
     state.profile?.userId ||
       state.account?.id ||
@@ -960,38 +980,11 @@ function getLocalDateString(date = new Date()) {
 }
 
 function parseCookie(cookie = '') {
-  return String(cookie)
-    .split(';')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .reduce((values, part) => {
-      const separatorIndex = part.indexOf('=')
-
-      if (separatorIndex === -1) {
-        return values
-      }
-
-      const key = part.slice(0, separatorIndex).trim()
-      const value = part.slice(separatorIndex + 1).trim()
-
-      if (key && value) {
-        values[key] = value
-      }
-
-      return values
-    }, {})
+  return parseCookieString(cookie)
 }
 
 function mergeCookie(currentCookie = '', nextCookie = '') {
-  const values = {
-    ...parseCookie(currentCookie),
-    ...parseCookie(nextCookie)
-  }
-
-  return Object.entries(values)
-    .filter(([, value]) => value !== undefined && value !== null && value !== '')
-    .map(([key, value]) => `${key}=${value}`)
-    .join(';')
+  return toKugouAuthCookie(mergeKugouAuth(currentCookie, nextCookie))
 }
 
 function normalizeQrImage(value) {

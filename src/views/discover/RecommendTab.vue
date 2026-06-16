@@ -105,16 +105,13 @@
         <span class="skeleton-title skeleton-title--small" />
         <div class="radio-grid">
           <article
-            v-for="item in 4"
+            v-for="item in visibleRecommendedRadioLimit"
             :key="`radio-skeleton-${item}`"
             class="skeleton-radio-card"
           >
-            <span class="skeleton-radio-icon" />
-            <span class="skeleton-radio-lines">
-              <span class="skeleton-line skeleton-line--song" />
-              <span class="skeleton-line skeleton-line--meta" />
-              <span class="skeleton-line skeleton-line--meta skeleton-line--radio-count" />
-            </span>
+            <span class="skeleton-radio-cover" />
+            <span class="skeleton-line skeleton-line--playlist" />
+            <span class="skeleton-line skeleton-line--meta" />
           </article>
         </div>
       </section>
@@ -328,17 +325,30 @@
       <SectionTitle title="推荐电台" />
       <div class="radio-grid">
         <router-link
-          v-for="radio in recommendedRadios"
+          v-for="radio in visibleRecommendedRadios"
           :key="radio.id"
-          :to="`/playlist/radio-${radio.id}`"
+          :to="radio.to || `/podcast/${radio.id}`"
           class="radio-card"
         >
-          <span class="radio-card__icon">
-            <Radio :size="24" />
+          <span class="radio-cover" :class="`cover--${radio.type}`">
+            <img
+              v-if="radio.coverUrl"
+              class="radio-cover__image"
+              :src="radio.coverUrl"
+              :alt="radio.title"
+              loading="lazy"
+              decoding="async"
+            />
+            <span v-else class="radio-cover__fallback" aria-hidden="true">
+              <Radio :size="28" />
+            </span>
+            <span class="radio-hover-bg" aria-hidden="true" />
+            <span class="radio-play">
+              <Play :size="18" fill="currentColor" />
+            </span>
           </span>
           <strong>{{ radio.title }}</strong>
-          <small>{{ radio.desc }}</small>
-          <em>{{ radio.listeners }}</em>
+          <small>{{ radio.description || radio.desc }}</small>
         </router-link>
       </div>
     </section>
@@ -391,8 +401,13 @@ const visibleRecommendedSingles = computed(() =>
   homeRecommendedSingles.value.slice(0, RECOMMENDED_SINGLE_DISPLAY_LIMIT)
 );
 const homeRecommendedMvs = ref(recommendedMvs);
+const homeRecommendedRadios = ref(recommendedRadios);
 const isHomeLoading = ref(true);
 const playlistCarouselColumns = ref(6);
+const visibleRecommendedRadioLimit = computed(() => playlistCarouselColumns.value);
+const visibleRecommendedRadios = computed(() =>
+  homeRecommendedRadios.value.slice(0, visibleRecommendedRadioLimit.value)
+);
 const recommendCarouselPageIndex = ref(0);
 const latestCarouselPageIndex = ref(0);
 const recommendPlaylistTrack = ref(null);
@@ -746,6 +761,9 @@ async function loadHomeData() {
     homeRecommendedMvs.value = data.recommendedMvs.length
       ? data.recommendedMvs
       : recommendedMvs;
+    homeRecommendedRadios.value = data.recommendedRadios?.length
+      ? data.recommendedRadios
+      : recommendedRadios;
     activeHeroIndex.value = 0;
     clampPlaylistCarouselPages();
   } catch (error) {

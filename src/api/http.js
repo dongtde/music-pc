@@ -1,27 +1,16 @@
 import axios from 'axios';
-import { API_CONFIG, STORAGE_KEYS } from '../config/app';
-import { readStorage } from '../utils/storage';
+import { API_CONFIG } from '../config/app';
 
 const http = axios.create({
   baseURL: API_CONFIG.baseURL,
   timeout: API_CONFIG.timeout,
-  withCredentials: true,
+  withCredentials: false,
 });
 
 http.interceptors.request.use((config) => {
-  const cookie = getStoredCookie();
-  const skipCookie = Boolean(config.noCookie || config.params?.noCookie);
-
-  if (config.params?.noCookie) {
+  if (config.params?.noCookie !== undefined) {
     const { noCookie, ...params } = config.params;
     config.params = params;
-  }
-
-  if (cookie && !config.params?.cookie && !skipCookie) {
-    config.params = {
-      ...(config.params ?? {}),
-      cookie,
-    };
   }
 
   return config;
@@ -62,9 +51,5 @@ http.interceptors.response.use(
   },
   (error) => Promise.reject(error),
 );
-
-function getStoredCookie() {
-  return readStorage(STORAGE_KEYS.neteaseCookie, '');
-}
 
 export default http;

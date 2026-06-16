@@ -1,6 +1,16 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
+function stripProxyCookies(proxy) {
+  proxy.on('proxyReq', (proxyReq) => {
+    proxyReq.removeHeader('cookie');
+  });
+
+  proxy.on('proxyRes', (proxyRes) => {
+    delete proxyRes.headers['set-cookie'];
+  });
+}
+
 export default defineConfig({
   plugins: [vue()],
   server: {
@@ -11,8 +21,16 @@ export default defineConfig({
     proxy: {
       '^/api': {
         target: 'http://localhost:4000', // 后端地址
+        // target: 'https://ku-gou-music-lz3rukudb-dongtdes-projects.vercel.app', // 后端地址
         changeOrigin: true,
+        configure: stripProxyCookies,
         rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+      '^/netease-api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        configure: stripProxyCookies,
+        rewrite: (path) => path.replace(/^\/netease-api/, ''),
       },
     },
   },

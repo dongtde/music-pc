@@ -110,6 +110,24 @@ import {
   updateSatiSubscribe,
   updateSongLike
 } from '../api/modules/netease'
+import {
+  getAllMvs as getNeteaseAllMvs,
+  getArtistMvs as getNeteaseArtistMvs,
+  getExclusiveMvs as getNeteaseExclusiveMvs,
+  getFirstMvs as getNeteaseFirstMvs,
+  getFollowArtistNewMvs as getNeteaseFollowArtistNewMvs,
+  getMvComments as getNeteaseMvComments,
+  getMvDetail as getNeteaseMvDetail,
+  getMvDetailInfo as getNeteaseMvDetailInfo,
+  getMvUrl as getNeteaseMvUrl,
+  getPersonalizedMvs as getNeteasePersonalizedMvs,
+  getSimilarMvs as getNeteaseSimilarMvs,
+  getSubscribedMvs as getNeteaseSubscribedMvs,
+  getTopMvs as getNeteaseTopMvs,
+  getUgcMv as getNeteaseUgcMv,
+  likeResource as likeNeteaseResource,
+  subscribeMv as subscribeNeteaseMv
+} from '../api/modules/neteaseLegacy'
 import { CACHE_TTL, COVER_TYPES } from '../config/app'
 import { cacheKey, getCachedData } from './cache'
 
@@ -118,24 +136,31 @@ let artistToplistPromise = null
 
 export async function getHomeDiscoverData() {
   return getCachedData('home-discover', CACHE_TTL.discovery, async () => {
-  const [bannerResponse, playlistResponse, newsongResponse, mvResponse] = await Promise.all([
+  const [bannerResponse, playlistResponse, newsongResponse, mvResponse, radioResponse] = await Promise.all([
     getBanners({ type: 0 }).catch(() => ({})),
     getPersonalizedPlaylists({ limit: 18 }).catch(() => ({})),
     getPersonalizedNewSongs({ limit: 100 }).catch(() => ({})),
-    getPersonalizedMvs().catch(() => ({}))
+    getNeteaseTopMvs({ limit: 5, offset: 0 }).catch(() => ({})),
+    getRadioRecommend().catch(() => ({}))
   ])
 
   const banners = (bannerResponse.banners ?? []).map(mapBanner)
   const playlists = (playlistResponse.result ?? []).map(mapPlaylist)
   const songs = (newsongResponse.result ?? []).map(mapNewsong)
-  const mvs = (mvResponse.result ?? []).map(mapMv)
+  const mvs = getHomeTopMvPayload(mvResponse).map(mapHomeTopMv).slice(0, 5)
+  const radioCards = uniqueRadioCards(
+    getRadioRecommendPayload(radioResponse).map((item, index) => mapRadioCard(item, index))
+  ).slice(0, 6)
+  const radioImageMap = await getRadioImageMap(radioCards)
+  const radios = radioCards.map((radio) => hydrateRadioImage(radio, radioImageMap))
 
   return {
     heroSlides: banners.slice(0, 6),
     recommendPlaylists: playlists.slice(0, 12),
     latestPlaylistCards: playlists.slice(12, 18),
     recommendedSingles: songs,
-    recommendedMvs: mvs
+    recommendedMvs: mvs,
+    recommendedRadios: radios
   }
   })
 }
@@ -557,13 +582,13 @@ export async function getVideoCenterData({
     subscribedResponse,
     followNewResponse
   ] = await Promise.all([
-    getPersonalizedMvs().catch(() => ({})),
-    getFirstMvs({ area, limit: 12 }).catch(() => ({})),
-    getExclusiveMvs({ limit: 12, offset: 0 }).catch(() => ({})),
-    getTopMvs({ area: area === '全部' ? undefined : area, limit: 10, offset: 0 }).catch(() => ({})),
-    getAllMvs({ area, type, order, limit, offset }).catch(() => ({})),
-    getSubscribedMvs().catch(() => ({})),
-    getFollowArtistNewMvs({ limit: 10 }).catch(() => ({}))
+    getNeteasePersonalizedMvs().catch(() => ({})),
+    getNeteaseFirstMvs({ area, limit: 12 }).catch(() => ({})),
+    getNeteaseExclusiveMvs({ limit: 12, offset: 0 }).catch(() => ({})),
+    getNeteaseTopMvs({ area: area === '全部' ? undefined : area, limit: 10, offset: 0 }).catch(() => ({})),
+    getNeteaseAllMvs({ area, type, order, limit, offset }).catch(() => ({})),
+    getNeteaseSubscribedMvs().catch(() => ({})),
+    getNeteaseFollowArtistNewMvs({ limit: 10 }).catch(() => ({}))
   ])
   const recommended = (recommendedResponse.result ?? []).map(mapVideoMv)
   const first = getMvListPayload(firstResponse).map(mapVideoMv)
@@ -596,7 +621,7 @@ export async function getFilteredMvsData({
   limit = 18,
   offset = 0
 } = {}) {
-  const response = await getAllMvs({ area, type, order, limit, offset })
+  const response = await getNeteaseAllMvs({ area, type, order, limit, offset })
   const items = getMvListPayload(response).map(mapVideoMv)
 
   return {
@@ -608,12 +633,12 @@ export async function getFilteredMvsData({
 
 export async function getMvPlaybackData(id, quality = 1080) {
   const [detailResponse, infoResponse, urlResponse, simiResponse, commentResponse, ugcResponse] = await Promise.all([
-    getMvDetail({ mvid: id }).catch(() => ({})),
-    getMvDetailInfo({ mvid: id }).catch(() => ({})),
-    getMvUrl({ id, r: quality || 1080 }).catch(() => ({})),
-    getSimilarMvs({ mvid: id }).catch(() => ({})),
-    getMvComments({ id, limit: 12, offset: 0 }).catch(() => ({})),
-    getUgcMv({ id }).catch(() => ({}))
+    getNeteaseMvDetail({ mvid: id }).catch(() => ({})),
+    getNeteaseMvDetailInfo({ mvid: id }).catch(() => ({})),
+    getNeteaseMvUrl({ id, r: quality || 1080 }).catch(() => ({})),
+    getNeteaseSimilarMvs({ mvid: id }).catch(() => ({})),
+    getNeteaseMvComments({ id, limit: 12, offset: 0 }).catch(() => ({})),
+    getNeteaseUgcMv({ id }).catch(() => ({}))
   ])
   const detail = detailResponse.data ?? detailResponse.mv ?? {}
   const mv = mapVideoMv(detail)
@@ -626,7 +651,7 @@ export async function getMvPlaybackData(id, quality = 1080) {
   })
   const artistId = mv.artistId || detail.artistId || detail.artists?.[0]?.id
   const artistMvResponse = artistId
-    ? await getArtistMvs({ id: artistId, limit: 8 }).catch(() => ({}))
+    ? await getNeteaseArtistMvs({ id: artistId, limit: 8 }).catch(() => ({}))
     : {}
 
   return {
@@ -648,13 +673,13 @@ export async function getMvPlaybackData(id, quality = 1080) {
 }
 
 export async function getMvCommentsData({ id, limit = 20, offset = 0 }) {
-  const response = await getMvComments({ id, limit, offset })
+  const response = await getNeteaseMvComments({ id, limit, offset })
 
   return mapMvCommentResult(response)
 }
 
 export async function toggleMvSubscribeData({ id, subscribe }) {
-  return subscribeMv({
+  return subscribeNeteaseMv({
     mvid: id,
     t: subscribe ? 1 : 0,
     timestamp: Date.now()
@@ -662,7 +687,7 @@ export async function toggleMvSubscribeData({ id, subscribe }) {
 }
 
 export async function toggleMvLikeData({ id, like }) {
-  return likeResource({
+  return likeNeteaseResource({
     id,
     type: 1,
     t: like ? 1 : 0,
@@ -2979,6 +3004,33 @@ function mapVideoMv(mv = {}, index = 0) {
   }
 }
 
+function mapHomeTopMv(item = {}, index = 0) {
+  const nestedMv = item.mv ?? {}
+  const duration = item.duration || getTopMvVideoDuration(nestedMv)
+  const mv = {
+    ...nestedMv,
+    ...item,
+    duration,
+    artists: item.artists ?? nestedMv.artists,
+    cover: item.cover ?? nestedMv.cover,
+    coverUrl: item.coverUrl ?? item.cover ?? nestedMv.coverUrl,
+    picUrl: item.picUrl ?? item.cover ?? nestedMv.picUrl,
+    playCount: item.playCount ?? nestedMv.playCount ?? nestedMv.plays,
+    publishTime: item.publishTime ?? nestedMv.publishTime,
+    name: item.name ?? nestedMv.name ?? nestedMv.title,
+    title: item.name ?? nestedMv.title ?? nestedMv.name
+  }
+
+  return mapVideoMv(mv, index)
+}
+
+function getTopMvVideoDuration(mv = {}) {
+  const videos = Array.isArray(mv.videos) ? mv.videos : []
+  const video = videos.find((item) => Number(item?.duration) > 0)
+
+  return video?.duration ?? mv.duration ?? 0
+}
+
 function mapMvStats(response = {}) {
   const data = response.data ?? response
 
@@ -3030,6 +3082,13 @@ function getMvListPayload(response = {}) {
     .filter((item) => item?.id || item?.mvid || item?.mvId || item?.vid || item?.videoId)
 }
 
+function getHomeTopMvPayload(response = {}) {
+  const data = response.data ?? response
+  const items = Array.isArray(data) ? data : []
+
+  return items.length ? items : getMvListPayload(response)
+}
+
 async function hydrateMissingMvCards(mvs = []) {
   const targets = mvs.filter((mv) => mv?.id && (!mv.coverUrl || !mv.playCountRaw))
 
@@ -3038,7 +3097,7 @@ async function hydrateMissingMvCards(mvs = []) {
   }
 
   const detailResponses = await Promise.all(
-    targets.map((mv) => getMvDetail({ mvid: mv.id }).catch(() => null))
+    targets.map((mv) => getNeteaseMvDetail({ mvid: mv.id }).catch(() => null))
   )
   const detailsById = new Map()
 

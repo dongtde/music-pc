@@ -2164,15 +2164,8 @@
 
 .mv-card,
 .radio-card {
-  min-width: 0;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--card-bg);
-  box-shadow: 0 12px 26px var(--shadow-color);
-}
-
-.mv-card {
   display: flex;
+  min-width: 0;
   flex-direction: column;
   gap: 10px;
   overflow: hidden;
@@ -2182,18 +2175,15 @@
   box-shadow: none;
 }
 
-.radio-card:hover {
-  background: var(--card-bg-hover);
-}
-
 .mv-card strong,
 .radio-card strong {
   overflow: hidden;
   color: var(--text-strong);
-  font-size: 16px;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.45;
   text-overflow: ellipsis;
   transition: color 220ms ease;
-  white-space: nowrap;
 }
 
 .mv-card:hover strong,
@@ -2202,15 +2192,15 @@
 }
 
 .mv-card strong,
-.mv-card small {
+.mv-card small,
+.radio-card strong,
+.radio-card small {
   padding: 0;
 }
 
-.mv-card strong {
+.mv-card strong,
+.radio-card strong {
   display: -webkit-box;
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 1.45;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
@@ -2224,13 +2214,24 @@
   white-space: nowrap;
 }
 
-.mv-cover {
+.mv-cover,
+.radio-cover {
   position: relative;
-  aspect-ratio: 16 / 9;
   overflow: hidden;
+  border-radius: 8px;
+  background: #222;
 }
 
-.mv-cover__image {
+.mv-cover {
+  aspect-ratio: 16 / 9;
+}
+
+.radio-cover {
+  aspect-ratio: 1 / 1;
+}
+
+.mv-cover__image,
+.radio-cover__image {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -2238,14 +2239,16 @@
   object-fit: cover;
 }
 
-.mv-cover::after {
+.mv-cover::after,
+.radio-cover::after {
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg, transparent 45%, rgba(0, 0, 0, 0.62));
   content: '';
 }
 
-.mv-hover-bg {
+.mv-hover-bg,
+.radio-hover-bg {
   position: absolute;
   inset: 0;
   z-index: 1;
@@ -2254,11 +2257,13 @@
   transition: opacity 220ms ease;
 }
 
-.mv-card:hover .mv-hover-bg {
+.mv-card:hover .mv-hover-bg,
+.radio-card:hover .radio-hover-bg {
   opacity: 1;
 }
 
-.mv-play {
+.mv-play,
+.radio-play {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -2278,7 +2283,8 @@
     transform 220ms ease;
 }
 
-.mv-card:hover .mv-play {
+.mv-card:hover .mv-play,
+.radio-card:hover .radio-play {
   opacity: 1;
   transform: translate(-50%, -50%) scale(1);
 }
@@ -2295,24 +2301,14 @@
 }
 
 .radio-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
-.radio-card {
+.radio-cover__fallback {
+  position: absolute;
+  inset: 0;
   display: grid;
-  grid-template-columns: 56px 1fr;
-  gap: 6px 14px;
-  align-items: center;
-  padding: 16px;
-}
-
-.radio-card__icon {
-  display: grid;
-  grid-row: span 3;
-  width: 56px;
-  height: 56px;
   place-items: center;
-  border-radius: 50%;
   color: #ffffff;
   background:
     radial-gradient(
@@ -2321,14 +2317,6 @@
       transparent 15%
     ),
     linear-gradient(135deg, var(--accent), var(--accent-pressed));
-  box-shadow: 0 12px 22px rgba(var(--accent-rgb), 0.3);
-}
-
-.radio-card em {
-  color: var(--accent);
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 800;
 }
 
 .section-head {
@@ -2588,6 +2576,7 @@
 .skeleton-tabs,
 .skeleton-artist-avatar,
 .skeleton-mv-cover,
+.skeleton-radio-cover,
 .skeleton-song-thumb,
 .skeleton-radio-icon,
 .skeleton-chart-summary-cover,
@@ -2707,10 +2696,18 @@
   width: 70%;
 }
 
-.skeleton-mv-cover {
-  aspect-ratio: 16 / 9;
+.skeleton-mv-cover,
+.skeleton-radio-cover {
   width: 100%;
   border-radius: 8px;
+}
+
+.skeleton-mv-cover {
+  aspect-ratio: 16 / 9;
+}
+
+.skeleton-radio-cover {
+  aspect-ratio: 1 / 1;
 }
 
 .skeleton-tabs {
@@ -2755,16 +2752,10 @@
 }
 
 .skeleton-radio-card {
-  display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
-  gap: 6px 14px;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
   min-width: 0;
-  padding: 16px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--card-bg);
-  box-shadow: 0 12px 26px var(--shadow-color);
 }
 
 .skeleton-radio-icon {
@@ -2811,6 +2802,7 @@
   .skeleton-tabs,
   .skeleton-artist-avatar,
   .skeleton-mv-cover,
+  .skeleton-radio-cover,
   .skeleton-song-thumb,
   .skeleton-radio-icon,
   .skeleton-chart-summary-cover,
@@ -2892,7 +2884,7 @@
   }
 
   .radio-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .song-list--recommend {
@@ -2915,5 +2907,10 @@
 
   .hero__content {
     padding: 10px 12px;
+  }
+
+  .media-grid,
+  .radio-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
