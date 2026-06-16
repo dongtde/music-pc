@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { getSongUrl } from '../api/modules/netease'
+import { getSongUrl, registerAnonymous } from '../api/modules/netease'
 import { STORAGE_KEYS } from '../config/app'
 import { currentTrack as fallbackTrack, newSongs } from '../data/music'
 import { useAuthStore } from './auth'
@@ -207,6 +207,7 @@ async function resolvePlaybackUrl(track) {
   if (!auth.state.cookie) {
     await auth.loginAsGuest()
   }
+  const playbackCookie = await getPlaybackCookie(auth.state.cookie)
 
   const response = await getSongUrl({
     id: track.id,
@@ -214,9 +215,26 @@ async function resolvePlaybackUrl(track) {
     album_audio_id: track.album_audio_id ?? track.mixsongid ?? track.audio_id,
     mixsongid: track.mixsongid,
     album_id: track.album_id ?? track.albumId,
-    level: 'standard'
+    quality: '128',
+    cookie: playbackCookie || undefined
   })
   return response.data?.[0]?.url || ''
+}
+
+async function getPlaybackCookie(cookie = '') {
+  const currentCookie = String(cookie || '').trim()
+
+  if (parseCookie(currentCookie).dfid) {
+    return currentCookie
+  }
+
+  const response = await registerAnonymous({
+    timestamp: Date.now(),
+    noCookie: true
+  }).catch(() => null)
+  const guestCookie = response?.cookie || ''
+
+  return mergeCookie(currentCookie, guestCookie)
 }
 
 function notifyTrackEnded() {
@@ -351,4 +369,39 @@ function serializeTrack(track) {
 
 function isRestorableTrack(track) {
   return Boolean(track?.id && track?.name)
+}
+
+function parseCookie(cookie = '') {
+  return String(cookie)
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce((values, part) => {
+      const separatorIndex = part.indexOf('=')
+
+      if (separatorIndex === -1) {
+        return values
+      }
+
+      const key = part.slice(0, separatorIndex).trim()
+      const value = part.slice(separatorIndex + 1).trim()
+
+      if (key && value) {
+        values[key] = value
+      }
+
+      return values
+    }, {})
+}
+
+function mergeCookie(currentCookie = '', nextCookie = '') {
+  const values = {
+    ...parseCookie(currentCookie),
+    ...parseCookie(nextCookie)
+  }
+
+  return Object.entries(values)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => `${key}=${value}`)
+    .join(';')
 }

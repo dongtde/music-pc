@@ -34,15 +34,20 @@ const lyricRequestRegistry = new Map()
 function normalizeParams(path, params) {
   const normalized = { ...params }
 
-  if (normalized.limit !== undefined && normalized.pagesize === undefined) {
-    normalized.pagesize = normalized.limit
+  if (normalized.pagesize !== undefined && normalized.pageSize === undefined) {
+    normalized.pageSize = normalized.pagesize
+  }
+
+  if (normalized.limit !== undefined && normalized.pageSize === undefined) {
+    normalized.pageSize = normalized.limit
   }
 
   if (normalized.offset !== undefined && normalized.page === undefined) {
-    const pageSize = Number(normalized.pagesize) || 30
+    const pageSize = Number(normalized.pageSize) || 30
     normalized.page = Math.floor(Number(normalized.offset) / pageSize) + 1
   }
 
+  delete normalized.pagesize
   delete normalized.limit
   delete normalized.offset
   delete normalized.level
@@ -110,13 +115,28 @@ function normalizeParams(path, params) {
     delete normalized.order
   }
 
+  if (path === '/top/album') {
+    normalized.type = normalizeAlbumAreaType(normalized.type ?? normalized.area)
+
+    if (!normalized.type) {
+      delete normalized.type
+    }
+
+    delete normalized.area
+  }
+
+  if (path === '/album') {
+    normalized.album_id ??= normalized.id
+    delete normalized.id
+  }
+
   if (path === '/artist/videos') {
-    if (normalized.size !== undefined && normalized.pagesize === undefined) {
-      normalized.pagesize = normalized.size
+    if (normalized.size !== undefined && normalized.pageSize === undefined) {
+      normalized.pageSize = normalized.size
     }
 
     if (normalized.cursor !== undefined && normalized.page === undefined) {
-      const pageSize = Number(normalized.pagesize) || 30
+      const pageSize = Number(normalized.pageSize) || 30
       normalized.page = Math.floor(Number(normalized.cursor) / pageSize) + 1
     }
 
@@ -145,6 +165,21 @@ function normalizeSearchType(type) {
   }
 
   return typeMap[type] || type || 'song'
+}
+
+function normalizeAlbumAreaType(type) {
+  const typeMap = {
+    ZH: 1,
+    EA: 2,
+    JP: 3,
+    KR: 4,
+    1: 1,
+    2: 2,
+    3: 3,
+    4: 4
+  }
+
+  return typeMap[String(type ?? '').toUpperCase()] || ''
 }
 
 function parseKugouPayload(payload) {
@@ -229,7 +264,27 @@ function normalizeKugouImage(url, size = 480) {
     return ''
   }
 
-  return url.replace('{size}', String(size))
+  const value = url.trim()
+
+  if (!value) {
+    return ''
+  }
+
+  if (/^\/\//.test(value)) {
+    return `https:${value}`.replace('{size}', String(size))
+  }
+
+  if (/^https?:\/\//i.test(value)) {
+    return value.replace('{size}', String(size))
+  }
+
+  if (/^[\w.-]+\.(?:jpe?g|png|webp|gif)$/i.test(value)) {
+    const datePath = value.match(/^(\d{8})/)?.[1]
+
+    return `https://imge.kugou.com/stdmusic/${size}/${datePath ? `${datePath}/` : ''}${value}`
+  }
+
+  return value.replace('{size}', String(size))
 }
 
 function splitFilename(value = '') {
@@ -245,84 +300,138 @@ function splitFilename(value = '') {
   }
 }
 
+function mergeSongFields(song = {}) {
+  if (!song || typeof song !== 'object' || Array.isArray(song)) {
+    return song
+  }
+
+  const merged = { ...song }
+  const sources = [
+    song.resource,
+    song.song,
+    song.audio,
+    song.base,
+    song.audio_info,
+    song.audioInfo,
+    song.song_info,
+    song.songInfo
+  ]
+
+  sources.forEach((source) => fillMissingSongFields(merged, source))
+
+  return merged
+}
+
+function fillMissingSongFields(target, source) {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
+    return
+  }
+
+  Object.entries(source).forEach(([key, value]) => {
+    if (isPresentValue(value) && !isPresentValue(target[key])) {
+      target[key] = value
+    }
+  })
+}
+
+function isPresentValue(value) {
+  return value !== undefined && value !== null && value !== ''
+}
+
 function normalizeArtistName(song = {}) {
+  const source = mergeSongFields(song)
+  const authors = firstArray(source.authors, source.singerinfo)
+
   return (
-    song.author_name ||
-    song.singername ||
-    firstArray(song.authors, song.singerinfo).map((artist) => artist.author_name || artist.name).filter(Boolean).join(' / ') ||
-    splitFilename(song.filename || song.name || song.songname).artist ||
+    source.author_name ||
+    source.singername ||
+    source.artist_name ||
+    source.author ||
+    source.singer ||
+    authors.map((artist) => artist.author_name || artist.name).filter(Boolean).join(' / ') ||
+    splitFilename(source.filename || source.name || source.songname || source.audio_name).artist ||
     '未知歌手'
   )
 }
 
 function normalizeSongName(song = {}) {
-  const source = song.filename || song.songname || song.name
-  const file = splitFilename(source)
-  const plainName = song.name && !splitFilename(song.name).artist ? song.name : ''
+  const source = mergeSongFields(song)
+  const title = source.filename || source.audio_name || source.songname || source.name || source.remark || source.title
+  const file = splitFilename(title)
+  const plainName = source.name && !splitFilename(source.name).artist ? source.name : ''
 
-  return plainName || file.name || song.songname || song.name || song.remark || '未知歌曲'
+  return plainName || file.name || source.audio_name || source.songname || source.name || source.remark || source.title || '未知歌曲'
 }
 
 function normalizeSong(song = {}, index = 0) {
-  const artistName = normalizeArtistName(song)
-  const artistId = song.author_id ?? song.authors?.[0]?.author_id ?? song.singerinfo?.[0]?.id ?? ''
-  const albumId = song.album_id ?? song.albuminfo?.id ?? song.album_info?.album_id ?? ''
-  const albumName = song.album_name ?? song.albuminfo?.name ?? song.album_info?.album_name ?? song.remark ?? ''
+  const source = mergeSongFields(song)
+  const artistName = normalizeArtistName(source)
+  const artistId = source.author_id ?? source.authors?.[0]?.author_id ?? source.authors?.[0]?.id ?? source.singerinfo?.[0]?.id ?? ''
+  const albumId = source.album_id ?? source.albuminfo?.id ?? source.album_info?.album_id ?? source.album_info?.id ?? ''
+  const albumName = source.album_name ?? source.albuminfo?.name ?? source.album_info?.album_name ?? source.album_info?.name ?? source.remark ?? ''
   const cover = normalizeKugouImage(
-    song.cover ||
-      song.album_sizable_cover ||
-      song.album_info?.sizable_cover ||
-      song.album_info?.album_cover ||
-      song.imgurl ||
-      song.pic ||
-      song.album_cover ||
-      song.trans_param?.union_cover,
+    source.cover ||
+      source.sizable_cover ||
+      source.album_sizable_cover ||
+      source.album_info?.sizable_cover ||
+      source.album_info?.album_cover ||
+      source.album_info?.cover ||
+      source.album_info?.picUrl ||
+      source.imgurl ||
+      source.pic ||
+      source.picUrl ||
+      source.image ||
+      source.album_cover ||
+      source.trans_param?.union_cover,
     480
   )
-  const id = song.album_audio_id ?? song.mixsongid ?? song.add_mixsongid ?? song.audio_id ?? song.id ?? song.hash
+  const id = source.album_audio_id ?? source.mixsongid ?? source.add_mixsongid ?? source.audio_id ?? source.id ?? source.hash
   const duration = toMilliseconds(
-    song.timelength ??
-      song.timelen ??
-      song.duration ??
-      song.audio_info?.duration_128 ??
-      song.audio_info?.duration_320 ??
-      song.audio_info?.duration_high ??
-      song.deprecated?.duration ??
-      song.video_timelength
+    source.timelength ??
+      source.timelen ??
+      source.duration ??
+      source.duration_128 ??
+      source.duration_320 ??
+      source.duration_high ??
+      source.audio_info?.duration_128 ??
+      source.audio_info?.duration_320 ??
+      source.audio_info?.duration_high ??
+      source.deprecated?.duration ??
+      source.video_timelength
   )
   const mvId =
-    song.video_id ||
-    song.video_info?.video_id ||
-    song.mv_id ||
-    song.mvid ||
-    song.mvhash ||
-    song.video_hash ||
-    song.video_info?.video_hash ||
-    song.mv_hash ||
+    source.video_id ||
+    source.video_info?.video_id ||
+    source.mv_id ||
+    source.mvid ||
+    source.mvhash ||
+    source.video_hash ||
+    source.video_info?.video_hash ||
+    source.mv_hash ||
     ''
   const normalized = {
-    ...song,
+    ...source,
     id,
-    name: normalizeSongName(song),
-    songname: song.songname ?? normalizeSongName(song),
+    name: normalizeSongName(source),
+    songname: source.songname ?? normalizeSongName(source),
     hash:
-      song.hash ??
-      song.file_hash ??
-      song.audio_hash ??
-      song.hash_128 ??
-      song['128hash'] ??
-      song.audio_info?.hash_128 ??
-      song.audio_info?.hash_320 ??
-      song.deprecated?.hash ??
+      source.hash ??
+      source.file_hash ??
+      source.audio_hash ??
+      source.hash_128 ??
+      source['128hash'] ??
+      source.audio_info?.hash_128 ??
+      source.audio_info?.hash_320 ??
+      source.deprecated?.hash ??
       '',
-    album_audio_id: song.album_audio_id ?? song.mixsongid ?? song.add_mixsongid ?? id,
-    mixsongid: song.mixsongid ?? song.add_mixsongid ?? song.album_audio_id ?? id,
-    audio_id: song.audio_id ?? song.rp_id ?? '',
+    album_audio_id: source.album_audio_id ?? source.mixsongid ?? source.add_mixsongid ?? id,
+    mixsongid: source.mixsongid ?? source.add_mixsongid ?? source.album_audio_id ?? id,
+    audio_id: source.audio_id ?? source.rp_id ?? '',
     album_id: albumId,
     duration,
     dt: duration,
     mv: mvId,
-    fee: song.pay_type || song.feetype || 0,
+    fee: source.pay_type || source.feetype || 0,
     ar: [{
       id: artistId,
       name: artistName
@@ -501,26 +610,55 @@ function normalizeArtist(artist = {}, index = 0) {
 }
 
 function normalizeAlbum(album = {}, index = 0) {
-  const id = album.album_id ?? album.id
-  const cover = normalizeKugouImage(album.cover || album.sizable_cover || album.pic || album.picUrl, 480)
-  const artistName = album.author_name || album.singername || album.artist_name || album.authors?.[0]?.author_name || '未知歌手'
+  const id = album.album_id ?? album.albumid ?? album.id
+  const cover = normalizeKugouImage(
+    album.sizable_cover ||
+      album.cover_url ||
+      album.coverUrl ||
+      album.picUrl ||
+      album.imgurl ||
+      album.image ||
+      album.album_cover ||
+      album.cover ||
+      album.pic,
+    480
+  )
+  const authors = firstNonEmptyArray(album.authors, album.singerinfo, album.artists)
+  const artistName =
+    album.author_name ||
+    album.singername ||
+    album.artist_name ||
+    album.artistname ||
+    album.artist?.name ||
+    authors.map((artist) => artist.author_name || artist.name).filter(Boolean).join(' / ') ||
+    '未知歌手'
+  const artistId =
+    album.author_id ??
+    album.singerid ??
+    album.artist_id ??
+    album.artist?.id ??
+    authors[0]?.author_id ??
+    authors[0]?.id ??
+    ''
 
   return {
     ...album,
     id,
-    name: album.album_name || album.name || '未知专辑',
+    name: album.album_name || album.albumname || album.name || '未知专辑',
     picUrl: cover,
     blurPicUrl: cover,
-    publishTime: normalizeTimestamp(album.publish_time || album.publish_date),
+    publishTime: normalizeTimestamp(album.publish_time || album.publish_date || album.publishTime || album.publishtime),
     company: album.publish_company || album.company || '',
     description: album.intro || album.description || '',
-    size: album.audio_count ?? album.song_count ?? album.size ?? 0,
+    size: album.audio_count ?? album.song_count ?? album.songcount ?? album.size ?? album.count ?? 0,
+    type: album.category || album.type || album.language || '',
+    playCount: album.play_count ?? album.playCount ?? album.heat ?? 0,
     artists: [{
-      id: album.author_id ?? album.authors?.[0]?.author_id ?? '',
+      id: artistId,
       name: artistName
     }],
     artist: {
-      id: album.author_id ?? album.authors?.[0]?.author_id ?? '',
+      id: artistId,
       name: artistName
     },
     rank: index + 1
@@ -554,7 +692,7 @@ function extractSongItems(source = {}) {
     data
   )
 
-  return items.map((item) => item.song ?? item.resource ?? item.audio ?? item.audio_info ?? item)
+  return items.map(mergeSongFields)
 }
 
 function toSongListResponse(response = {}) {
@@ -669,7 +807,7 @@ function toPlaylistTracksResponse(response = {}, id) {
   const songs = extractSongItems(data).map(normalizeSong)
   const total = data.total ?? data.count ?? data.songcount ?? response.total ?? songs.length
   const page = Number(data.page ?? response.page ?? 1)
-  const pageSize = Number(data.pagesize ?? data.page_size ?? response.pagesize ?? songs.length)
+  const pageSize = Number(data.pageSize ?? data.pagesize ?? data.page_size ?? response.pageSize ?? response.pagesize ?? songs.length)
 
   return {
     ...response,
@@ -762,7 +900,7 @@ function toArtistSongsResponse(response = {}) {
   const songs = firstArray(data.songs, data.list, data).map(normalizeSong)
   const total = response.total ?? data.total ?? data.count ?? response.extra?.page_total ?? data.extra?.page_total ?? songs.length
   const page = Number(response.params?.page ?? data.page ?? 1)
-  const pageSize = Number(response.params?.pagesize ?? data.pagesize ?? songs.length)
+  const pageSize = Number(response.params?.pageSize ?? response.params?.pagesize ?? data.pageSize ?? data.pagesize ?? songs.length)
 
   return {
     ...response,
@@ -778,7 +916,7 @@ function toArtistAlbumsResponse(response = {}) {
   const albums = firstArray(data.albums, data.list, data).map(normalizeAlbum)
   const total = response.total ?? data.total ?? data.count ?? response.extra?.page_total ?? data.extra?.page_total ?? albums.length
   const page = Number(response.params?.page ?? data.page ?? 1)
-  const pageSize = Number(response.params?.pagesize ?? data.pagesize ?? albums.length)
+  const pageSize = Number(response.params?.pageSize ?? response.params?.pagesize ?? data.pageSize ?? data.pagesize ?? albums.length)
 
   return {
     ...response,
@@ -810,7 +948,7 @@ function toArtistVideosResponse(response = {}) {
   }))
   const total = response.total ?? data.total ?? data.count ?? response.extra?.page_total ?? data.extra?.page_total ?? videos.length
   const page = Number(response.params?.page ?? data.page ?? 1)
-  const pageSize = Number(response.params?.pagesize ?? data.pagesize ?? videos.length)
+  const pageSize = Number(response.params?.pageSize ?? response.params?.pagesize ?? data.pageSize ?? data.pagesize ?? videos.length)
   const cursor = pageSize ? page * pageSize : videos.length
 
   return {
@@ -856,25 +994,95 @@ function toMvListResponse(response = {}) {
 
 function toAlbumListResponse(response = {}) {
   const data = response.data ?? response
-  const albums = firstArray(data.albums, data.list, data).map(normalizeAlbum)
+  const albums = getAlbumListItems(data, response.params?.type).map(normalizeAlbum)
+  const total = response.total ?? data.total ?? data.count ?? response.extra?.page_total ?? data.extra?.page_total ?? albums.length
+  const page = Number(response.params?.page ?? data.page ?? 1)
+  const pageSize = Number(response.params?.pageSize ?? response.params?.pagesize ?? data.pageSize ?? data.pagesize ?? albums.length)
 
   return {
     ...response,
     albums,
-    total: data.total ?? data.count ?? albums.length,
-    more: Boolean(data.has_next)
+    total,
+    more: Boolean(data.has_next || data.more || (total && pageSize && page * pageSize < total))
   }
+}
+
+function getAlbumListItems(data = {}, type) {
+  const groupedAlbums = getTopAlbumGroupedItems(data, type)
+
+  if (groupedAlbums.length) {
+    return groupedAlbums
+  }
+
+  return firstArray(
+    data.albums,
+    data.list,
+    data.info,
+    data.album_list,
+    data.albumList,
+    data
+  )
+}
+
+function getTopAlbumGroupedItems(data = {}, type) {
+  const groupMap = {
+    1: 'chn',
+    2: 'eur',
+    3: 'jpn',
+    4: 'kor'
+  }
+  const groupKey = groupMap[String(type ?? '')]
+
+  if (groupKey) {
+    return firstArray(data[groupKey])
+  }
+
+  return ['chn', 'eur', 'jpn', 'kor'].flatMap((key) => firstArray(data[key]))
 }
 
 function toAlbumDetailResponse(response = {}) {
   const data = response.data ?? response
-  const album = normalizeAlbum(firstObject(data.info, data.album, data), 0)
-  const songs = firstArray(data.songs, data.list).map(normalizeSong)
+  const rawAlbum = firstObject(
+    data.info,
+    data.album,
+    data.album_info,
+    firstArray(data.info, data.album, data.album_info, data)[0],
+    data
+  )
+  const album = normalizeAlbum(rawAlbum, 0)
+  const songs = firstArray(
+    data.songs,
+    data.songlist,
+    data.song_list,
+    data.list,
+    data.info?.songs,
+    data.info?.songlist,
+    data.album?.songs,
+    data.album?.songlist
+  ).map(normalizeSong)
+  const total = data.total ?? data.count ?? album.size ?? songs.length
 
   return {
     ...response,
     album,
-    songs
+    songs,
+    total,
+    more: Boolean(data.has_next || data.more)
+  }
+}
+
+function toAlbumInfoResponse(response = {}) {
+  const data = response.data ?? response
+  const albums = firstArray(data.info, data.albums, data.list, data)
+    .map((item) => item.album ?? item.album_info ?? item)
+    .map(normalizeAlbum)
+  const singleAlbum = normalizeAlbum(firstObject(data.info, data.album, data.album_info, data), 0)
+  const album = albums.find((item) => item.id) ?? (singleAlbum.id ? singleAlbum : null)
+
+  return {
+    ...response,
+    album,
+    albums
   }
 }
 
@@ -1428,6 +1636,7 @@ export const getArtistDynamic = (params = {}) => getKugou('/artist/detail', para
 export const getAlbumNewest = (params = {}) => getKugou('/top/album', params).then(toAlbumListResponse)
 export const getNewAlbums = (params = {}) => getKugou('/top/album', params).then(toAlbumListResponse)
 export const getTopAlbums = (params = {}) => getKugou('/top/album', params).then(toAlbumListResponse)
+export const getAlbumInfo = (params = {}) => getKugou('/album', params).then(toAlbumInfoResponse)
 export const getAlbumDetail = (params = {}) => getKugou('/album/detail', params).then(toAlbumDetailResponse)
 export const getAlbumSongs = (params = {}) => getKugou('/album/songs', params).then(toSongListResponse)
 export const getAlbumDynamic = (params = {}) => getKugou('/album/detail', params).then(toAlbumDetailResponse)
@@ -1473,6 +1682,9 @@ export const getLoginQrCreate = (params = {}) => getKugou('/login/qr/create', pa
 export const getLoginQrCheck = (params = {}) =>
   getKugou('/login/qr/check', params, { acceptCodes: [0, 1, 2, 4, 200] }).then(toQrCheckResponse)
 export const getUserAccount = (params = {}) => getKugou('/user/detail', params).then(toLoginProfileResponse)
+export const claimYouthDayVip = (params = {}) => getKugou('/youth/day/vip', params)
+export const upgradeYouthDayVip = (params = {}) => getKugou('/youth/day/vip/upgrade', params)
+export const getYouthVipStatus = (params = {}) => getKugou('/youth/union/vip', params)
 export const logout = (params = {}) => getKugou('/login/token', params)
 
 // Songs, comments, lyrics, and search

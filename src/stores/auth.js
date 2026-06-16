@@ -1,16 +1,19 @@
 import { computed, reactive } from 'vue'
 import {
+  claimYouthDayVip,
   getLoginQrCheck,
   getLoginQrCreate,
   getLoginQrKey,
   getLoginStatus,
   getUserAccount,
+  getYouthVipStatus,
   loginByCellphone,
   loginByEmail,
   logout as requestLogout,
   refreshLogin,
   registerAnonymous,
-  sendCaptcha
+  sendCaptcha,
+  upgradeYouthDayVip
 } from '../api/modules/netease'
 import { DEFAULT_COUNTRY_CODE, STORAGE_KEYS } from '../config/app'
 import { readJsonStorage, readStorage, writeJsonStorage, writeStorage } from '../utils/storage'
@@ -34,6 +37,14 @@ const state = reactive({
   cookie: storedCookie,
   error: '',
   notice: '',
+  vip: {
+    loading: false,
+    claiming: false,
+    loaded: false,
+    active: false,
+    raw: null,
+    error: ''
+  },
   qr: {
     loading: false,
     key: '',
@@ -42,6 +53,8 @@ const state = reactive({
     message: ''
   }
 })
+let dailyVipClaimRequest = null
+let vipStatusRequest = null
 
 export function useAuthStore() {
   const displayName = computed(() =>
@@ -60,7 +73,10 @@ export function useAuthStore() {
     state.error = ''
 
     try {
-      await refreshLoginStatus({ preserveCurrent: state.isLoggedIn })
+      const loggedIn = await refreshLoginStatus({ preserveCurrent: state.isLoggedIn })
+      if (loggedIn || (state.isLoggedIn && state.loginType !== 'guest')) {
+        syncVipAfterLogin()
+      }
     } finally {
       state.initialized = true
       state.loading = false
@@ -364,6 +380,7 @@ export function useAuthStore() {
         return false
       }
 
+      syncVipAfterLogin()
       state.loginModalVisible = false
       return true
     } catch (error) {
@@ -390,6 +407,9 @@ export function useAuthStore() {
       }
 
       const refreshed = await refreshLoginStatus({ preserveCurrent: true })
+      if (refreshed || (state.isLoggedIn && state.loginType !== 'guest')) {
+        syncVipAfterLogin()
+      }
       state.notice = refreshed ? '登录状态已刷新' : '当前登录已失效'
       return refreshed
     } catch (error) {
@@ -435,6 +455,8 @@ export function useAuthStore() {
     initAuth,
     refreshLoginStatus,
     refreshCurrentLogin,
+    refreshVipStatus,
+    claimDailyVip,
     createQrLogin,
     checkQrLogin,
     loginWithCellphone,
@@ -455,7 +477,185 @@ function setAccountState({ profile, account, loginType }) {
   state.isLoggedIn = Boolean(profile || account)
   state.loginType = state.isLoggedIn ? loginType || 'account' : ''
   state.error = ''
+
+  if (!state.isLoggedIn || state.loginType === 'guest') {
+    resetVipState()
+  }
+
   saveSession()
+}
+
+function syncVipAfterLogin() {
+  return refreshVipStatus()
+    .then((active) => {
+      if (!active) {
+        ensureDailyVipClaim()
+      }
+    })
+    .catch(() => {
+      ensureDailyVipClaim()
+    })
+}
+
+async function refreshVipStatus({ force = false } = {}) {
+  if (!state.isLoggedIn || state.loginType === 'guest') {
+    resetVipState()
+    return false
+  }
+
+  if (vipStatusRequest && !force) {
+    return vipStatusRequest
+  }
+
+  const identity = getVipClaimIdentity()
+  state.vip.loading = true
+  state.vip.error = ''
+
+  const request = getYouthVipStatus({ timestamp: Date.now() })
+    .then((response) => {
+      if (!state.isLoggedIn || state.loginType === 'guest' || getVipClaimIdentity() !== identity) {
+        return false
+      }
+
+      state.vip.raw = response
+      state.vip.active = isYouthVipActive(response)
+      state.vip.loaded = true
+      state.vip.error = ''
+      return state.vip.active
+    })
+    .catch((error) => {
+      if (getVipClaimIdentity() === identity) {
+        state.vip.error = error?.message || 'VIP 状态获取失败'
+        state.vip.loaded = false
+      }
+
+      console.warn('Failed to load youth VIP status:', error)
+      return false
+    })
+    .finally(() => {
+      if (vipStatusRequest === request) {
+        vipStatusRequest = null
+        if (getVipClaimIdentity() === identity) {
+          state.vip.loading = false
+        }
+      }
+    })
+
+  vipStatusRequest = request
+  return request
+}
+
+function ensureDailyVipClaim() {
+  if (!state.isLoggedIn || state.loginType === 'guest' || state.vip.active) {
+    return null
+  }
+
+  const receiveDay = getLocalDateString()
+  const identity = getVipClaimIdentity()
+  const claimRecord = readJsonStorage(STORAGE_KEYS.dailyVipClaim, {})
+
+  if (claimRecord?.date === receiveDay && claimRecord?.identity === identity) {
+    return null
+  }
+
+  if (dailyVipClaimRequest) {
+    return dailyVipClaimRequest
+  }
+
+  dailyVipClaimRequest = claimAndUpgradeYouthVip(receiveDay)
+    .then((response) => {
+      markDailyVipClaim(receiveDay, identity)
+      refreshVipStatus({ force: true })
+      return response
+    })
+    .catch((error) => {
+      console.warn('Failed to claim daily youth VIP:', error)
+      return null
+    })
+    .finally(() => {
+      dailyVipClaimRequest = null
+    })
+
+  return dailyVipClaimRequest
+}
+
+async function claimDailyVip() {
+  if (!state.isLoggedIn || state.loginType === 'guest') {
+    openLoginModalFromStore()
+    return { ok: false, reason: 'login-required' }
+  }
+
+  if (state.vip.active) {
+    return { ok: true, active: true, skipped: true }
+  }
+
+  if (dailyVipClaimRequest) {
+    state.vip.claiming = true
+    try {
+      const response = await dailyVipClaimRequest
+      await refreshVipStatus({ force: true })
+      return { ok: true, active: state.vip.active, response }
+    } finally {
+      state.vip.claiming = false
+    }
+  }
+
+  const receiveDay = getLocalDateString()
+  const identity = getVipClaimIdentity()
+
+  state.vip.claiming = true
+  state.vip.error = ''
+
+  try {
+    const response = await claimAndUpgradeYouthVip(receiveDay)
+
+    markDailyVipClaim(receiveDay, identity)
+    await refreshVipStatus({ force: true })
+
+    return { ok: true, active: state.vip.active, response }
+  } catch (error) {
+    state.vip.error = error?.message || 'VIP 领取失败'
+    console.warn('Failed to claim youth VIP manually:', error)
+    return { ok: false, error }
+  } finally {
+    state.vip.claiming = false
+  }
+}
+
+async function claimAndUpgradeYouthVip(receiveDay = getLocalDateString()) {
+  const dayResponse = await claimYouthDayVip({
+    receive_day: receiveDay,
+    timestamp: Date.now()
+  })
+  assertVipStepSucceeded(dayResponse, '领取一天 VIP 失败')
+
+  const upgradeResponse = await upgradeYouthDayVip({
+    timestamp: Date.now()
+  })
+  assertVipStepSucceeded(upgradeResponse, '升级 VIP 失败')
+
+  return {
+    day: dayResponse,
+    upgrade: upgradeResponse
+  }
+}
+
+function assertVipStepSucceeded(response, fallbackMessage) {
+  const code = firstDefined(response?.code, response?.errcode, response?.err_code, response?.error_code)
+  const numericCode = Number(code)
+
+  if (code !== undefined && Number.isFinite(numericCode) && ![0, 1, 200].includes(numericCode)) {
+    throw new Error(getApiErrorMessage(response) || fallbackMessage)
+  }
+
+  const success = firstDefined(response?.success, response?.succeed)
+  if (success === false || String(success).toLowerCase() === 'false') {
+    throw new Error(getApiErrorMessage(response) || fallbackMessage)
+  }
+}
+
+function getApiErrorMessage(response = {}) {
+  return firstDefined(response.message, response.msg, response.errmsg, response.error_msg)
 }
 
 function clearAccountState(clearCookie) {
@@ -464,6 +664,7 @@ function clearAccountState(clearCookie) {
   state.isLoggedIn = false
   state.loginType = ''
   state.notice = ''
+  resetVipState()
   resetQr()
 
   if (clearCookie) {
@@ -497,10 +698,21 @@ async function completeLogin(response, loginType) {
       account: response.account ?? null,
       loginType
     })
+    syncVipAfterLogin()
     return true
   }
 
-  return await refreshLoginStatus({ preserveCurrent: state.isLoggedIn })
+  const loggedIn = await refreshLoginStatus({ preserveCurrent: state.isLoggedIn })
+  if (loggedIn) {
+    syncVipAfterLogin()
+  }
+  return loggedIn
+}
+
+function openLoginModalFromStore() {
+  state.loginModalVisible = true
+  state.error = ''
+  state.notice = ''
 }
 
 function setError(message) {
@@ -596,6 +808,155 @@ function createAuthRequestParams(params = {}) {
     userid: params.userid ?? cookieValues.userid ?? fallbackUserId,
     dfid: params.dfid ?? cookieValues.dfid
   }
+}
+
+function getVipClaimIdentity() {
+  const cookieValues = parseCookie(state.cookie)
+  return String(
+    state.profile?.userId ||
+      state.account?.id ||
+      cookieValues.userid ||
+      cookieValues.token ||
+      ''
+  )
+}
+
+function markDailyVipClaim(receiveDay = getLocalDateString(), identity = getVipClaimIdentity()) {
+  writeJsonStorage(STORAGE_KEYS.dailyVipClaim, {
+    date: receiveDay,
+    identity,
+    claimedAt: Date.now()
+  })
+}
+
+function resetVipState() {
+  state.vip.loading = false
+  state.vip.claiming = false
+  state.vip.loaded = false
+  state.vip.active = false
+  state.vip.raw = null
+  state.vip.error = ''
+}
+
+function isYouthVipActive(response = {}) {
+  return collectVipStatusObjects(response).some(({ object, nested }) => {
+    const explicitValue = firstDefined(
+      object.is_vip,
+      object.isVip,
+      object.is_union_vip,
+      object.isUnionVip,
+      object.is_youth_vip,
+      object.isYouthVip,
+      object.vip_status,
+      object.vipStatus,
+      object.union_vip_status,
+      object.unionVipStatus,
+      object.youth_vip_status,
+      object.youthVipStatus,
+      object.vip,
+      object.union_vip,
+      object.unionVip,
+      object.youth_vip,
+      object.youthVip
+    )
+
+    if (isPositiveVipValue(explicitValue)) {
+      return true
+    }
+
+    if (nested && isPositiveVipValue(object.status)) {
+      return true
+    }
+
+    return isFutureVipTime(
+      firstDefined(
+        object.expire_time,
+        object.expireTime,
+        object.end_time,
+        object.endTime,
+        object.vip_end_time,
+        object.vipEndTime,
+        object.deadline
+      )
+    )
+  })
+}
+
+function collectVipStatusObjects(value, nested = false, depth = 0, results = []) {
+  if (!value || typeof value !== 'object' || depth > 4) {
+    return results
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectVipStatusObjects(item, true, depth + 1, results))
+    return results
+  }
+
+  results.push({ object: value, nested })
+
+  Object.entries(value).forEach(([key, child]) => {
+    if (!child || typeof child !== 'object') {
+      return
+    }
+
+    if (depth < 2 || /vip|data|info|result|status/i.test(key)) {
+      collectVipStatusObjects(child, true, depth + 1, results)
+    }
+  })
+
+  return results
+}
+
+function firstDefined(...values) {
+  return values.find((value) => value !== undefined && value !== null && value !== '')
+}
+
+function isPositiveVipValue(value) {
+  if (typeof value === 'boolean') {
+    return value
+  }
+
+  if (typeof value === 'number') {
+    return value > 0
+  }
+
+  if (typeof value === 'string') {
+    return /^(1|true|yes|y|active|valid|open|opened|vip|已开通|已领取)$/i.test(value.trim())
+  }
+
+  return false
+}
+
+function isFutureVipTime(value) {
+  const time = normalizeVipTime(value)
+  return Boolean(time && time > Date.now())
+}
+
+function normalizeVipTime(value) {
+  if (value === undefined || value === null || value === '') {
+    return 0
+  }
+
+  if (typeof value === 'string' && /[-/]/.test(value)) {
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+
+  const number = Number(value)
+
+  if (!Number.isFinite(number) || number <= 0) {
+    return 0
+  }
+
+  return number < 10000000000 ? number * 1000 : number
+}
+
+function getLocalDateString(date = new Date()) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
 }
 
 function parseCookie(cookie = '') {

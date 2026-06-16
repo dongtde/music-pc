@@ -6,6 +6,7 @@ export const API_CONFIG = {
 export const STORAGE_KEYS = {
   neteaseCookie: 'mappic:netease-cookie',
   neteaseSession: 'mappic:netease-session',
+  dailyVipClaim: 'mappic:daily-vip-claim',
   libraryData: 'mappic:library:data',
   playerSnapshot: 'mappic:player:last-track',
   themePreferences: 'mappic-theme-preferences',

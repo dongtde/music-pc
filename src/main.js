@@ -5,7 +5,8 @@ import {
   NInput,
   NInputGroup,
   NMessageProvider,
-  NModal
+  NModal,
+  NTooltip
 } from 'naive-ui'
 import App from './App.vue'
 import router from './router'
@@ -20,6 +21,7 @@ app.component('NInput', NInput)
 app.component('NInputGroup', NInputGroup)
 app.component('NMessageProvider', NMessageProvider)
 app.component('NModal', NModal)
+app.component('NTooltip', NTooltip)
 
 app.use(router).mount('#app')
 

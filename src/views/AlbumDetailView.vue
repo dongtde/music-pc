@@ -13,30 +13,24 @@
       </div>
 
       <div class="album-hero__content">
-        <span class="tag">专辑</span>
         <h1>{{ album.title }}</h1>
-        <p>{{ album.description }}</p>
+        <n-tooltip
+          trigger="hover"
+          placement="bottom-start"
+          :disabled="!album.description"
+          class="album-description-tooltip"
+        >
+          <template #trigger>
+            <p class="album-description">{{ album.description }}</p>
+          </template>
+          {{ album.description }}
+        </n-tooltip>
 
         <div class="album-meta">
           <span>{{ album.artist }}</span>
           <span>{{ album.publishTime }}</span>
           <span>{{ album.company || '酷狗音乐' }}</span>
           <span>{{ album.size }} 首歌</span>
-        </div>
-
-        <div v-if="hasAlbumStats" class="album-stats" aria-label="专辑动态">
-          <span>
-            <Heart :size="14" />
-            {{ formatStat(album.subCount) }} 收藏
-          </span>
-          <span>
-            <MessageCircle :size="14" />
-            {{ formatStat(displayCommentTotal) }} 评论
-          </span>
-          <span>
-            <Share2 :size="14" />
-            {{ formatStat(album.shareCount) }} 分享
-          </span>
         </div>
 
         <div class="album-actions">
@@ -46,19 +40,27 @@
             :disabled="isLoading || !albumTracks.length"
             @click="playAllTracks"
           >
-            <Play v-if="!isPlaying" :size="18" fill="currentColor" />
-            <Pause v-else :size="18" fill="currentColor" />
-            <span>{{ isPlaying ? '暂停播放' : '播放全部' }}</span>
+            <Play :size="18" fill="currentColor" />
+            <span>播放全部</span>
           </button>
-          <button
-            class="album-action"
-            type="button"
-            :disabled="commentsLoading && !comments.length"
-            @click="openCommentsModal"
-          >
-            <MessageCircle :size="17" />
-            <span>评论 {{ displayCommentTotal || '' }}</span>
-          </button>
+          <div v-if="hasAlbumStats" class="album-stats" aria-label="专辑动态">
+            <span>
+              <Heart :size="14" />
+              {{ formatStat(album.subCount) }} 收藏
+            </span>
+            <button
+              type="button"
+              :disabled="commentsLoading && !comments.length"
+              @click="openCommentsModal"
+            >
+              <MessageCircle :size="14" />
+              {{ formatStat(displayCommentTotal) }} 评论
+            </button>
+            <span>
+              <Share2 :size="14" />
+              {{ formatStat(album.shareCount) }} 分享
+            </span>
+          </div>
         </div>
       </div>
     </section>
@@ -104,7 +106,6 @@ import { useRoute } from 'vue-router'
 import {
   Heart,
   MessageCircle,
-  Pause,
   Play,
   Share2
 } from 'lucide-vue-next'
@@ -174,7 +175,6 @@ const hasAlbumStats = computed(() =>
 )
 
 const {
-  isPlaying,
   playAll: playAllTracks,
   playTrack: playAlbumTrack
 } = useQueuePlayback({

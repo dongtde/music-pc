@@ -3,6 +3,7 @@ import {
   getAlbumComments,
   getAlbumDetail,
   getAlbumDynamic,
+  getAlbumInfo,
   getAlbumSongs,
   getAllMvs,
   getArtistAlbums,
@@ -1293,9 +1294,9 @@ function getKugouArtistGroup(response = {}, initial = -1) {
 export async function getAlbumsDiscoveryData({ area = 'ALL', limit = 36, offset = 0 } = {}) {
   const shouldLoadFeatured = offset <= 0
   const [newAlbumResponse, topResponse] = await Promise.all([
-    getNewAlbums({ area, limit, offset }).catch(() => ({})),
+    getNewAlbums({ type: getAlbumAreaType(area), limit, offset }).catch(() => ({})),
     shouldLoadFeatured
-      ? getTopAlbums({ area, type: 'hot', limit: 16, offset: 0 }).catch(() => ({}))
+      ? getTopAlbums({ limit: 16, offset: 0 }).catch(() => ({}))
       : Promise.resolve({})
   ])
   const albums = newAlbumResponse.albums ?? []
@@ -1305,23 +1306,23 @@ export async function getAlbumsDiscoveryData({ area = 'ALL', limit = 36, offset 
     albums: albums.map((album, index) => mapAlbumCard(album, offset + index)),
     topAlbums: getTopAlbumList(topResponse).map(mapAlbumCard).slice(0, 10),
     total,
-    more: Boolean(
-      newAlbumResponse.more ||
-      newAlbumResponse.hasMore ||
-      (total && offset + albums.length < total)
-    )
+    more: Boolean(newAlbumResponse.more || newAlbumResponse.hasMore)
   }
 }
 
 export async function getAlbumDetailData(id) {
-  const [response, dynamicResponse, songsResponse] = await Promise.all([
+  const [infoResponse, response, dynamicResponse, songsResponse] = await Promise.all([
+    getAlbumInfo({
+      album_id: id,
+      fields: 'trans_param,special_tag,authors,album_name,publish_date,cover,intro,publish_company,type,album_id,language,category,author_name,sizable_cover'
+    }).catch(() => ({})),
     getAlbumDetail({ id }),
     getAlbumDynamic({ id }).catch(() => ({})),
     getAlbumSongs({ id, limit: 100, offset: 0 }).catch(() => ({}))
   ])
-  const album = response.album
+  const album = mergeAlbumSources(response.album, infoResponse.album)
 
-  if (!album) {
+  if (!album?.id) {
     throw new Error('Album detail is empty')
   }
 
@@ -1330,9 +1331,13 @@ export async function getAlbumDetailData(id) {
     : Array.isArray(songsResponse.songs) && songsResponse.songs.length
       ? songsResponse.songs
       : album.songs ?? []
+  const normalizedAlbum = {
+    ...album,
+    size: album.size || songs.length
+  }
 
   return {
-    album: mapAlbumDetail(album, dynamicResponse),
+    album: mapAlbumDetail(normalizedAlbum, dynamicResponse),
     tracks: songs.map(mapPlaylistTrack)
   }
 }
@@ -2125,6 +2130,38 @@ function getTopAlbumList(response = {}) {
   })
 }
 
+function getAlbumAreaType(area) {
+  const areaMap = {
+    ZH: 1,
+    EA: 2,
+    JP: 3,
+    KR: 4
+  }
+
+  return areaMap[String(area ?? '').toUpperCase()] || undefined
+}
+
+function mergeAlbumSources(...sources) {
+  return sources
+    .filter((source) => source && typeof source === 'object')
+    .reduce((merged, source) => ({
+      ...merged,
+      ...Object.fromEntries(
+        Object.entries(source).filter(([, value]) => value !== undefined && value !== null && value !== '')
+      ),
+      artist: mergePlainObject(merged.artist, source.artist),
+      artists: source.artists?.length ? source.artists : merged.artists,
+      info: mergePlainObject(merged.info, source.info)
+    }), {})
+}
+
+function mergePlainObject(current, next) {
+  return {
+    ...(current && typeof current === 'object' ? current : {}),
+    ...(next && typeof next === 'object' ? next : {})
+  }
+}
+
 function mapAlbumCard(album, index = 0) {
   const artist = getAlbumArtist(album)
   const songCount = album.size ?? album.songCount ?? 0
@@ -2297,7 +2334,7 @@ function mapPlaylistTrack(song, index) {
     albumId: album.id ?? '',
     type: coverType(index),
     time: formatDuration(song.dt ?? song.duration),
-    coverUrl: album.picUrl,
+    coverUrl: album.picUrl || album.blurPicUrl,
     thumbnailUrl: resizeNeteaseImage(album.picUrl, 96),
     to: `/playlist/song-${trackId}`,
     vip: Boolean(song.fee && song.fee !== 0),
