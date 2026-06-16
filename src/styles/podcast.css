@@ -568,7 +568,7 @@
 
 .podcast-detail-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  grid-template-columns: 1fr;
   gap: 18px;
 }
 
@@ -1124,71 +1124,6 @@
   background: rgba(var(--accent-rgb), 0.08);
 }
 
-.podcast-page-tabs {
-  display: flex;
-  width: 100%;
-  max-width: 100%;
-  gap: 34px;
-  align-items: stretch;
-  min-height: 46px;
-  overflow-x: auto;
-  overflow-y: visible;
-  padding: 0 2px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  scrollbar-width: none;
-}
-
-.podcast-page-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.podcast-page-tab {
-  position: relative;
-  display: block;
-  flex: 0 0 auto;
-  height: 46px;
-  min-width: 0;
-  padding: 0 2px;
-  border-radius: 0;
-  color: #7b8799;
-  font-size: 16px;
-  font-weight: 900;
-  line-height: 46px;
-  overflow: visible;
-  white-space: nowrap;
-}
-
-.podcast-page-tab span {
-  display: block;
-  height: 46px;
-  line-height: 46px;
-  overflow: visible;
-}
-
-.podcast-page-tab:hover {
-  color: var(--text-strong);
-  background: transparent;
-}
-
-.podcast-page-tab.active {
-  color: var(--text-strong);
-  background: transparent;
-}
-
-.podcast-page-tab.active::after {
-  position: absolute;
-  right: 10px;
-  bottom: 4px;
-  left: 10px;
-  height: 5px;
-  border-radius: 999px;
-  background: var(--accent);
-  content: "";
-}
-
 .podcast-page-heading {
   display: flex;
   min-height: 54px;
@@ -1424,6 +1359,11 @@
   display: grid;
   gap: 18px;
   padding-bottom: 88px;
+}
+
+.podcast-home-rank {
+  display: grid;
+  gap: 18px;
 }
 
 .podcast-rank-toolbar {
@@ -2149,14 +2089,6 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .podcast-page-tabs {
-    width: 100%;
-  }
-
-  .podcast-page-tab {
-    flex: 1 0 auto;
-  }
-
   .podcast-view .podcast-chip-row {
     gap: 10px;
   }
@@ -2522,7 +2454,7 @@
 
 .podcast-detail-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+  grid-template-columns: 1fr;
   gap: 26px;
   align-items: start;
   margin-top: 24px;

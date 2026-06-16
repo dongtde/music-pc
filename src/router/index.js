@@ -25,31 +25,31 @@ const routes = [
     path: '/podcast',
     name: 'podcast',
     component: PodcastView,
-    meta: { title: '播客', icon: 'MicVocal' }
+    meta: { title: '电台', icon: 'RadioTower' }
   },
   {
     path: '/podcast/rank',
     name: 'podcast-rank',
     component: PodcastView,
-    meta: { title: '播客榜单', icon: 'MicVocal' }
+    meta: { title: '电台榜单', icon: 'RadioTower' }
   },
   {
     path: '/podcast/sleep',
     name: 'podcast-sleep',
     component: PodcastView,
-    meta: { title: '助眠解压', icon: 'MicVocal' }
+    meta: { title: '乐库电台', icon: 'RadioTower' }
   },
   {
     path: '/podcast/radio',
     name: 'podcast-radio',
     component: PodcastView,
-    meta: { title: '播客电台', icon: 'MicVocal' }
+    meta: { title: '全部电台', icon: 'RadioTower' }
   },
   {
     path: '/podcast/:id',
     name: 'podcast-detail',
     component: () => import('../views/PodcastDetailView.vue'),
-    meta: { title: '播客详情', icon: 'MicVocal' }
+    meta: { title: '电台详情', icon: 'RadioTower' }
   },
   {
     path: '/mv',

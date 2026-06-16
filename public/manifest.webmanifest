@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Mappic Music",
   "short_name": "Mappic",
-  "description": "A desktop-style music player for discovery, playlists, podcasts, videos, and personal playback.",
+  "description": "A desktop-style music player for discovery, playlists, radio, videos, and personal playback.",
   "lang": "zh-CN",
   "start_url": "/",
   "scope": "/",

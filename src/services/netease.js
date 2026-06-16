@@ -87,6 +87,11 @@ import {
   getSimilarMvs,
   getSubscribedMvs,
   getRecentDj,
+  getRadioClasses,
+  getRadioImages,
+  getRadioLibrary,
+  getRadioRecommend,
+  getRadioSongs,
   getVoiceLyric,
   sendFmTrash,
   searchVoiceLists,
@@ -235,65 +240,70 @@ export async function movePersonalFmSongToTrash(id) {
 }
 
 export async function getPodcastHomeData() {
-  return getCachedData('podcast-home', CACHE_TTL.podcast, async () => {
-    const [
-      bannerResponse,
-      personalizeResponse,
-      recommendResponse,
-      hotResponse,
-      categoryResponse,
-      categoryHotResponse,
-      todayResponse,
-      programTopResponse,
-      payResponse,
-      recentResponse,
-      sublistResponse,
-      satiTagsResponse,
-      satiResourcesResponse,
-      difmResponse,
-      broadcastMetaResponse,
-      broadcastListResponse
-    ] = await Promise.all([
-      getDjBanner().catch(() => ({})),
-      getDjPersonalizeRecommend({ limit: 6 }).catch(() => ({})),
-      getDjRecommend().catch(() => ({})),
-      getDjHot({ limit: 12, offset: 0 }).catch(() => ({})),
-      getDjCategoryRecommend().catch(() => ({})),
-      getDjCatelist().catch(() => ({})),
-      getDjTodayPreferred().catch(() => ({})),
-      getDjProgramToplist({ limit: 8, offset: 0 }).catch(() => ({})),
-      getDjToplistPay({ limit: 8 }).catch(() => ({})),
-      getRecentDj({ limit: 8 }).catch(() => ({})),
-      getDjSublist({ limit: 12, offset: 0 }).catch(() => ({})),
-      getSatiTags().catch(() => ({})),
-      getSatiResources({ tag: 'RCMD' }).catch(() => ({})),
-      getDifmStyleChannels({ sources: JSON.stringify([0, 1, 2]) }).catch(() => ({})),
-      getBroadcastCategoryRegion().catch(() => ({})),
-      getBroadcastChannelList({ categoryId: 0, regionId: 0 }).catch(() => ({}))
-    ])
-    const categories = mapPodcastCategories(categoryResponse, categoryHotResponse)
+  return getCachedData('radio-home', CACHE_TTL.podcast, async () => {
+    const catalog = await getRadioCatalogData()
+    const categories = catalog.classGroups.map((group) => ({
+      id: group.id,
+      name: group.name,
+      description: `${group.radios.length} 个电台`,
+      radios: group.radios
+    }))
     const firstCategory = categories[0]
+    const featured = uniqueRadioCards([
+      ...catalog.recommendRadios,
+      ...catalog.libraryRadios,
+      ...catalog.classRadios
+    ]).slice(0, 12)
+    const hot = uniqueRadioCards([
+      ...catalog.recommendRadios,
+      ...catalog.classRadios
+    ]).slice(0, 18)
+    const libraryGroups = catalog.libraryGroups.length
+      ? catalog.libraryGroups
+      : categories.slice(0, 4).map((category) => ({
+        id: category.id,
+        title: category.name,
+        description: category.description,
+        channels: category.radios.slice(0, 8)
+      }))
 
     return {
-      banners: mapPodcastBanners(bannerResponse),
-      featured: uniquePodcasts([
-        ...getPodcastPayload(personalizeResponse),
-        ...getPodcastPayload(recommendResponse)
-      ]).slice(0, 12),
-      hot: getPodcastPayload(hotResponse).map(mapPodcastCard),
+      banners: featured.slice(0, 3).map((item) => ({
+        id: item.id,
+        title: item.title,
+        coverUrl: item.bannerUrl || item.coverUrl,
+        targetId: item.id,
+        to: item.to
+      })),
+      featured,
+      hot,
       categories,
       activeCategory: firstCategory ?? null,
-      categoryRadios: firstCategory?.radios ?? [],
-      today: getProgramPayload(todayResponse).slice(0, 8).map(mapPodcastProgramTrack),
-      programToplist: getProgramPayload(programTopResponse).slice(0, 8).map(mapPodcastProgramTrack),
-      paid: getPodcastPayload(payResponse).slice(0, 8).map(mapPodcastCard),
-      recent: getProgramPayload(recentResponse).slice(0, 8).map(mapPodcastProgramTrack),
-      subscribed: getPodcastPayload(sublistResponse).slice(0, 12).map(mapPodcastCard),
-      satiTags: getSatiTagPayload(satiTagsResponse).slice(0, 10).map(mapSatiTag),
-      satiResources: getSatiResourcePayload(satiResourcesResponse).slice(0, 24).map(mapSatiResourceTrack),
-      difm: mapDifmGroups(difmResponse),
-      broadcastMeta: mapBroadcastMeta(broadcastMetaResponse),
-      broadcastChannels: getBroadcastChannelPayload(broadcastListResponse).slice(0, 18).map(mapBroadcastChannel)
+      categoryRadios: firstCategory?.radios ?? hot,
+      today: catalog.previewTracks,
+      programToplist: catalog.previewTracks,
+      paid: [],
+      recent: [],
+      subscribed: [],
+      satiTags: categories.slice(0, 10).map((item) => ({
+        id: item.id,
+        tag: item.id,
+        title: item.name,
+        description: item.description
+      })),
+      satiResources: [],
+      difm: libraryGroups,
+      yuekuGroups: libraryGroups,
+      broadcastMeta: {
+        categories: categories.map(({ id, name }) => ({ id, name })),
+        regions: []
+      },
+      broadcastChannels: uniqueRadioCards([
+        ...catalog.libraryRadios,
+        ...catalog.classRadios,
+        ...catalog.recommendRadios
+      ]).slice(0, 36),
+      allRadios: catalog.allRadios
     }
   })
 }
@@ -325,71 +335,86 @@ export async function searchPodcastsData({ keyword, limit = 18, offset = 0 } = {
 }
 
 export async function getPodcastCategoryData({ cateId, limit = 18, offset = 0 } = {}) {
-  const response = await getDjRadioHot({
-    cateId,
-    limit,
-    offset
-  })
-  const podcasts = getPodcastPayload(response).map(mapPodcastCard)
-  const total = response.count ?? response.total ?? podcasts.length
+  const catalog = await getRadioCatalogData()
+  const source = String(cateId) === 'recommend'
+    ? catalog.recommendRadios
+    : catalog.classGroups.find((group) => String(group.id) === String(cateId))?.radios ?? catalog.classRadios
+  const radios = uniqueRadioCards(source)
+  const items = radios.slice(offset, offset + limit)
 
   return {
-    items: podcasts,
-    total,
-    more: Boolean(response.hasMore || response.more || (total && offset + podcasts.length < total))
+    items,
+    total: radios.length,
+    more: offset + items.length < radios.length
   }
 }
 
 export async function getPodcastRankData({ type = 'hot', limit = 18, offset = 0 } = {}) {
-  const loaders = {
-    hot: () => getDjToplist({ type: 'hot', limit, offset }),
-    new: () => getDjToplist({ type: 'new', limit, offset }),
-    pay: () => getDjToplistPay({ limit }),
-    hour: () => getDjToplistHours({ limit }),
-    newcomer: () => getDjToplistNewcomer({ limit }),
-    popular: () => getDjToplistPopular({ limit })
+  const catalog = await getRadioCatalogData()
+  const sortByAddTime = (items) => [...items].sort((current, next) => {
+    const currentTime = new Date(current.raw?.addtime || 0).getTime() || 0
+    const nextTime = new Date(next.raw?.addtime || 0).getTime() || 0
+
+    return nextTime - currentTime
+  })
+  const sortByHeat = (items) => [...items].sort((current, next) => {
+    return Number(next.heat || 0) - Number(current.heat || 0)
+  })
+  const sources = {
+    hot: catalog.recommendRadios,
+    new: sortByAddTime(catalog.allRadios),
+    library: catalog.libraryRadios,
+    classic: catalog.classGroups.find((group) => /主题|经典|年代/.test(group.name))?.radios ?? catalog.classRadios,
+    scene: catalog.classGroups.find((group) => /场景|心情|运动|生活/.test(group.name))?.radios ?? catalog.libraryRadios,
+    heat: sortByHeat(catalog.allRadios)
   }
-  const response = await (loaders[type] ?? loaders.hot)()
-  const podcasts = getPodcastPayload(response).map(mapPodcastCard)
+  const radios = uniqueRadioCards(sources[type] ?? sources.hot)
+  const items = radios.slice(offset, offset + limit)
 
   return {
-    items: podcasts,
-    total: response.count ?? response.total ?? podcasts.length,
-    more: Boolean(response.hasMore || response.more)
+    items,
+    total: radios.length,
+    more: offset + items.length < radios.length
   }
 }
 
-export async function getPodcastDetailData({ id, limit = 40, offset = 0 } = {}) {
-  const [detailResponse, programResponse] = await Promise.all([
-    getDjDetail({ rid: id }),
-    getDjPrograms({ rid: id, limit, offset })
-  ])
-  const rawPodcast = detailResponse.data ?? detailResponse.djRadio ?? detailResponse.radio
-
-  if (!rawPodcast) {
-    throw new Error('Podcast detail is empty')
-  }
-
-  const programs = getProgramPayload(programResponse).map(mapPodcastProgramTrack)
-  const total = programResponse.count ?? programResponse.total ?? rawPodcast.programCount ?? programs.length
+export async function getPodcastDetailData({ id, fmtype = 2, limit = 40, offset = 0 } = {}) {
+  const catalog = await getRadioCatalogData()
+  const radio = catalog.radiosById.get(String(id)) ?? mapRadioCard({ fmid: id, fmtype })
+  const songResponse = await getRadioSongs({
+    fmid: id,
+    fmtype: radio.fmtype ?? fmtype,
+    fmoffset: offset,
+    fmsize: limit
+  })
+  const songs = getRadioSongPayload(songResponse)
+  const programs = songs.map((song, index) => mapRadioSongTrack(song, index + offset, radio))
+  const total = getRadioSongTotal(songResponse, offset, programs.length, limit)
 
   return {
-    podcast: mapPodcastDetail(rawPodcast),
+    podcast: mapRadioDetail(radio, total),
     programs,
     total,
-    more: Boolean(programResponse.more || programResponse.hasMore || (total && offset + programs.length < total))
+    more: programs.length >= limit
   }
 }
 
-export async function getPodcastProgramsData({ id, limit = 40, offset = 0 } = {}) {
-  const response = await getDjPrograms({ rid: id, limit, offset })
-  const programs = getProgramPayload(response).map(mapPodcastProgramTrack)
-  const total = response.count ?? response.total ?? programs.length
+export async function getPodcastProgramsData({ id, fmtype = 2, limit = 40, offset = 0 } = {}) {
+  const catalog = await getRadioCatalogData()
+  const radio = catalog.radiosById.get(String(id)) ?? mapRadioCard({ fmid: id, fmtype })
+  const response = await getRadioSongs({
+    fmid: id,
+    fmtype: radio.fmtype ?? fmtype,
+    fmoffset: offset,
+    fmsize: limit
+  })
+  const programs = getRadioSongPayload(response).map((song, index) => mapRadioSongTrack(song, index + offset, radio))
+  const total = getRadioSongTotal(response, offset, programs.length, limit)
 
   return {
     programs,
     total,
-    more: Boolean(response.more || response.hasMore || (total && offset + programs.length < total))
+    more: programs.length >= limit
   }
 }
 
@@ -413,17 +438,17 @@ export async function getPodcastProgramCommentsData({ id, limit = 20, offset = 0
 }
 
 export async function togglePodcastSubscribeData({ id, subscribe }) {
-  return updateDjSubscribe({
-    rid: id,
-    t: subscribe ? 1 : 0,
-    timestamp: Date.now()
-  })
+  return {
+    id,
+    subscribe,
+    skipped: true
+  }
 }
 
 export async function getPodcastCategoryRecommendationsData(type) {
-  const response = await getDjRecommendType({ type })
+  const data = await getPodcastCategoryData({ cateId: type, limit: 24, offset: 0 })
 
-  return getPodcastPayload(response).map(mapPodcastCard)
+  return data.items
 }
 
 export async function getSatiResourcesData(tag = 'RCMD') {
@@ -1488,7 +1513,7 @@ function mapPodcastBanners(response = {}) {
 
   return banners.map((banner, index) => ({
     id: banner.targetId || banner.url || `podcast-banner-${index}`,
-    title: banner.typeTitle || '播客精选',
+    title: banner.typeTitle || '电台精选',
     coverUrl: resizeNeteaseImage(banner.pic ?? banner.imageUrl, 1200),
     targetId: banner.targetId || '',
     externalUrl: banner.url?.startsWith('http') ? banner.url : ''
@@ -1569,116 +1594,15 @@ function mapVoiceListSearchResult(resource, index) {
 }
 
 function mapPodcastCard(raw = {}, index = 0) {
-  const source = raw.baseInfo ?? raw.radio ?? raw.djRadio ?? raw
-  const extInfo = raw.extInfo ?? {}
-  const title = cleanPodcastTitle(
-    source.name ?? raw.uiElement?.mainTitle?.title ?? raw.name ?? raw.title ?? '未命名播客'
-  )
-  const id = source.id ?? source.radioId ?? source.rid ?? raw.resourceId ?? raw.id
-  const coverUrl =
-    source.picUrl ??
-    source.intervenePicUrl ??
-    raw.uiElement?.image?.imageUrl ??
-    raw.picUrl ??
-    raw.coverUrl
-  const playCount = source.playCount || raw.playCount || parseCountText(extInfo.playCount)
-  const subCount = source.subCount ?? raw.subCount ?? 0
-  const programCount = source.programCount ?? source.programCnt ?? raw.programCount ?? 0
-  const category = source.secondCategory || source.category || extInfo.officialTags?.[0] || raw.categoryName || ''
-
-  return {
-    id,
-    title,
-    name: title,
-    description: source.rcmdText || source.rcmdtext || source.desc || raw.desc || source.lastProgramName || '',
-    creator: source.dj?.nickname || raw.dj?.nickname || source.creatorName || raw.creatorName || '',
-    creatorAvatarUrl: source.dj?.avatarUrl || raw.dj?.avatarUrl || '',
-    category,
-    primaryCategory: source.category || raw.categoryName || '',
-    subCategory: source.secondCategory || '',
-    coverUrl: resizeNeteaseImage(coverUrl, 520),
-    programCount,
-    subCount,
-    playCount,
-    playCountLabel: extInfo.playCount || formatPlayCount(playCount),
-    subCountLabel: formatPlayCount(subCount),
-    programCountLabel: programCount ? `${programCount} 期` : '',
-    lastProgramName: source.lastProgramName || source.lastUpdateProgramName || '',
-    score: extInfo.scoreDto?.score || extInfo.rightLabelText || '',
-    tag: extInfo.labels?.[0]?.text || category,
-    subed: Boolean(source.subed),
-    type: coverType(index || Number(id) || 0),
-    to: id ? `/podcast/${id}` : ''
-  }
+  return mapRadioCard(raw, index)
 }
 
 function mapPodcastDetail(raw = {}) {
-  const card = mapPodcastCard(raw, Number(raw.id) || 0)
-
-  return {
-    ...card,
-    description: raw.desc || card.description || '这个播客暂时没有简介。',
-    shareCount: toFiniteCount(raw.shareCount),
-    likedCount: toFiniteCount(raw.likedCount),
-    commentCount: toFiniteCount(raw.commentCount),
-    createdAt: formatPlainDate(raw.createTime),
-    lastUpdated: formatPlainDate(raw.lastProgramCreateTime),
-    comments: (raw.commentDatas ?? []).map((comment) => ({
-      id: comment.commentId,
-      content: comment.content,
-      programName: comment.programName,
-      user: {
-        name: comment.userProfile?.nickname || '听友',
-        avatarUrl: comment.userProfile?.avatarUrl || ''
-      }
-    }))
-  }
+  return mapRadioDetail(raw)
 }
 
 function mapPodcastProgramTrack(program = {}, index = 0) {
-  const song = program.mainSong ?? program.song ?? program.track ?? program
-  const radio = program.radio ?? program.djRadio ?? {}
-  const artists = song.artists ?? song.ar ?? []
-  const coverUrl =
-    program.coverUrl ??
-    program.blurCoverUrl ??
-    radio.picUrl ??
-    radio.intervenePicUrl ??
-    song.album?.picUrl ??
-    song.al?.picUrl
-  const id = song.id ?? program.mainTrackId ?? program.trackId ?? program.id
-  const programId = program.id ?? program.programId ?? program.djProgramId ?? ''
-  const duration = song.duration ?? song.dt ?? program.duration ?? 0
-  const artist = program.dj?.brand || program.dj?.nickname || getArtistNames(artists) || radio.name || '播客节目'
-
-  return {
-    id,
-    programId,
-    voiceId: programId,
-    name: program.name || song.name || '未命名声音',
-    artist,
-    album: radio.name || program.categoryName || program.radioName || '播客',
-    rank: String(index + 1).padStart(2, '0'),
-    type: coverType(index || Number(programId) || Number(id) || 0),
-    time: formatDuration(duration),
-    duration: formatDuration(duration),
-    coverUrl: resizeNeteaseImage(coverUrl, 360),
-    publishTime: formatPlainDate(program.scheduledPublishTime ?? program.createTime ?? song.publishTime),
-    description: program.description || program.programDesc || '',
-    source: '播客',
-    category: radio.secondCategory || radio.category || program.categoryName || '',
-    likedCount: toFiniteCount(program.likedCount),
-    likedCountLabel: formatPlayCount(program.likedCount || 0),
-    commentCount: toFiniteCount(program.commentCount),
-    commentCountLabel: formatPlayCount(program.commentCount || 0),
-    listenerCount: toFiniteCount(program.listenerCount),
-    listenerCountLabel: formatPlayCount(program.listenerCount || 0),
-    vip: Boolean(song.fee && song.fee !== 0),
-    hasVideo: Boolean(song.mv),
-    mvId: song.mv || '',
-    podcastId: radio.id || program.radioId || '',
-    podcastTitle: radio.name || ''
-  }
+  return mapRadioSongTrack(program.mainSong ?? program.song ?? program.track ?? program, index, program.radio ?? program.djRadio ?? {})
 }
 
 function mapSatiTag(item = {}) {
@@ -1801,6 +1725,401 @@ function mapBroadcastChannel(item = {}, index = 0) {
   }
 }
 
+async function getRadioCatalogData() {
+  return getCachedData('radio-catalog', CACHE_TTL.podcast, async () => {
+    const [classResponse, recommendResponse, libraryResponse] = await Promise.all([
+      getRadioClasses().catch(() => ({})),
+      getRadioRecommend().catch(() => ({})),
+      getRadioLibrary().catch(() => ({}))
+    ])
+    const classGroups = getRadioClassGroups(classResponse)
+    const classRadios = classGroups.flatMap((group) =>
+      group.radios.map((radio) => ({
+        ...radio,
+        category: radio.category || group.name,
+        primaryCategory: radio.primaryCategory || group.name
+      }))
+    )
+    const recommendRadios = getRadioRecommendPayload(recommendResponse).map((item, index) => mapRadioCard(item, index))
+    const libraryGroups = getRadioLibraryGroups(libraryResponse)
+    const libraryRadios = libraryGroups.flatMap((group) =>
+      group.channels.map((radio) => ({
+        ...radio,
+        sectionTitle: group.title
+      }))
+    )
+    const allRadios = uniqueRadioCards([
+      ...recommendRadios,
+      ...libraryRadios,
+      ...classRadios
+    ])
+    const imageMap = await getRadioImageMap(allRadios.slice(0, 80))
+    const hydratedRadios = allRadios.map((radio) => hydrateRadioImage(radio, imageMap))
+    const radiosById = new Map(hydratedRadios.map((radio) => [String(radio.id), radio]))
+    const hydratedClassGroups = classGroups.map((group) => ({
+      ...group,
+      radios: group.radios.map((radio) => hydrateRadioImage(radiosById.get(String(radio.id)) ?? radio, imageMap))
+    }))
+    const hydratedLibraryGroups = libraryGroups.map((group) => ({
+      ...group,
+      channels: group.channels.map((radio) => hydrateRadioImage(radiosById.get(String(radio.id)) ?? radio, imageMap))
+    }))
+    const hydratedRecommendRadios = recommendRadios.map((radio) => hydrateRadioImage(radiosById.get(String(radio.id)) ?? radio, imageMap))
+    const previewTracks = uniqueSongs(
+      hydratedRecommendRadios
+        .flatMap((radio) => radio.previewTracks ?? [])
+        .map((track, index) => ({ ...track, rank: String(index + 1).padStart(2, '0') }))
+    ).slice(0, 12)
+
+    return {
+      classGroups: hydratedClassGroups,
+      classRadios: hydratedClassGroups.flatMap((group) => group.radios),
+      recommendRadios: uniqueRadioCards(hydratedRecommendRadios),
+      libraryGroups: hydratedLibraryGroups,
+      libraryRadios: hydratedLibraryGroups.flatMap((group) => group.channels),
+      allRadios: hydratedRadios,
+      radiosById,
+      previewTracks
+    }
+  })
+}
+
+function getRadioClassGroups(response = {}) {
+  const data = response.data ?? response
+  const groups = asArray(data.class_list ?? data.classList ?? data.classes ?? response.class_list)
+
+  return groups.map((group, groupIndex) => {
+    const radios = asArray(group.fmlist ?? group.fm_list ?? group.radios ?? group.list)
+      .map((item, index) => mapRadioCard({
+        ...item,
+        classid: item.classid ?? group.classid,
+        classname: item.classname ?? group.classname
+      }, index))
+      .filter((radio) => radio.id)
+
+    return {
+      id: group.classid ?? group.id ?? `class-${groupIndex + 1}`,
+      name: group.classname ?? group.name ?? `电台分类 ${groupIndex + 1}`,
+      count: group.class_count ?? radios.length,
+      sort: Number(group.sort_app ?? group.sort ?? groupIndex),
+      radios
+    }
+  }).filter((group) => group.radios.length)
+}
+
+function getRadioRecommendPayload(response = {}) {
+  return asArray(response.data ?? response.radios ?? response.list ?? response.items)
+}
+
+function getRadioLibraryGroups(response = {}) {
+  const groups = asArray(response.data ?? response.list ?? response.items)
+
+  return groups.map((group, groupIndex) => {
+    const title = group.time_fm_cn || group.title || group.name || `乐库电台 ${groupIndex + 1}`
+    const description = group.rcm_text || group.description || ''
+    const channels = asArray(group.fm_list ?? group.fmlist ?? group.radios ?? group.list)
+      .map((item, index) => mapRadioCard({
+        ...item,
+        sectionTitle: title,
+        sectionDescription: description
+      }, index))
+      .filter((radio) => radio.id)
+
+    return {
+      id: group.id ?? group.time_fm_cn ?? `library-${groupIndex + 1}`,
+      title,
+      description,
+      source: 'yueku',
+      channels
+    }
+  }).filter((group) => group.channels.length)
+}
+
+async function getRadioImageMap(radios = []) {
+  const ids = uniqueValues(radios.map((radio) => radio.id)).slice(0, 80)
+
+  if (!ids.length) {
+    return new Map()
+  }
+
+  const response = await getRadioImages({ fmid: ids.join(',') }).catch(() => ({}))
+  const items = asArray(response.data ?? response.list ?? response.items)
+
+  return new Map(items.map((item) => [
+    String(item.fmid ?? item.fmId ?? item.id),
+    {
+      coverUrl: normalizeKugouMediaUrl(item.imgUrl480 || item.imgUrl100 || item.imgurl || item.picUrl, 520),
+      fmtype: item.fmtype
+    }
+  ]))
+}
+
+function hydrateRadioImage(radio = {}, imageMap = new Map()) {
+  const image = imageMap.get(String(radio.id))
+
+  if (!image) {
+    return radio
+  }
+
+  return {
+    ...radio,
+    fmtype: radio.fmtype ?? image.fmtype,
+    coverUrl: radio.coverUrl || image.coverUrl
+  }
+}
+
+function mapRadioCard(raw = {}, index = 0) {
+  const source = raw.baseInfo ?? raw.radio ?? raw.djRadio ?? raw
+  const id = source.fmid ?? source.fm_id ?? source.fmId ?? source.id ?? source.radioId ?? source.rid ?? raw.resourceId
+  const title = cleanRadioTitle(
+    source.fmname ?? source.fm_name ?? source.name ?? source.title ?? raw.uiElement?.mainTitle?.title ?? '未命名电台'
+  )
+  const fmtype = Number(source.fmtype ?? source.fm_type ?? raw.fmtype ?? 2) || 2
+  const category = source.classname ?? source.categoryName ?? source.category ?? source.sectionTitle ?? raw.categoryName ?? ''
+  const description =
+    source.description ||
+    source.rcm_text ||
+    source.rcmdText ||
+    source.rcmdtext ||
+    source.sectionDescription ||
+    source.desc ||
+    ''
+  const heat = Number(source.heat ?? source.playCount ?? parseCountText(source.playCountLabel) ?? 0) || 0
+  const previewTracks = getRadioPreviewSongs(source)
+    .map((song, songIndex) => mapRadioSongTrack(song, songIndex, {
+      id,
+      title,
+      fmtype,
+      coverUrl: normalizeKugouMediaUrl(source.imgUrl480 || source.imgurl || source.imgUrl100 || source.picUrl, 520),
+      category
+    }))
+    .filter((track) => track.id)
+  const coverUrl = normalizeKugouMediaUrl(
+    source.imgUrl480 ||
+      source.imgurl ||
+      source.imgUrl100 ||
+      source.picUrl ||
+      source.coverUrl ||
+      source.cover ||
+      raw.uiElement?.image?.imageUrl,
+    520
+  )
+  const bannerUrl = normalizeKugouMediaUrl(source.banner || source.bannerUrl || source.imageUrl, 900)
+
+  return {
+    id,
+    fmid: id,
+    fmtype,
+    title,
+    name: title,
+    description: description || getRadioDescription(title, category),
+    creator: '酷狗电台',
+    creatorAvatarUrl: coverUrl,
+    category: category || '电台',
+    primaryCategory: category || '电台',
+    subCategory: source.parentName || '',
+    coverUrl,
+    bannerUrl,
+    programCount: Number(source.rcmdsongsize ?? source.size ?? previewTracks.length) || previewTracks.length,
+    subCount: 0,
+    playCount: heat,
+    heat,
+    playCountLabel: heat ? `${formatPlayCount(heat)} 热度` : 'FM',
+    subCountLabel: '',
+    programCountLabel: '',
+    lastProgramName: previewTracks[0]?.name || '',
+    score: source.isnew === '1' || source.isnew === 1 ? '新' : '',
+    tag: category || '电台',
+    subed: false,
+    type: coverType(index || Number(id) || 0),
+    to: id ? `/podcast/${id}` : '',
+    previewTracks,
+    raw: source
+  }
+}
+
+function mapRadioDetail(raw = {}, total = 0) {
+  const card = mapRadioCard(raw, Number(raw.id) || 0)
+
+  return {
+    ...card,
+    description: card.description || getRadioDescription(card.title, card.category),
+    programCount: total,
+    programCountLabel: total ? `${total}+ 首歌曲` : '',
+    commentCount: 0,
+    shareCount: 0,
+    likedCount: 0,
+    lastUpdated: formatPlainDate(raw.raw?.addtime ?? raw.addtime),
+    comments: []
+  }
+}
+
+function mapRadioSongTrack(song = {}, index = 0, radio = {}) {
+  const file = splitKugouSongName(song.name || song.filename || song.songname || song.audio_name || '未命名歌曲')
+  const album = song.al ?? song.album ?? {}
+  const artists = song.ar ?? song.artists ?? []
+  const artistName = getArtistNames(artists) || song.artist || song.singername || file.artist || '未知歌手'
+  const id = song.id ?? song.album_audio_id ?? song.mixsongid ?? song.audio_id ?? song.hash ?? `radio-song-${radio.id}-${index}`
+  const duration = song.dt ?? song.duration ?? song.time ?? song['320time'] ?? song.timelength ?? 0
+  const coverUrl = normalizeKugouMediaUrl(
+    album.picUrl ||
+      album.coverUrl ||
+      song.picUrl ||
+      song.coverUrl ||
+      song.imgurl ||
+      song.trans_param?.union_cover ||
+      radio.coverUrl,
+    360
+  )
+
+  return {
+    id,
+    ...getKugouTrackMeta(song),
+    name: file.name || song.name || '未命名歌曲',
+    artistId: artists[0]?.id ?? song.author_id ?? '',
+    artistIds: getArtistIds(artists),
+    artist: artistName,
+    album: radio.title || radio.name || album.name || '酷狗电台',
+    albumId: album.id ?? song.album_id ?? '',
+    rank: String(index + 1).padStart(2, '0'),
+    type: coverType(index || Number(id) || 0),
+    time: formatRadioDuration(duration),
+    duration: formatRadioDuration(duration),
+    coverUrl,
+    thumbnailUrl: normalizeKugouMediaUrl(coverUrl, 96),
+    source: radio.title ? `电台 · ${radio.title}` : '酷狗电台',
+    category: radio.category || '',
+    vip: Boolean(song.fee || song.vip || Number(song.pay_type) > 0),
+    hasVideo: Boolean(song.mv || song.mvhash),
+    mvId: song.mv || song.mvhash || '',
+    radioId: radio.id || radio.fmid || '',
+    radioTitle: radio.title || radio.name || ''
+  }
+}
+
+function getRadioSongPayload(response = {}) {
+  const data = response.data ?? response
+  const candidates = [
+    data?.songs,
+    data?.list,
+    data?.items,
+    data?.data,
+    response.songs,
+    response.list,
+    response.items
+  ]
+  const direct = candidates.find((item) => Array.isArray(item))
+
+  if (direct) {
+    return direct.map((item) => item.song ?? item.resource ?? item).filter(Boolean)
+  }
+
+  return asArray(data).flatMap((item) => asArray(item.songs ?? item.list ?? item.items))
+}
+
+function getRadioSongTotal(response = {}, offset = 0, count = 0, limit = 0) {
+  const data = response.data ?? response
+  const first = Array.isArray(data) ? data[0] : data
+  const total = first?.total ?? first?.count ?? response.total ?? response.count
+
+  return Number(total) || offset + count
+}
+
+function getRadioDescription(title = '', category = '') {
+  const prefix = category ? `${category}里的` : ''
+
+  return `${prefix}${title}，按酷狗电台实时歌单连续播放。`
+}
+
+function uniqueRadioCards(items = []) {
+  const seenIds = new Set()
+
+  return items
+    .map((item, index) => (item?.id && item?.title ? item : mapRadioCard(item, index)))
+    .filter((item) => {
+      const id = String(item?.id ?? '')
+
+      if (!id || seenIds.has(id)) {
+        return false
+      }
+
+      seenIds.add(id)
+      return true
+    })
+}
+
+function getRadioPreviewSongs(source = {}) {
+  const candidates = [
+    source.rcmdlist,
+    source.songlist,
+    source.songs,
+    source.song_info ? [source.song_info] : null
+  ]
+
+  return candidates.find((item) => Array.isArray(item)) ?? []
+}
+
+function uniqueValues(items = []) {
+  return [...new Set(items.filter((item) => item !== undefined && item !== null && item !== '').map(String))]
+}
+
+function asArray(value) {
+  return Array.isArray(value) ? value : []
+}
+
+function splitKugouSongName(value = '') {
+  const text = String(value ?? '').trim()
+  const separator = text.indexOf(' - ')
+
+  if (separator < 0) {
+    return {
+      artist: '',
+      name: text
+    }
+  }
+
+  return {
+    artist: text.slice(0, separator).trim(),
+    name: text.slice(separator + 3).trim()
+  }
+}
+
+function normalizeKugouMediaUrl(url, size = 480) {
+  if (typeof url !== 'string') {
+    return ''
+  }
+
+  const value = url.trim()
+
+  if (!value) {
+    return ''
+  }
+
+  if (value.startsWith('//')) {
+    return `https:${value}`.replace('{size}', String(size))
+  }
+
+  if (/^https?:\/\//i.test(value)) {
+    return value.replace('{size}', String(size))
+  }
+
+  if (/^[\w.-]+\.(?:jpe?g|png|webp|gif)$/i.test(value)) {
+    return `https://imge.kugou.com/fmlogo/${size}/${value}`
+  }
+
+  return value.replace('{size}', String(size))
+}
+
+function formatRadioDuration(duration = 0) {
+  const value = Number(duration)
+
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0:00'
+  }
+
+  return formatDuration(value > 0 && value < 10000 ? value * 1000 : value)
+}
+
 function getSatiCategoryName(tag) {
   const names = {
     RCMD: '热门',
@@ -1816,6 +2135,10 @@ function getSatiCategoryName(tag) {
   }
 
   return names[tag] || '声音资源'
+}
+
+function cleanRadioTitle(value) {
+  return String(value ?? '').replace(/^(播客|电台|FM)[:：]\s*/i, '').trim()
 }
 
 function cleanPodcastTitle(value) {

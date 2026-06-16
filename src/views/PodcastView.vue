@@ -1,22 +1,10 @@
 <template>
   <div class="view podcast-view">
-    <nav class="podcast-page-tabs" aria-label="播客页面">
-      <RouterLink
-        v-for="page in podcastPages"
-        :key="page.name"
-        :to="{ name: page.name }"
-        class="podcast-page-tab"
-        :class="{ active: activePage.name === page.name }"
-      >
-        <span>{{ page.label }}</span>
-      </RouterLink>
-    </nav>
-
     <section
       v-if="isOverviewPage && skeletonVisible"
       class="podcast-showcase podcast-showcase--skeleton"
       aria-busy="true"
-      aria-label="播客内容加载中"
+      aria-label="电台内容加载中"
     >
       <article class="podcast-showcase__panel">
         <div class="podcast-skeleton-spotlight">
@@ -60,20 +48,20 @@
             />
           </span>
           <span class="podcast-spotlight__copy">
-            <small><Radio :size="14" /> 随心听FM</small>
+            <small><Radio :size="14" /> 酷狗电台</small>
             <strong>{{ heroTitle }}</strong>
             <em>{{ heroDescription }}</em>
           </span>
           <span class="podcast-showcase__signal">
-            <MicVocal :size="22" />
+            <RadioTower :size="22" />
           </span>
         </RouterLink>
       </article>
 
       <article class="podcast-showcase__panel podcast-showcase__panel--green">
         <div class="podcast-showcase__head">
-          <strong>高分必听</strong>
-          <RouterLink to="/podcast/rank">查看全部</RouterLink>
+          <strong>场景热播</strong>
+          <a href="#podcast-hot-rank">查看全部</a>
         </div>
         <div class="podcast-top-list">
           <RouterLink
@@ -91,8 +79,8 @@
 
       <article class="podcast-showcase__panel podcast-showcase__panel--red">
         <div class="podcast-showcase__head">
-          <strong>今日最热</strong>
-          <RouterLink to="/podcast/rank">查看全部</RouterLink>
+          <strong>今日推荐</strong>
+          <a href="#podcast-hot-rank">查看全部</a>
         </div>
         <div class="podcast-top-list">
           <RouterLink
@@ -115,6 +103,39 @@
 
     <template v-if="skeletonVisible">
       <template v-if="isOverviewPage">
+        <section class="podcast-home-rank" aria-hidden="true">
+          <section class="podcast-rank-layout">
+            <article class="podcast-panel podcast-rank-main">
+              <div class="podcast-section__head">
+                <span class="podcast-skeleton podcast-skeleton--heading" />
+                <span class="podcast-skeleton podcast-skeleton--mini" />
+              </div>
+              <div class="podcast-program-list podcast-rank-programs">
+                <span v-for="item in 8" :key="`home-program-skeleton-${item}`" class="podcast-rank-program-skeleton">
+                  <span class="podcast-skeleton podcast-skeleton--program-cover" />
+                  <span class="podcast-skeleton podcast-skeleton--line" />
+                  <span class="podcast-skeleton podcast-skeleton--mini" />
+                </span>
+              </div>
+            </article>
+
+            <aside class="podcast-rank-side">
+              <article class="podcast-panel podcast-rank-card">
+                <div class="podcast-section__head">
+                  <span class="podcast-skeleton podcast-skeleton--heading" />
+                  <span class="podcast-skeleton podcast-skeleton--mini" />
+                </div>
+                <div class="podcast-rank-podium">
+                  <article v-for="item in 12" :key="`home-rank-card-skeleton-${item}`" class="podcast-card podcast-card--skeleton">
+                    <span class="podcast-skeleton podcast-skeleton--cover" />
+                    <span class="podcast-skeleton podcast-skeleton--line" />
+                  </article>
+                </div>
+              </article>
+            </aside>
+          </section>
+        </section>
+
         <section class="podcast-category-strip podcast-category-strip--skeleton" aria-hidden="true">
           <div class="podcast-filter-options">
             <span v-for="item in 9" :key="`podcast-chip-skeleton-${item}`" class="podcast-skeleton podcast-skeleton--chip" />
@@ -220,6 +241,52 @@
 
     <template v-else>
       <template v-if="isOverviewPage">
+        <section id="podcast-hot-rank" class="podcast-home-rank">
+          <section class="podcast-rank-layout" aria-label="推荐电台和歌曲">
+            <article class="podcast-panel podcast-rank-main">
+              <div class="podcast-section__head">
+                <div>
+                  <strong>推荐歌曲</strong>
+                </div>
+                <AudioLines :size="18" />
+              </div>
+              <div class="podcast-program-list podcast-rank-programs">
+                <SongListRow
+                  v-for="track in programToplist"
+                  :key="`home-program-${track.programId || track.id}`"
+                  :track="track"
+                  compact
+                  @play="playProgram(track, programToplist)"
+                />
+              </div>
+            </article>
+
+            <aside class="podcast-rank-side">
+              <article class="podcast-panel podcast-rank-card">
+                <div class="podcast-section__head">
+                  <div>
+                    <strong>热门推荐</strong>
+                  </div>
+                  <RadioTower :size="18" />
+                </div>
+
+                <div v-if="rankPodcastItems.length" class="podcast-rank-podium">
+                  <RouterLink
+                    v-for="(item, index) in rankPodcastItems"
+                    :key="`home-rank-leader-${item.id}`"
+                    class="podcast-rank-podium__item"
+                    :to="getPodcastTo(item)"
+                  >
+                    <span class="podcast-rank-podium__badge">{{ index + 1 }}</span>
+                    <img v-if="item.coverUrl" :src="item.coverUrl" :alt="item.title" loading="lazy" decoding="async" />
+                    <strong>{{ item.title }}</strong>
+                  </RouterLink>
+                </div>
+              </article>
+            </aside>
+          </section>
+        </section>
+
         <section class="podcast-category-strip">
           <div class="podcast-filter-row">
             <div class="podcast-filter-options">
@@ -265,7 +332,7 @@
             >
               加载失败，重试
             </button>
-            <span v-else-if="!categoryMore && categoryPodcasts.length">没有更多播客了</span>
+            <span v-else-if="!categoryMore && categoryPodcasts.length">没有更多电台了</span>
             <span v-else>继续向下浏览，自动加载更多</span>
           </div>
         </section>
@@ -277,7 +344,7 @@
             <article class="podcast-panel podcast-rank-main">
               <div class="podcast-section__head">
                 <div>
-                  <strong>节目热榜</strong>
+                  <strong>推荐歌曲</strong>
                 </div>
                 <AudioLines :size="18" />
               </div>
@@ -300,12 +367,12 @@
                   </div>
                   <label class="podcast-rank-select">
                     <select v-model="rankType" @change="loadRank">
-                      <option value="hot">热门电台榜</option>
-                      <option value="new">新晋电台榜</option>
-                      <option value="pay">付费精品</option>
-                      <option value="hour">24 小时主播榜</option>
-                      <option value="newcomer">主播新人榜</option>
-                      <option value="popular">最热主播榜</option>
+                      <option value="hot">热门推荐</option>
+                      <option value="new">最新上线</option>
+                      <option value="library">乐库精选</option>
+                      <option value="classic">经典主题</option>
+                      <option value="scene">场景电台</option>
+                      <option value="heat">热度排行</option>
                     </select>
                   </label>
                 </div>
@@ -328,48 +395,26 @@
         </section>
       </template>
 
-      <template v-else-if="activePageKey === 'sleep'">
-        <section class="podcast-sleep-page">
-          <section class="podcast-category-strip podcast-sleep-strip">
-            <div class="podcast-filter-row">
-              <div class="podcast-filter-options">
-                <button
-                  v-for="item in satiTagItems"
-                  :key="item.tag"
-                  type="button"
-                  :class="{ active: item.tag === activeSatiTagId }"
-                  @click="selectSatiTag(item)"
-                >
-                  {{ item.title }}
-                </button>
-              </div>
-            </div>
-          </section>
-
-          <section class="podcast-section podcast-sleep-library">
+      <template v-else-if="activePageKey === 'library'">
+        <section class="podcast-radio-page">
+          <section
+            v-for="group in libraryGroupItems"
+            :key="`radio-library-${group.id}`"
+            class="podcast-section podcast-radio-broadcast"
+          >
             <div class="podcast-section__head">
               <div>
-                <strong>{{ activeSatiTag?.title || '精选声音' }}</strong>
+                <strong>{{ group.title }}</strong>
+                <small>{{ group.description || '乐库电台推荐' }}</small>
               </div>
-              <LoaderCircle v-if="satiLoading" :size="18" class="podcast-spin" />
-              <Moon v-else :size="18" />
+              <RadioTower :size="18" />
             </div>
-            <div class="podcast-voice-grid podcast-sleep-grid">
-              <button
-                v-for="track in visibleSatiResources"
-                :key="`sati-${track.satiId || track.id}`"
-                class="podcast-voice-card"
-                type="button"
-                v-memo="[track.id, track.satiId, track.name, track.coverUrl]"
-                @click="playSatiResource(track)"
-              >
-                <img v-if="track.coverUrl" :src="track.coverUrl" :alt="track.name" loading="lazy" decoding="async" />
-                <span><Play :size="15" fill="currentColor" /></span>
-                <strong>{{ track.name }}</strong>
-              </button>
-            </div>
-            <div v-if="satiHasMore" ref="satiLoadSentinel" class="podcast-autoload" aria-live="polite">
-              <span v-if="satiHasMore">继续向下浏览，自动显示更多</span>
+            <div class="podcast-card-grid">
+              <PodcastCard
+                v-for="item in group.channels"
+                :key="`library-radio-${group.id}-${item.id}`"
+                :podcast="item"
+              />
             </div>
           </section>
         </section>
@@ -381,60 +426,57 @@
             <article class="podcast-section podcast-radio-channels">
               <div class="podcast-section__head">
                 <div>
-                  <strong>DIFM 电台</strong>
+                  <strong>乐库分组</strong>
                 </div>
                 <RadioTower :size="18" />
               </div>
-              <div v-if="difmChannels.length" class="podcast-radio-channel-grid">
-                <button
-                  v-for="channel in difmChannels"
-                  :key="`difm-${channel.source}-${channel.id}`"
+              <div v-if="libraryGroupItems.length" class="podcast-radio-channel-grid">
+                <RouterLink
+                  v-for="group in libraryGroupItems"
+                  :key="`radio-group-${group.id}`"
                   class="podcast-radio-channel"
-                  type="button"
-                  @click="loadDifmTracks(channel)"
+                  :to="{ name: 'podcast-sleep' }"
                 >
                   <span><RadioReceiver :size="16" /></span>
-                  <strong>{{ channel.title }}</strong>
-                </button>
+                  <strong>{{ group.title }}</strong>
+                  <small>{{ group.description || `${group.channels?.length || 0} 个电台` }}</small>
+                </RouterLink>
               </div>
             </article>
 
             <article class="podcast-section podcast-radio-now">
               <div class="podcast-section__head">
                 <div>
-                  <strong>频道播放列表</strong>
+                  <strong>今日推荐歌曲</strong>
                 </div>
                 <RadioReceiver :size="18" />
               </div>
-              <div v-if="difmTrackItems.length" class="podcast-program-list podcast-radio-track-list">
+              <div v-if="programToplist.length" class="podcast-program-list podcast-radio-track-list">
                 <SongListRow
-                  v-for="track in difmTrackItems"
-                  :key="`difm-track-${track.id}`"
+                  v-for="track in programToplist"
+                  :key="`radio-preview-track-${track.id}`"
                   :track="track"
                   compact
-                  @play="playProgram(track, difmTrackItems)"
+                  @play="playProgram(track, programToplist)"
                 />
               </div>
-              <div v-else class="podcast-state">选择一个 DIFM 频道查看播放列表。</div>
+              <div v-else class="podcast-state">暂无推荐歌曲。</div>
             </article>
 
             <article class="podcast-section podcast-radio-broadcast">
               <div class="podcast-section__head">
                 <div>
-                  <strong>广播电台</strong>
+                  <strong>全部电台</strong>
+                  <small>{{ broadcastChannelItems.length }} 个电台</small>
                 </div>
                 <Radio :size="18" />
               </div>
-              <div class="podcast-radio-broadcast-grid">
-                <article
+              <div class="podcast-card-grid">
+                <PodcastCard
                   v-for="item in broadcastChannelItems"
                   :key="`broadcast-${item.id}`"
-                  class="podcast-radio-broadcast-card"
-                >
-                  <img v-if="item.coverUrl" :src="item.coverUrl" :alt="item.title" loading="lazy" decoding="async" />
-                  <span v-else><Radio :size="16" /></span>
-                  <strong>{{ item.title }}</strong>
-                </article>
+                  :podcast="item"
+                />
               </div>
             </article>
           </section>
@@ -450,11 +492,7 @@ import { RouterLink, useRoute } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import {
   AudioLines,
-  Headphones,
   LoaderCircle,
-  MicVocal,
-  Moon,
-  Play,
   Radio,
   RadioReceiver,
   RadioTower,
@@ -462,57 +500,40 @@ import {
 } from 'lucide-vue-next'
 import SongListRow from '../components/SongListRow.vue'
 import {
-  getDifmChannelTracksData,
   getPodcastCategoryData,
   getPodcastHomeData,
-  getPodcastRankData,
-  getSatiResourcesData
+  getPodcastRankData
 } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
 import '../styles/podcast.css'
 
 const RANK_LABELS = {
-  hot: '热门电台榜',
-  new: '新晋电台榜',
-  pay: '付费精品',
-  hour: '24 小时主播榜',
-  newcomer: '主播新人榜',
-  popular: '最热主播榜'
+  hot: '热门推荐',
+  new: '最新上线',
+  library: '乐库精选',
+  classic: '经典主题',
+  scene: '场景电台',
+  heat: '热度排行'
 }
 
 const PODCAST_SKELETON_MIN_MS = 420
-const SATI_PAGE_SIZE = 24
-const SATI_MIN_ITEMS = 24
-const SATI_MAX_ITEMS = 72
 
 const PODCAST_PAGES = [
   {
     key: 'overview',
-    name: 'podcast',
-    label: '精选',
-    description: '精选推荐、分类和搜索',
-    icon: Headphones
+    name: 'podcast'
   },
   {
     key: 'rank',
-    name: 'podcast-rank',
-    label: '榜单',
-    description: '节目热榜和播客排行',
-    icon: AudioLines
+    name: 'podcast-rank'
   },
   {
-    key: 'sleep',
-    name: 'podcast-sleep',
-    label: '助眠',
-    description: '白噪音、冥想和解压声音',
-    icon: Moon
+    key: 'library',
+    name: 'podcast-sleep'
   },
   {
     key: 'radio',
-    name: 'podcast-radio',
-    label: '电台',
-    description: 'DIFM 和公共广播频道',
-    icon: RadioTower
+    name: 'podcast-radio'
   }
 ]
 
@@ -542,7 +563,7 @@ const PodcastCard = defineComponent({
             props.podcast.playCountLabel
               ? h('span', { class: 'podcast-card__count' }, props.podcast.playCountLabel)
               : null,
-            h('span', { class: 'podcast-card__tag' }, props.podcast.category || '播客')
+            h('span', { class: 'podcast-card__tag' }, props.podcast.category || '电台')
           ]),
           h('strong', props.podcast.title),
           h('small', props.podcast.description || props.podcast.creator || props.podcast.category)
@@ -555,7 +576,6 @@ const route = useRoute()
 const player = usePlayerStore()
 const message = useMessage()
 const categoryLoadSentinel = ref(null)
-const satiLoadSentinel = ref(null)
 const loading = ref(false)
 const skeletonVisible = ref(false)
 const homeLoaded = ref(false)
@@ -573,36 +593,26 @@ const programToplist = ref([])
 const rankType = ref('hot')
 const rankPodcasts = ref([])
 const rankLoading = ref(false)
-const satiTags = ref([])
-const activeSatiTagId = ref('RCMD')
-const satiResources = ref([])
-const defaultSatiResources = ref([])
-const satiVisibleCount = ref(SATI_PAGE_SIZE)
-const satiLoading = ref(false)
-const difmGroups = ref([])
-const difmTracks = ref([])
+const libraryGroups = ref([])
 const broadcastChannels = ref([])
 const toArray = (value) => (Array.isArray(value) ? value : [])
 let categoryObserver = null
-let satiObserver = null
 let categoryRequestId = 0
 
-const podcastPages = PODCAST_PAGES
 const activePage = computed(() =>
   PODCAST_PAGES.find((page) => page.name === route.name) ?? PODCAST_PAGES[0]
 )
 const activePageKey = computed(() => activePage.value.key)
 const isOverviewPage = computed(() => activePageKey.value === 'overview')
-const isSleepPage = computed(() => activePageKey.value === 'sleep')
 const heroBanner = computed(() => banners.value[0] ?? null)
 const spotlightPodcast = computed(() =>
   featuredPodcasts.value[0] ?? categoryPodcasts.value[0] ?? rankPodcasts.value[0] ?? null
 )
 const spotlightCoverUrl = computed(() => spotlightPodcast.value?.coverUrl || heroBanner.value?.coverUrl || '')
-const heroTitle = computed(() => spotlightPodcast.value?.title || heroBanner.value?.title || '随心听FM')
+const heroTitle = computed(() => spotlightPodcast.value?.title || heroBanner.value?.title || '酷狗电台')
 const heroDescription = computed(() =>
   spotlightPodcast.value?.description ||
-  '播客、电台节目、助眠白噪音和广播频道都放在这里，适合通勤、工作和睡前慢慢听。'
+  '按主题、场景和时间挑选电台，进入后可连续播放当前电台的实时歌曲列表。'
 )
 const activeCategory = computed(() =>
   categories.value.find((item) => String(item.id) === String(activeCategoryId.value))
@@ -616,25 +626,10 @@ const hotTopPodcasts = computed(() =>
 const recommendationPodcasts = computed(() =>
   dedupeById([...categoryPodcasts.value, ...featuredPodcasts.value, ...rankPodcasts.value])
 )
-const rankLabel = computed(() => RANK_LABELS[rankType.value] || '热门电台榜')
+const rankLabel = computed(() => RANK_LABELS[rankType.value] || '热门推荐')
 const rankPodcastItems = computed(() => toArray(rankPodcasts.value))
-const satiTagItems = computed(() => toArray(satiTags.value))
-const satiResourceItems = computed(() => toArray(satiResources.value))
-const visibleSatiResources = computed(() => satiResourceItems.value.slice(0, satiVisibleCount.value))
-const satiHasMore = computed(() => satiVisibleCount.value < satiResourceItems.value.length)
-const difmGroupItems = computed(() => toArray(difmGroups.value))
-const difmTrackItems = computed(() => toArray(difmTracks.value))
+const libraryGroupItems = computed(() => toArray(libraryGroups.value))
 const broadcastChannelItems = computed(() => toArray(broadcastChannels.value))
-const activeSatiTag = computed(() =>
-  satiTagItems.value.find((item) => item.tag === activeSatiTagId.value)
-)
-const difmChannels = computed(() =>
-  difmGroupItems.value.flatMap((group) =>
-    group.channels?.length
-      ? group.channels.map((channel) => ({ ...channel, source: channel.source ?? group.source }))
-      : [{ id: group.id, title: group.title, source: group.source, description: '点击加载播放列表' }]
-  ).slice(0, 8)
-)
 
 onMounted(() => {
   loadHome()
@@ -642,7 +637,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   disconnectCategoryLoadObserver()
-  disconnectSatiLoadObserver()
 })
 
 watch([isOverviewPage, homeLoaded], () => {
@@ -650,14 +644,6 @@ watch([isOverviewPage, homeLoaded], () => {
     nextTick(setupCategoryLoadObserver)
   } else {
     disconnectCategoryLoadObserver()
-  }
-})
-
-watch([isSleepPage, homeLoaded, () => satiResourceItems.value.length], () => {
-  if (isSleepPage.value && homeLoaded.value && satiHasMore.value) {
-    nextTick(setupSatiLoadObserver)
-  } else {
-    disconnectSatiLoadObserver()
   }
 })
 
@@ -680,30 +666,13 @@ async function loadHome() {
     categoryError.value = null
     programToplist.value = data.programToplist.length ? data.programToplist : data.today
     rankPodcasts.value = Array.isArray(data.hot) ? data.hot : []
-    satiTags.value = toArray(data.satiTags)
-    activeSatiTagId.value = satiTags.value[0]?.tag ?? 'RCMD'
-    let initialSatiResources = toArray(data.satiResources)
-
-    if (!initialSatiResources.length) {
-      try {
-        initialSatiResources = toArray(await getSatiResourcesData('RCMD'))
-      } catch (error) {
-        console.warn('Failed to load default sati resources:', error)
-      }
-    }
-
-    const initialSatiPool = fillSatiResources(initialSatiResources)
-
-    defaultSatiResources.value = initialSatiPool
-    satiResources.value = initialSatiPool
-    satiVisibleCount.value = SATI_PAGE_SIZE
-    difmGroups.value = toArray(data.difm)
+    libraryGroups.value = toArray(data.yuekuGroups || data.difm)
     broadcastChannels.value = toArray(data.broadcastChannels)
     homeLoaded.value = true
     nextTick(setupCategoryLoadObserver)
   } catch (error) {
-    console.warn('Failed to load podcasts:', error)
-    errorMessage.value = error?.message || '播客加载失败'
+    console.warn('Failed to load radios:', error)
+    errorMessage.value = error?.message || '电台加载失败'
     message.error(errorMessage.value)
   } finally {
     await waitForSkeleton(startedAt)
@@ -795,9 +764,9 @@ async function loadCategory({ reset = false } = {}) {
       return
     }
 
-    console.warn('Failed to load podcast category:', error)
+    console.warn('Failed to load radio category:', error)
     categoryError.value = error
-    message.error(error?.message || '分类播客加载失败')
+    message.error(error?.message || '分类电台加载失败')
   } finally {
     if (requestId === categoryRequestId) {
       categoryLoading.value = false
@@ -828,48 +797,6 @@ function handleCategoryLoadIntersect(entries) {
   }
 }
 
-function setupSatiLoadObserver() {
-  disconnectSatiLoadObserver()
-
-  if (!isSleepPage.value || !homeLoaded.value || !satiLoadSentinel.value || !satiHasMore.value || typeof IntersectionObserver === 'undefined') {
-    return
-  }
-
-  const scrollRoot = satiLoadSentinel.value.closest('.view')
-  satiObserver = new IntersectionObserver(handleSatiLoadIntersect, {
-    root: scrollRoot,
-    rootMargin: '360px 0px 360px',
-    threshold: 0
-  })
-  satiObserver.observe(satiLoadSentinel.value)
-}
-
-function handleSatiLoadIntersect(entries) {
-  if (entries.some((entry) => entry.isIntersecting)) {
-    revealMoreSatiResources()
-  }
-}
-
-function revealMoreSatiResources() {
-  if (!satiHasMore.value) {
-    disconnectSatiLoadObserver()
-    return
-  }
-
-  satiVisibleCount.value = Math.min(
-    satiVisibleCount.value + SATI_PAGE_SIZE,
-    satiResourceItems.value.length
-  )
-
-  nextTick(() => {
-    if (satiHasMore.value) {
-      setupSatiLoadObserver()
-    } else {
-      disconnectSatiLoadObserver()
-    }
-  })
-}
-
 function disconnectCategoryLoadObserver() {
   if (!categoryObserver) {
     return
@@ -877,15 +804,6 @@ function disconnectCategoryLoadObserver() {
 
   categoryObserver.disconnect()
   categoryObserver = null
-}
-
-function disconnectSatiLoadObserver() {
-  if (!satiObserver) {
-    return
-  }
-
-  satiObserver.disconnect()
-  satiObserver = null
 }
 
 async function loadRank() {
@@ -899,48 +817,10 @@ async function loadRank() {
     const data = await getPodcastRankData({ type: rankType.value, limit: 12, offset: 0 })
     rankPodcasts.value = Array.isArray(data.items) ? data.items : []
   } catch (error) {
-    console.warn('Failed to load podcast rank:', error)
-    message.error(error?.message || '播客榜单加载失败')
+    console.warn('Failed to load radio rank:', error)
+    message.error(error?.message || '电台榜单加载失败')
   } finally {
     rankLoading.value = false
-  }
-}
-
-async function selectSatiTag(item) {
-  if (activeSatiTagId.value === item.tag || satiLoading.value) {
-    return
-  }
-
-  activeSatiTagId.value = item.tag
-  satiVisibleCount.value = SATI_PAGE_SIZE
-  disconnectSatiLoadObserver()
-  satiLoading.value = true
-
-  try {
-    const resources = toArray(await getSatiResourcesData(item.tag))
-    const fallbackResources = await getDefaultSatiResources()
-
-    satiResources.value = fillSatiResources(resources, fallbackResources)
-    satiVisibleCount.value = SATI_PAGE_SIZE
-    nextTick(setupSatiLoadObserver)
-  } catch (error) {
-    console.warn('Failed to load sati resources:', error)
-    message.error(error?.message || '助眠声音加载失败')
-  } finally {
-    satiLoading.value = false
-  }
-}
-
-async function loadDifmTracks(channel) {
-  try {
-    difmTracks.value = toArray(await getDifmChannelTracksData({
-      source: channel.source,
-      channelId: channel.id,
-      limit: 12
-    }))
-  } catch (error) {
-    console.warn('Failed to load DIFM tracks:', error)
-    message.error(error?.message || 'DIFM 播放列表加载失败')
   }
 }
 
@@ -949,35 +829,12 @@ async function playProgram(track, queue) {
   const played = await player.playTrack(track)
 
   if (!played) {
-    message.error(player.state.error?.message || '当前声音暂无可播放链接')
+    message.error(player.state.error?.message || '当前歌曲暂无可播放链接')
   }
-}
-
-function playSatiResource(track) {
-  playProgram(track, visibleSatiResources.value)
 }
 
 function getPodcastTo(podcast) {
   return podcast?.to || `/podcast/${podcast?.id || ''}`
-}
-
-async function getDefaultSatiResources() {
-  if (defaultSatiResources.value.length) {
-    return defaultSatiResources.value
-  }
-
-  defaultSatiResources.value = fillSatiResources(await getSatiResourcesData('RCMD'))
-  return defaultSatiResources.value
-}
-
-function fillSatiResources(resources = [], fallbackResources = []) {
-  const baseItems = dedupeById(toArray(resources))
-
-  if (baseItems.length >= SATI_MIN_ITEMS) {
-    return baseItems.slice(0, SATI_MAX_ITEMS)
-  }
-
-  return dedupeById([...baseItems, ...toArray(fallbackResources)]).slice(0, SATI_MAX_ITEMS)
 }
 
 function dedupeById(items = []) {

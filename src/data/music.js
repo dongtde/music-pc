@@ -17,7 +17,7 @@ export const sidebarGroups = [
         icon: 'Compass',
         activeMatch: '/discover',
       },
-      { label: '播客', to: '/podcast', icon: 'MicVocal', activeMatch: '/podcast' },
+      { label: '电台', to: '/podcast', icon: 'RadioTower', activeMatch: '/podcast' },
       { label: '视频', to: '/mv', icon: 'Video' },
       { label: '朋友', to: '/friends', icon: 'Users' },
     ],

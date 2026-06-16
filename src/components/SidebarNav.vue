@@ -94,9 +94,9 @@ import {
   Heart,
   History,
   House,
-  MicVocal,
   Music2,
   Radio,
+  RadioTower,
   Users,
   Video
 } from 'lucide-vue-next'
@@ -117,7 +117,7 @@ const library = useLibraryStore()
 const message = useMessage()
 const displayName = auth.displayName
 const avatarUrl = auth.avatarUrl
-const icons = { CloudDownload, Compass, Heart, History, House, MicVocal, Music2, Radio, Users, Video }
+const icons = { CloudDownload, Compass, Heart, History, House, Music2, Radio, RadioTower, Users, Video }
 const endTimeLabel = '\u5230\u671f'
 const vipButtonText = computed(() => {
   if (auth.state.vip.claiming) {
@@ -170,7 +170,7 @@ const sidebarGroups = computed(() => [
         icon: 'Compass',
         activeMatch: '/discover'
       },
-      { label: '播客', to: '/podcast', icon: 'MicVocal', activeMatch: '/podcast' },
+      { label: '电台', to: '/podcast', icon: 'RadioTower', activeMatch: '/podcast' },
       { label: '视频', to: '/mv', icon: 'Video' },
       { label: '朋友', to: '/friends', icon: 'Users' }
     ]
