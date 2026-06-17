@@ -1,5 +1,5 @@
 <template>
-  <section class="discover-page">
+  <section class="discover-page recommend-page">
     <section
       v-if="isHomeLoading"
       class="home-skeleton"

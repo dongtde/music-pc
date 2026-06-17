@@ -3,10 +3,13 @@ const path = require('node:path');
 
 const APP_PROTOCOL = 'mappic';
 const isDev = !app.isPackaged;
-const isDebug = process.env.MAPPIC_DESKTOP_DEBUG === '1' || process.argv.includes('--debug');
+const isDebug =
+  process.env.MAPPIC_DESKTOP_DEBUG === '1' || process.argv.includes('--debug');
 const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://127.0.0.1:5173';
-const kugouApiTarget = process.env.KUGOU_API_TARGET || 'http://localhost:4000';
-const neteaseApiTarget = process.env.NETEASE_API_TARGET || 'http://localhost:3000';
+const kugouApiTarget =
+  process.env.KUGOU_API_TARGET || 'https://kugou.cyouhong.cn';
+const neteaseApiTarget =
+  process.env.NETEASE_API_TARGET || 'https://music-api.xcj.pw';
 const proxyCookieJars = new Map();
 
 protocol.registerSchemesAsPrivileged([
@@ -56,13 +59,24 @@ async function createMainWindow() {
   });
 
   if (isDebug) {
-    mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
-      console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`);
-    });
+    mainWindow.webContents.on(
+      'console-message',
+      (_event, level, message, line, sourceId) => {
+        console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`);
+      },
+    );
 
-    mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
-      console.warn('[renderer:did-fail-load]', errorCode, errorDescription, validatedURL);
-    });
+    mainWindow.webContents.on(
+      'did-fail-load',
+      (_event, errorCode, errorDescription, validatedURL) => {
+        console.warn(
+          '[renderer:did-fail-load]',
+          errorCode,
+          errorDescription,
+          validatedURL,
+        );
+      },
+    );
   }
 
   await mainWindow.loadURL(`${APP_PROTOCOL}://app/#/home`);
@@ -88,7 +102,10 @@ function registerAppProtocol() {
       return proxyRequest(request, kugouApiTarget, url);
     }
 
-    if (url.hostname === 'netease-api' || pathname.startsWith('/netease-api/')) {
+    if (
+      url.hostname === 'netease-api' ||
+      pathname.startsWith('/netease-api/')
+    ) {
       url.pathname = pathname.replace(/^\/netease-api/, '') || '/';
       return proxyRequest(request, neteaseApiTarget, url);
     }
@@ -103,7 +120,9 @@ function registerAppProtocol() {
 
 async function serveStaticAsset(url) {
   if (isDev) {
-    return net.fetch(new URL(url.pathname + url.search, devServerUrl).toString());
+    return net.fetch(
+      new URL(url.pathname + url.search, devServerUrl).toString(),
+    );
   }
 
   const distRoot = path.join(__dirname, '..', 'dist');
@@ -138,19 +157,29 @@ async function proxyRequest(request, target, sourceUrl) {
     const response = await fetch(targetUrl, {
       method: request.method,
       headers,
-      body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
+      body:
+        request.method === 'GET' || request.method === 'HEAD'
+          ? undefined
+          : request.body,
       redirect: 'follow',
     });
 
     if (isDebug && response.status >= 400) {
-      console.warn('[api:proxy]', response.status, request.method, targetUrl.href);
+      console.warn(
+        '[api:proxy]',
+        response.status,
+        request.method,
+        targetUrl.href,
+      );
     }
 
     storeProxyCookies(response, targetUrl);
     return response;
   } catch (error) {
     console.warn('[api:proxy:error]', request.method, targetUrl.href, error);
-    return new Response(error?.message || 'Proxy request failed', { status: 502 });
+    return new Response(error?.message || 'Proxy request failed', {
+      status: 502,
+    });
   }
 }
 
@@ -196,7 +225,11 @@ function storeProxyCookies(response, targetUrl) {
   }
 
   if (isDebug) {
-    console.log('[api:cookies]', origin, Array.from(jar.keys()).join(',') || '(empty)');
+    console.log(
+      '[api:cookies]',
+      origin,
+      Array.from(jar.keys()).join(',') || '(empty)',
+    );
   }
 }
 
@@ -257,7 +290,10 @@ function splitSetCookieHeader(header) {
 }
 
 function parseSetCookie(cookie) {
-  const parts = String(cookie || '').split(';').map((part) => part.trim()).filter(Boolean);
+  const parts = String(cookie || '')
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean);
   const pair = parts[0] || '';
   const separatorIndex = pair.indexOf('=');
 
@@ -289,8 +325,12 @@ function parseSetCookie(cookie) {
 function mergeCookieHeaders(currentCookie = '', jarCookie = '') {
   const values = new Map();
 
-  parseCookieHeader(jarCookie).forEach((value, name) => values.set(name, value));
-  parseCookieHeader(currentCookie).forEach((value, name) => values.set(name, value));
+  parseCookieHeader(jarCookie).forEach((value, name) =>
+    values.set(name, value),
+  );
+  parseCookieHeader(currentCookie).forEach((value, name) =>
+    values.set(name, value),
+  );
 
   return Array.from(values.entries())
     .map(([name, value]) => `${name}=${value}`)
@@ -345,25 +385,40 @@ async function proxyMediaRequest(request, sourceUrl) {
   headers.delete('referer');
 
   if (isDebug) {
-    console.log('[media:proxy]', request.method, targetUrl.href, headers.get('range') || '');
+    console.log(
+      '[media:proxy]',
+      request.method,
+      targetUrl.href,
+      headers.get('range') || '',
+    );
   }
 
   try {
     const response = await fetch(targetUrl, {
       method: request.method,
       headers,
-      body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
+      body:
+        request.method === 'GET' || request.method === 'HEAD'
+          ? undefined
+          : request.body,
       redirect: 'follow',
     });
 
     if (isDebug && response.status >= 400) {
-      console.warn('[media:proxy]', response.status, request.method, targetUrl.href);
+      console.warn(
+        '[media:proxy]',
+        response.status,
+        request.method,
+        targetUrl.href,
+      );
     }
 
     return response;
   } catch (error) {
     console.warn('[media:proxy:error]', request.method, targetUrl.href, error);
-    return new Response(error?.message || 'Media proxy request failed', { status: 502 });
+    return new Response(error?.message || 'Media proxy request failed', {
+      status: 502,
+    });
   }
 }
 

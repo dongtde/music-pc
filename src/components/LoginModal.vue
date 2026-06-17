@@ -9,7 +9,7 @@
   >
     <template #header>
       <div class="login-modal__title">
-        <span>{{ auth.state.isLoggedIn ? '账号信息' : '登录酷狗账号' }}</span>
+        <span>{{ auth.state.isLoggedIn ? '账号信息' : headerTitle }}</span>
         <small>{{ headerSubtitle }}</small>
       </div>
     </template>
@@ -47,7 +47,7 @@
     </section>
 
     <section v-else class="login-panel">
-      <nav class="login-methods" aria-label="登录方式">
+      <nav class="login-methods" :class="{ 'login-methods--sms': loginMethod === 'sms' }" aria-label="登录方式">
         <button
           v-for="method in loginMethods"
           :key="method.value"
@@ -60,141 +60,72 @@
         </button>
       </nav>
 
-      <section v-if="loginMethod === 'qr'" class="login-qr">
-        <div class="login-qr__box">
-          <div v-if="auth.state.qr.loading" class="login-qr__loading">二维码生成中...</div>
-          <img
-            v-else-if="auth.state.qr.image"
-            class="login-qr__image"
-            :src="auth.state.qr.image"
-            loading="lazy"
-            decoding="async"
-            alt="登录二维码"
-          />
-          <div v-else class="login-qr__loading">二维码暂不可用</div>
-        </div>
+      <div class="login-method-stage">
+        <Transition :name="methodTransitionName">
+          <section v-if="loginMethod === 'qr'" key="qr" class="login-qr">
+            <div class="login-qr__box">
+              <div v-if="auth.state.qr.loading" class="login-qr__loading">二维码生成中...</div>
+              <img
+                v-else-if="auth.state.qr.image"
+                class="login-qr__image"
+                :src="auth.state.qr.image"
+                loading="lazy"
+                decoding="async"
+                alt="登录二维码"
+              />
+              <div v-else class="login-qr__loading">二维码暂不可用</div>
+            </div>
 
-        <strong
-          class="login-qr__status"
-          :class="{
-            'login-qr__status--confirm': auth.state.qr.status === 802,
-            'login-qr__status--expired': auth.state.qr.status === 800 || auth.state.error
-          }"
-        >
-          {{ auth.state.error || auth.state.qr.message || '等待扫码' }}
-        </strong>
-        <p>使用酷狗音乐 App 扫码，确认后会自动完成登录。</p>
-
-        <button class="login-modal__button" type="button" :disabled="auth.state.qr.loading" @click="refreshQr">
-          <RefreshCw :size="15" :class="{ spin: auth.state.qr.loading }" />
-          <span>{{ auth.state.qr.loading ? '刷新中...' : '刷新二维码' }}</span>
-        </button>
-      </section>
-
-      <form v-else-if="loginMethod === 'sms'" class="login-form" @submit.prevent="submitSmsLogin">
-        <label class="login-field">
-          <span>国家码</span>
-          <n-input v-model:value="phoneForm.countrycode" placeholder="86" clearable />
-        </label>
-        <label class="login-field">
-          <span>手机号</span>
-          <n-input v-model:value="phoneForm.phone" placeholder="请输入手机号" clearable />
-        </label>
-        <label class="login-field">
-          <span>短信验证码</span>
-          <n-input-group>
-            <n-input v-model:value="phoneForm.captcha" placeholder="请输入验证码" clearable />
-            <button
-              class="login-send-button"
-              type="button"
-              :disabled="auth.state.captchaLoading || captchaCooldown > 0"
-              @click="sendCaptchaCode"
+            <strong
+              class="login-qr__status"
+              :class="{
+                'login-qr__status--confirm': auth.state.qr.status === 802,
+                'login-qr__status--expired': auth.state.qr.status === 800 || auth.state.error
+              }"
             >
-              {{ captchaButtonText }}
+              {{ auth.state.error || auth.state.qr.message || '等待扫码' }}
+            </strong>
+
+            <button class="login-modal__button" type="button" :disabled="auth.state.qr.loading" @click="refreshQr">
+              <RefreshCw :size="15" :class="{ spin: auth.state.qr.loading }" />
+              <span>{{ auth.state.qr.loading ? '刷新中...' : '刷新二维码' }}</span>
             </button>
-          </n-input-group>
-        </label>
-        <label class="login-field">
-          <span>用户 ID</span>
-          <n-input v-model:value="phoneForm.userid" placeholder="多账号时填写，可留空" clearable />
-        </label>
-        <button class="login-modal__button login-modal__button--primary" type="submit" :disabled="auth.state.formLoading">
-          <LogIn :size="15" />
-          <span>{{ auth.state.formLoading ? '登录中...' : '验证码登录' }}</span>
-        </button>
-      </form>
+          </section>
 
-      <form v-else-if="loginMethod === 'phone'" class="login-form" @submit.prevent="submitPhoneLogin">
-        <label class="login-field">
-          <span>国家码</span>
-          <n-input v-model:value="phoneForm.countrycode" placeholder="86" clearable />
-        </label>
-        <label class="login-field">
-          <span>手机号</span>
-          <n-input v-model:value="phoneForm.phone" placeholder="请输入手机号" clearable />
-        </label>
-        <label class="login-field">
-          <span>密码</span>
-          <n-input
-            v-model:value="phoneForm.password"
-            type="password"
-            show-password-on="click"
-            placeholder="请输入密码"
-            clearable
-          />
-        </label>
-        <button class="login-modal__button login-modal__button--primary" type="submit" :disabled="auth.state.formLoading">
-          <Smartphone :size="15" />
-          <span>{{ auth.state.formLoading ? '登录中...' : '手机号登录' }}</span>
-        </button>
-      </form>
-
-      <form v-else-if="loginMethod === 'account'" class="login-form" @submit.prevent="submitAccountLogin">
-        <label class="login-field">
-          <span>用户名</span>
-          <n-input v-model:value="accountForm.email" placeholder="酷狗账号或邮箱" clearable />
-        </label>
-        <label class="login-field">
-          <span>密码</span>
-          <n-input
-            v-model:value="accountForm.password"
-            type="password"
-            show-password-on="click"
-            placeholder="请输入密码"
-            clearable
-          />
-        </label>
-        <button class="login-modal__button login-modal__button--primary" type="submit" :disabled="auth.state.formLoading">
-          <Mail :size="15" />
-          <span>{{ auth.state.formLoading ? '登录中...' : '账号登录' }}</span>
-        </button>
-      </form>
-
-      <form v-else class="login-form" @submit.prevent="submitCookieLogin">
-        <label class="login-field">
-          <span>Cookie</span>
-          <n-input
-            v-model:value="cookieValue"
-            type="textarea"
-            placeholder="token=...;userid=...;dfid=..."
-            :autosize="{ minRows: 3, maxRows: 5 }"
-            clearable
-          />
-        </label>
-        <button class="login-modal__button login-modal__button--primary" type="submit" :disabled="auth.state.formLoading">
-          <KeyRound :size="15" />
-          <span>{{ auth.state.formLoading ? '登录中...' : '导入 Cookie' }}</span>
-        </button>
-      </form>
+          <form v-else key="sms" class="login-form" @submit.prevent="submitSmsLogin">
+            <label class="login-field">
+              <span>国家码</span>
+              <n-input v-model:value="phoneForm.countrycode" placeholder="86" clearable />
+            </label>
+            <label class="login-field">
+              <span>手机号</span>
+              <n-input v-model:value="phoneForm.phone" placeholder="请输入手机号" clearable />
+            </label>
+            <label class="login-field">
+              <span>短信验证码</span>
+              <n-input-group>
+                <n-input v-model:value="phoneForm.captcha" placeholder="请输入验证码" clearable />
+                <button
+                  class="login-send-button"
+                  type="button"
+                  :disabled="auth.state.captchaLoading || captchaCooldown > 0"
+                  @click="sendCaptchaCode"
+                >
+                  {{ captchaButtonText }}
+                </button>
+              </n-input-group>
+            </label>
+            <button class="login-modal__button login-modal__button--primary" type="submit" :disabled="auth.state.formLoading">
+              <LogIn :size="15" />
+              <span>{{ auth.state.formLoading ? '登录中...' : '验证码登录' }}</span>
+            </button>
+          </form>
+        </Transition>
+      </div>
 
       <p v-if="auth.state.error || auth.state.notice" class="login-feedback" :class="{ error: auth.state.error }">
         {{ auth.state.error || auth.state.notice }}
       </p>
-
-      <button class="login-guest-button" type="button" :disabled="auth.state.formLoading" @click="auth.loginAsGuest">
-        <UserRound :size="15" />
-        <span>{{ auth.state.formLoading ? '登录中...' : '游客登录' }}</span>
-      </button>
     </section>
   </n-modal>
 </template>
@@ -202,15 +133,11 @@
 <script setup>
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import {
-  KeyRound,
   LogIn,
   LogOut,
-  Mail,
   MessageCircle,
   QrCode,
-  RefreshCw,
-  Smartphone,
-  UserRound
+  RefreshCw
 } from 'lucide-vue-next'
 import { useAuthStore } from '../stores/auth'
 import '../styles/auth.css'
@@ -224,17 +151,11 @@ const props = defineProps({
 const emit = defineEmits(['update:show'])
 const auth = useAuthStore()
 const loginMethod = ref('qr')
-const cookieValue = ref('')
+const methodTransitionName = ref('login-slide-next')
 const phoneForm = reactive({
   countrycode: '86',
   phone: '',
-  password: '',
-  captcha: '',
-  userid: ''
-})
-const accountForm = reactive({
-  email: '',
-  password: ''
+  captcha: ''
 })
 const captchaCooldown = ref(0)
 let qrTimer = 0
@@ -242,10 +163,7 @@ let captchaTimer = 0
 
 const loginMethods = [
   { label: '扫码', value: 'qr', icon: QrCode },
-  { label: '验证码', value: 'sms', icon: MessageCircle },
-  { label: '手机号', value: 'phone', icon: Smartphone },
-  { label: '账号', value: 'account', icon: Mail },
-  { label: 'Cookie', value: 'cookie', icon: KeyRound }
+  { label: '验证码', value: 'sms', icon: MessageCircle }
 ]
 
 const modalVisible = computed({
@@ -253,17 +171,16 @@ const modalVisible = computed({
   set: (value) => emit('update:show', value)
 })
 
+const headerTitle = computed(() => (loginMethod.value === 'sms' ? '验证码登录' : '扫码登录'))
+
 const headerSubtitle = computed(() => {
   if (auth.state.isLoggedIn) {
     return auth.isGuest.value ? '已连接游客凭证' : '已连接酷狗账号'
   }
 
   const subtitles = {
-    qr: '使用 App 扫码授权',
-    sms: '使用手机号和短信验证码',
-    phone: '使用手机号和密码',
-    account: '使用酷狗账号和密码',
-    cookie: '导入 token、userid、dfid'
+    qr: '打开酷狗音乐 App 扫一扫',
+    sms: '使用手机号和短信验证码'
   }
 
   return subtitles[loginMethod.value]
@@ -290,10 +207,12 @@ watch(
     if (!auth.state.isLoggedIn && loginMethod.value === 'qr') {
       await ensureQrLogin()
     }
-  }
+  },
+  { immediate: true }
 )
 
 watch(loginMethod, async (method) => {
+  methodTransitionName.value = method === 'sms' ? 'login-slide-next' : 'login-slide-prev'
   stopQrPolling()
 
   if (props.show && !auth.state.isLoggedIn && method === 'qr') {
@@ -346,25 +265,8 @@ async function submitSmsLogin() {
   await auth.loginWithCellphone({
     phone: phoneForm.phone,
     countrycode: phoneForm.countrycode,
-    captcha: phoneForm.captcha,
-    userid: phoneForm.userid
+    captcha: phoneForm.captcha
   })
-}
-
-async function submitPhoneLogin() {
-  await auth.loginWithCellphone({
-    phone: phoneForm.phone,
-    countrycode: phoneForm.countrycode,
-    password: phoneForm.password
-  })
-}
-
-async function submitAccountLogin() {
-  await auth.loginWithEmail(accountForm)
-}
-
-async function submitCookieLogin() {
-  await auth.loginWithCookie(cookieValue.value)
 }
 
 function startQrPolling() {

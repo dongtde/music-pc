@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 release
+release-desktop
+release-fresh
 dist-ssr
 *.local
 

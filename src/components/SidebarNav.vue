@@ -19,6 +19,7 @@
         <ChevronRight :size="18" />
       </button>
       <n-tooltip
+        v-if="showVipButton"
         raw
         trigger="hover"
         placement="bottom-start"
@@ -119,6 +120,7 @@ const displayName = auth.displayName
 const avatarUrl = auth.avatarUrl
 const icons = { CloudDownload, Compass, Heart, History, House, Music2, Radio, RadioTower, Users, Video }
 const endTimeLabel = '\u5230\u671f'
+const showVipButton = computed(() => auth.state.isLoggedIn && !auth.isGuest.value)
 const vipButtonText = computed(() => {
   if (auth.state.vip.claiming) {
     return '领取中'
