@@ -1,5 +1,5 @@
 export function registerServiceWorker() {
-  if (!import.meta.env.PROD || !('serviceWorker' in navigator)) {
+  if (import.meta.env.MODE === 'desktop' || !import.meta.env.PROD || !('serviceWorker' in navigator)) {
     return
   }
 

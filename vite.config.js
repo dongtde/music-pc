@@ -1,11 +1,22 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const desktopDevPort = Number(process.env.VITE_DEV_SERVER_PORT) || 5174;
+
+  return {
+  base: mode === 'desktop' ? './' : '/',
   plugins: [vue()],
   server: {
     host: '127.0.0.1',
     port: 5173,
+    hmr: mode === 'desktop'
+      ? {
+          protocol: 'ws',
+          host: '127.0.0.1',
+          clientPort: desktopDevPort,
+        }
+      : undefined,
     allowedHosts: ['.cpolar.top'], // 带点=放行所有xxx.cpolar.top二级域名
     // 新增代理配置
     proxy: {
@@ -48,4 +59,5 @@ export default defineConfig({
       },
     },
   },
+  };
 });

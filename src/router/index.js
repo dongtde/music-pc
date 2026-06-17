@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
 
 const PodcastView = () => import('../views/PodcastView.vue')
 
@@ -97,6 +97,6 @@ const routes = [
 ]
 
 export default createRouter({
-  history: createWebHistory(),
+  history: import.meta.env.MODE === 'desktop' ? createWebHashHistory() : createWebHistory(),
   routes
 })

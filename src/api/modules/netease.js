@@ -1543,9 +1543,11 @@ function collectAudioUrlCandidates(source, depth = 0) {
     'download_url',
     'downloadUrl',
     'audio_url',
-    'audioUrl'
+    'audioUrl',
+    'tracker_url',
+    'trackerUrl'
   ]
-  const nestedKeys = ['data', 'urls', 'url_info', 'urlInfo']
+  const nestedKeys = ['data', 'info', 'urls', 'url_info', 'urlInfo']
 
   return [
     ...directKeys.flatMap((key) => collectAudioUrlCandidates(source[key], depth + 1)),

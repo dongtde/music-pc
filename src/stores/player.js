@@ -65,6 +65,21 @@ audio.addEventListener('ended', () => {
   notifyTrackEnded()
 })
 
+audio.addEventListener('error', () => {
+  const mediaError = audio.error
+  state.error = new Error(mediaError?.message || `Audio playback failed${mediaError?.code ? ` (${mediaError.code})` : ''}`)
+  state.isPlaying = false
+  console.warn('Audio element error:', {
+    code: mediaError?.code,
+    message: mediaError?.message,
+    src: audio.currentSrc || audio.src
+  })
+})
+
+audio.addEventListener('stalled', () => {
+  console.warn('Audio playback stalled:', audio.currentSrc || audio.src)
+})
+
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', persistPlaybackSnapshot)
 }
@@ -216,9 +231,18 @@ async function resolvePlaybackUrl(track) {
     album_audio_id: track.album_audio_id ?? track.mixsongid ?? track.audio_id,
     mixsongid: track.mixsongid,
     album_id: track.album_id ?? track.albumId,
-    quality: '128'
+    quality: '128',
+    cookie: auth.state.cookie
   })
-  return response.data?.[0]?.url || ''
+  return normalizeDesktopPlaybackUrl(response.data?.[0]?.url || '')
+}
+
+function normalizeDesktopPlaybackUrl(url = '') {
+  if (!url || typeof window === 'undefined' || !window.mappicDesktop || !/^https?:\/\//i.test(url)) {
+    return url
+  }
+
+  return `/media?url=${encodeURIComponent(url)}`
 }
 
 async function ensurePlaybackCookie(auth) {
