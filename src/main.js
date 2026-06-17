@@ -11,10 +11,10 @@ import {
 import App from './App.vue'
 import router from './router'
 import { registerServiceWorker } from './registerServiceWorker'
-import { clearKugouBrowserCookies } from './utils/kugouAuth'
+import { syncStoredKugouBrowserCookies } from './utils/kugouAuth'
 import './styles/main.css'
 
-clearKugouBrowserCookies()
+syncStoredKugouBrowserCookies()
 
 const app = createApp(App)
 

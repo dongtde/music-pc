@@ -4,10 +4,23 @@ import { API_CONFIG } from '../config/app';
 const http = axios.create({
   baseURL: API_CONFIG.baseURL,
   timeout: API_CONFIG.timeout,
-  withCredentials: false,
+  withCredentials: true,
 });
 
 http.interceptors.request.use((config) => {
+  const noCookie = Boolean(config.noCookie || config.params?.noCookie !== undefined);
+
+  if (noCookie) {
+    config.withCredentials = false;
+
+    if (usesLocalProxy(config.baseURL)) {
+      config.headers = {
+        ...(config.headers ?? {}),
+        'X-Kugou-No-Cookie': '1',
+      };
+    }
+  }
+
   if (config.params?.noCookie !== undefined) {
     const { noCookie, ...params } = config.params;
     config.params = params;
@@ -15,6 +28,10 @@ http.interceptors.request.use((config) => {
 
   return config;
 });
+
+function usesLocalProxy(baseURL = API_CONFIG.baseURL) {
+  return typeof baseURL === 'string' && baseURL.startsWith('/');
+}
 
 http.interceptors.response.use(
   (response) => {

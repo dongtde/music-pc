@@ -56,7 +56,6 @@ import {
   getPersonalizedPlaylists,
   getLyric,
   getCloudSearch,
-  getCommentInfoList,
   checkSongLike,
   getMvComments,
   getMvDetail,
@@ -940,20 +939,14 @@ export async function getSongInteractionStatsData(id) {
     }
   }
 
-  const [redResponse, commentResponse] = await Promise.all([
-    getSongRedCount({ id: trackId }).catch(() => ({})),
-    getCommentInfoList({ type: 0, ids: trackId }).catch(() => ({}))
-  ])
+  const redResponse = await getSongRedCount({ id: trackId }).catch(() => ({}))
   const redData = redResponse.data ?? {}
-  const commentInfo = Array.isArray(commentResponse.data)
-    ? commentResponse.data.find((item) => String(item.resourceId) === trackId) ?? commentResponse.data[0] ?? {}
-    : {}
 
   return {
     likedCount: 0,
     likedCountLabel: '',
-    commentCount: toFiniteCount(redData.count ?? commentInfo.commentCount),
-    commentCountLabel: redData.countDesc || commentInfo.commentCountDesc || ''
+    commentCount: toFiniteCount(redData.count),
+    commentCountLabel: redData.countDesc || ''
   }
 }
 

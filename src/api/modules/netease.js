@@ -11,7 +11,7 @@ import { readStoredKugouAuth, toKugouAuthCookie } from '../../utils/kugouAuth'
 
 function getKugou(path, params = {}, config = {}) {
   const normalizedParams = normalizeParams(path, params)
-  const requestParams = withStoredKugouAuthCookie(path, normalizedParams, {
+  const requestParams = withStoredKugouSearchCookie(path, normalizedParams, {
     ...config,
     noCookie: config.noCookie ?? params.noCookie
   })
@@ -25,7 +25,7 @@ function getKugou(path, params = {}, config = {}) {
 
 function getKugouRaw(path, params = {}, config = {}) {
   const normalizedParams = normalizeParams(path, params)
-  const requestParams = withStoredKugouAuthCookie(path, normalizedParams, {
+  const requestParams = withStoredKugouSearchCookie(path, normalizedParams, {
     ...config,
     noCookie: config.noCookie ?? params.noCookie
   })
@@ -37,38 +37,14 @@ function getKugouRaw(path, params = {}, config = {}) {
   }).then((payload) => attachKugouParams(parseKugouPayload(payload), requestParams))
 }
 
-const KUGOU_AUTH_COOKIE_PATHS = new Set([
-  '/favorite/count',
-  '/login/token',
-  '/personal/fm',
-  '/playlist/tracks/add',
-  '/search',
-  '/search/complex',
-  '/song/url',
-  '/song/url/new',
-  '/user/cloud',
-  '/user/detail',
-  '/user/playlist',
-  '/user/video/collect',
-  '/youth/channel/all',
-  '/youth/channel/sub',
-  '/youth/day/vip',
-  '/youth/day/vip/upgrade',
-  '/youth/union/vip'
-])
-
-function withStoredKugouAuthCookie(path, params = {}, config = {}) {
-  if (config.noCookie || params.cookie || !shouldUseStoredKugouAuthCookie(path, config)) {
+function withStoredKugouSearchCookie(path, params = {}, config = {}) {
+  if (config.noCookie || params.cookie || !isSearchPath(path)) {
     return params
   }
 
   const cookie = toKugouAuthCookie(readStoredKugouAuth())
 
   return cookie ? { ...params, cookie } : params
-}
-
-function shouldUseStoredKugouAuthCookie(path, config = {}) {
-  return Boolean(config.withAuthCookie || KUGOU_AUTH_COOKIE_PATHS.has(path))
 }
 
 const songRegistry = new Map()
@@ -1995,7 +1971,37 @@ export const getAlbumSongs = (params = {}) => getKugou('/album/songs', params).t
 export const getAlbumDynamic = (params = {}) => getKugou('/album/detail', params).then(toAlbumDetailResponse)
 export const getAlbumComments = (params = {}) => getKugou('/comment/album', params).then(toCommentResponse)
 export const getPlaylistComments = (params = {}) => getKugou('/comment/playlist', params).then(toCommentResponse)
-export const getCommentInfoList = (params = {}) => getKugou('/comment/floor', params)
+export const getCommentInfoList = (params = {}) => {
+  const ids = String(params.ids ?? params.id ?? '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean)
+  const resourceId = ids[0] ?? ''
+
+  if (!resourceId) {
+    return Promise.resolve({ data: [] })
+  }
+
+  return getKugou('/comment/count', {
+    id: resourceId,
+    hash: params.hash,
+    special_id: params.special_id
+  }).then((response) => {
+    const data = response.data ?? response
+    const count = data.count ?? data.comment_count ?? response.count ?? 0
+
+    return {
+      ...response,
+      data: resourceId
+        ? [{
+          resourceId,
+          commentCount: count,
+          commentCountDesc: data.countDesc ?? ''
+        }]
+        : []
+    }
+  })
+}
 
 // Authentication
 export const getLoginStatus = (params = {}) => getKugou('/user/detail', params).then(toLoginProfileResponse)

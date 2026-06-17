@@ -5,7 +5,7 @@ import { currentTrack as fallbackTrack, newSongs } from '../data/music'
 import { useAuthStore } from './auth'
 import { useLibraryStore } from './library'
 import { readJsonStorage, writeJsonStorage } from '../utils/storage'
-import { mergeKugouAuth, parseCookieString, toKugouAuthCookie } from '../utils/kugouAuth'
+import { parseCookieString } from '../utils/kugouAuth'
 import { clampTime, formatTime, parseDuration, toFiniteNumber } from '../utils/time'
 
 const audio = new Audio()
@@ -208,7 +208,7 @@ async function resolvePlaybackUrl(track) {
   if (!auth.state.cookie) {
     await auth.loginAsGuest()
   }
-  const playbackCookie = await getPlaybackCookie(auth.state.cookie)
+  await ensurePlaybackCookie(auth)
 
   const response = await getSongUrl({
     id: track.id,
@@ -216,14 +216,13 @@ async function resolvePlaybackUrl(track) {
     album_audio_id: track.album_audio_id ?? track.mixsongid ?? track.audio_id,
     mixsongid: track.mixsongid,
     album_id: track.album_id ?? track.albumId,
-    quality: '128',
-    cookie: playbackCookie || undefined
+    quality: '128'
   })
   return response.data?.[0]?.url || ''
 }
 
-async function getPlaybackCookie(cookie = '') {
-  const currentCookie = String(cookie || '').trim()
+async function ensurePlaybackCookie(auth) {
+  const currentCookie = String(auth.state.cookie || '').trim()
 
   if (parseCookie(currentCookie).dfid) {
     return currentCookie
@@ -235,7 +234,7 @@ async function getPlaybackCookie(cookie = '') {
   }).catch(() => null)
   const guestCookie = response?.cookie || ''
 
-  return mergeCookie(currentCookie, guestCookie)
+  return auth.mergeAuthCookie?.(guestCookie) || currentCookie
 }
 
 function notifyTrackEnded() {
@@ -374,8 +373,4 @@ function isRestorableTrack(track) {
 
 function parseCookie(cookie = '') {
   return parseCookieString(cookie)
-}
-
-function mergeCookie(currentCookie = '', nextCookie = '') {
-  return toKugouAuthCookie(mergeKugouAuth(currentCookie, nextCookie))
 }

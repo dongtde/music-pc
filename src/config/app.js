@@ -1,4 +1,5 @@
 export const API_CONFIG = {
+  // baseURL: 'https://ku-gou-music-api-i2hh.vercel.app/',
   baseURL: '/api',
   neteaseBaseURL: '/netease-api',
   timeout: 120000,

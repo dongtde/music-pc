@@ -2,6 +2,9 @@ import { STORAGE_KEYS } from '../config/app'
 import { readJsonStorage, readStorage, writeJsonStorage, writeStorage } from './storage'
 
 const AUTH_COOKIE_KEYS = ['token', 'userid', 'dfid']
+const BROWSER_COOKIE_WRITE_PATHS = ['/api']
+const BROWSER_COOKIE_CLEAR_PATHS = ['/', '/api', '/netease-api']
+const BROWSER_COOKIE_MAX_AGE = 180 * 24 * 60 * 60
 const BROWSER_COOKIE_NAME_PATTERNS = [
   /^KUGOU_API/i,
   /^Hm_l?p?vt_/i,
@@ -85,8 +88,9 @@ export function toKugouAuthCookie(auth = {}) {
 export function readStoredKugouAuth() {
   const legacyCookie = readStorage(STORAGE_KEYS.neteaseCookie, '')
   const storedAuth = readJsonStorage(STORAGE_KEYS.kugouAuth, {})
+  const browserAuth = readBrowserKugouAuth()
 
-  return mergeKugouAuth(legacyCookie, storedAuth)
+  return mergeKugouAuth(legacyCookie, storedAuth, browserAuth)
 }
 
 export function writeStoredKugouAuth(auth = {}) {
@@ -95,6 +99,7 @@ export function writeStoredKugouAuth(auth = {}) {
   if (!hasKugouAuth(normalized)) {
     writeJsonStorage(STORAGE_KEYS.kugouAuth, null)
     writeStorage(STORAGE_KEYS.neteaseCookie, '')
+    clearKugouBrowserCookies()
     return normalized
   }
 
@@ -105,19 +110,47 @@ export function writeStoredKugouAuth(auth = {}) {
 
   writeJsonStorage(STORAGE_KEYS.kugouAuth, storedAuth)
   writeStorage(STORAGE_KEYS.neteaseCookie, toKugouAuthCookie(normalized))
+  writeKugouBrowserCookies(normalized)
   return normalized
 }
 
-export function clearKugouBrowserCookies() {
-  if (typeof document === 'undefined' || !document.cookie) {
+export function syncStoredKugouBrowserCookies() {
+  writeKugouBrowserCookies(readStoredKugouAuth())
+}
+
+export function writeKugouBrowserCookies(auth = {}) {
+  if (typeof document === 'undefined') {
     return
   }
 
-  document.cookie
-    .split(';')
-    .map((part) => part.split('=')[0]?.trim())
-    .filter((name) => name && BROWSER_COOKIE_NAME_PATTERNS.some((pattern) => pattern.test(name)))
-    .forEach(expireBrowserCookie)
+  const normalized = normalizeKugouAuth(auth)
+  clearKugouBrowserAuthCookies()
+
+  AUTH_COOKIE_KEYS.forEach((key) => {
+    writeBrowserCookie(key, normalized[key])
+  })
+}
+
+export function clearKugouBrowserCookies() {
+  if (typeof document === 'undefined') {
+    return
+  }
+
+  const names = new Set(AUTH_COOKIE_KEYS)
+
+  if (document.cookie) {
+    document.cookie
+      .split(';')
+      .map((part) => part.split('=')[0]?.trim())
+      .filter((name) => name && BROWSER_COOKIE_NAME_PATTERNS.some((pattern) => pattern.test(name)))
+      .forEach((name) => names.add(name))
+  }
+
+  names.forEach(expireBrowserCookie)
+}
+
+function clearKugouBrowserAuthCookies() {
+  AUTH_COOKIE_KEYS.forEach(expireBrowserCookie)
 }
 
 function cleanString(value) {
@@ -133,11 +166,34 @@ function normalizeInteger(value) {
   return Number.isFinite(number) ? number : ''
 }
 
+function readBrowserKugouAuth() {
+  if (typeof document === 'undefined' || !document.cookie) {
+    return {}
+  }
+
+  return parseCookieString(document.cookie)
+}
+
+function writeBrowserCookie(name, value) {
+  const cookieValue = cleanCookieValue(value)
+
+  if (!cookieValue) {
+    return
+  }
+
+  BROWSER_COOKIE_WRITE_PATHS.forEach((path) => {
+    document.cookie = `${name}=${cookieValue}; Max-Age=${BROWSER_COOKIE_MAX_AGE}; path=${path}; SameSite=Lax`
+  })
+}
+
+function cleanCookieValue(value) {
+  return cleanString(value).replace(/[;\r\n]/g, '')
+}
+
 function expireBrowserCookie(name) {
   const encodedName = encodeURIComponent(name)
-  const paths = ['/', '/api', '/netease-api']
 
-  paths.forEach((path) => {
+  BROWSER_COOKIE_CLEAR_PATHS.forEach((path) => {
     document.cookie = `${encodedName}=; Max-Age=0; path=${path}`
   })
 }

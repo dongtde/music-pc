@@ -471,6 +471,7 @@ export function useAuthStore() {
     loginWithCellphone,
     loginWithEmail,
     loginWithCookie,
+    mergeAuthCookie,
     sendLoginCaptcha,
     verifyLoginCaptcha,
     loginAsGuest,
@@ -700,6 +701,16 @@ function saveCookie(cookie) {
 
   state.auth = writeStoredKugouAuth(mergeKugouAuth(state.auth, cookie))
   state.cookie = toKugouAuthCookie(state.auth)
+}
+
+function mergeAuthCookie(cookie) {
+  if (!cookie) {
+    return state.cookie
+  }
+
+  saveCookie(mergeCookie(state.cookie, cookie))
+  saveSession()
+  return state.cookie
 }
 
 async function completeLogin(response, loginType) {
