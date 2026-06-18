@@ -1829,7 +1829,7 @@ function getLyricCandidate(lyricSearch = {}) {
 
 // Discovery and recommendations
 export const getPersonalizedPlaylists = (params = {}) =>
-  getKugou('/top/playlist', { category_id: 0, ...params }).then(toPlaylistListResponse)
+  getKugou('/top/playlist', { category_id: 0, ...params }, { noCookie: true }).then(toPlaylistListResponse)
 export const getBanners = (params = {}) => getKugou('/pc/diantai', params).then(toBannerResponse)
 export const getPersonalizedMvs = (params = {}) => getKugou('/brush', params).then(toMvListResponse)
 export const getDailyRecommend = (params = {}) => getKugou('/everyday/recommend', params).then(toSongListResponse)
@@ -1973,9 +1973,9 @@ export const getPlaylistHotCategories = (params = {}) => getKugou('/playlist/tag
 export const getPlaylistCategories = (params = {}) => getKugou('/playlist/tags', params)
 export const getSimilarPlaylists = (params = {}) => getKugou('/playlist/similar', params).then(toPlaylistListResponse)
 export const getTopPlaylists = (params = {}) =>
-  getKugou('/top/playlist', { category_id: 0, ...params }).then(toPlaylistListResponse)
+  getKugou('/top/playlist', { category_id: 0, ...params }, { noCookie: true }).then(toPlaylistListResponse)
 export const getHighQualityPlaylists = (params = {}) =>
-  getKugou('/top/playlist', { category_id: 11292, ...params }).then(toPlaylistListResponse)
+  getKugou('/top/playlist', { category_id: 11292, ...params }, { noCookie: true }).then(toPlaylistListResponse)
 export const getToplist = (params = {}) => getKugou('/rank/list', params).then(toToplistResponse)
 
 // Artists

@@ -144,7 +144,7 @@ async function createDesktopLyricsWindow() {
       minWidth: DESKTOP_LYRICS_WINDOW_WIDTH,
       maxWidth: DESKTOP_LYRICS_WINDOW_WIDTH,
       minHeight: DESKTOP_LYRICS_WINDOW_BASE_HEIGHT,
-      maxHeight: DESKTOP_LYRICS_WINDOW_MAX_HEIGHT,
+      maxHeight: DESKTOP_LYRICS_WINDOW_BASE_HEIGHT,
       title: 'Desktop lyrics',
       frame: false,
       transparent: true,
@@ -280,6 +280,8 @@ function resizeDesktopLyricsWindowForFontSize(fontSize) {
   const nextHeight = getDesktopLyricsHeightForFontSize(fontSize);
   const bounds = desktopLyricsWindow.getBounds();
 
+  setDesktopLyricsFixedHeight(nextHeight, bounds.height);
+
   if (bounds.height === nextHeight) {
     return;
   }
@@ -294,6 +296,21 @@ function resizeDesktopLyricsWindowForFontSize(fontSize) {
     false,
   );
   broadcastDesktopLyricsWindowState();
+}
+
+function setDesktopLyricsFixedHeight(nextHeight, currentHeight = nextHeight) {
+  if (!isDesktopLyricsWindowOpen()) {
+    return;
+  }
+
+  if (nextHeight > currentHeight) {
+    desktopLyricsWindow.setMaximumSize(DESKTOP_LYRICS_WINDOW_WIDTH, nextHeight);
+    desktopLyricsWindow.setMinimumSize(DESKTOP_LYRICS_WINDOW_WIDTH, nextHeight);
+    return;
+  }
+
+  desktopLyricsWindow.setMinimumSize(DESKTOP_LYRICS_WINDOW_WIDTH, nextHeight);
+  desktopLyricsWindow.setMaximumSize(DESKTOP_LYRICS_WINDOW_WIDTH, nextHeight);
 }
 
 function sendDesktopLyricsWindowState(targetWindow = desktopLyricsWindow) {
@@ -574,11 +591,18 @@ function pathToFileUrl(filePath) {
 async function proxyRequest(request, target, sourceUrl) {
   const targetUrl = new URL(sourceUrl.pathname + sourceUrl.search, target);
   const headers = new Headers(request.headers);
+  const noCookie = headers.has('x-kugou-no-cookie');
 
   headers.delete('host');
   headers.delete('origin');
   headers.delete('referer');
-  appendProxyCookies(headers, targetUrl);
+  headers.delete('x-kugou-no-cookie');
+
+  if (noCookie) {
+    headers.delete('cookie');
+  } else {
+    appendProxyCookies(headers, targetUrl);
+  }
 
   try {
     const response = await fetch(targetUrl, {

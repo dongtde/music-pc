@@ -8,11 +8,11 @@
 defineProps({
   title: {
     type: String,
-    required: true
+    required: true,
   },
   compact: {
     type: Boolean,
-    default: false
-  }
-})
+    default: false,
+  },
+});
 </script>

@@ -192,9 +192,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 10px 14px;
-  margin: 0 0 28px;
   padding-bottom: 26px;
-  border-bottom: 1px solid var(--border-subtle);
 }
 
 .playlist-category-chip {
@@ -502,7 +500,11 @@
 }
 
 .chart-summary-card:hover {
-  background: color-mix(in srgb, var(--card-bg-hover) 72%, var(--control-bg-hover));
+  background: color-mix(
+    in srgb,
+    var(--card-bg-hover) 72%,
+    var(--control-bg-hover)
+  );
   transform: translateY(-2px);
 }
 
@@ -1951,8 +1953,7 @@
   flex-direction: column;
   gap: 9px;
   color: inherit;
-  transition:
-    transform 220ms ease;
+  transition: transform 220ms ease;
 }
 
 .playlist-card:hover {
@@ -1991,7 +1992,7 @@
   display: -webkit-box;
   overflow: hidden;
   color: var(--text-strong);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 400;
   line-height: 1.45;
   text-overflow: ellipsis;
