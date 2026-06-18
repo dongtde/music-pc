@@ -4,6 +4,8 @@ body:has(.desktop-lyrics),
   min-width: 0;
   overflow: hidden;
   background: transparent;
+  width: 700px;
+  height: 80px;
 }
 
 body:has(.desktop-lyrics) {
@@ -150,21 +152,21 @@ body:has(.desktop-lyrics) {
 }
 
 .desktop-lyrics__line-wrap {
-  top: 10px;
-  position: relative;
+  position: absolute;
+  top: 50px;
+  right: 28px;
+  bottom: 0;
+  left: 28px;
   z-index: 1;
   display: grid;
-  width: 100%;
-  height: 100%;
   min-width: 0;
-  place-items: center;
+  place-items: start center;
   text-align: center;
   cursor: move;
   -webkit-app-region: no-drag;
 }
 
 .desktop-lyrics__line {
-  top: 10px;
   position: relative;
   width: 100%;
   min-width: 0;
@@ -233,6 +235,7 @@ body:has(.desktop-lyrics) {
   top: 10px;
   left: 50%;
   z-index: 4;
+  --desktop-lyrics-settings-control-size: 21px;
   display: flex;
   width: 400px;
   min-width: 0;
@@ -267,15 +270,18 @@ body:has(.desktop-lyrics) {
 
 .desktop-lyrics__settings button {
   display: grid;
-  width: 21px;
-  height: 21px;
+  width: var(--desktop-lyrics-settings-control-size);
+  height: var(--desktop-lyrics-settings-control-size);
   flex: 0 0 auto;
   place-items: center;
+  padding: 0;
   border: 0;
   border-radius: 50%;
   color: rgba(255, 255, 255, 0.82);
   background: rgba(255, 255, 255, 0.1);
+  line-height: 0;
   cursor: pointer;
+  appearance: none;
 }
 
 .desktop-lyrics__settings .desktop-lyrics__settings-back {
@@ -304,13 +310,14 @@ body:has(.desktop-lyrics) {
 }
 
 .desktop-lyrics__settings input[type='range']::-webkit-slider-thumb {
-  width: 18px;
-  height: 18px;
-  margin-top: -7.5px;
+  width: 9px;
+  height: 9px;
+  margin-top: -3px;
   border: 0;
   border-radius: 50%;
   background: var(--desktop-lyric-color, #ffe16d);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28);
+  cursor: pointer;
   -webkit-appearance: none;
 }
 
@@ -330,19 +337,31 @@ body:has(.desktop-lyrics) {
 
 .desktop-lyrics__swatch.active {
   box-shadow:
-    inset 0 0 0 2px rgba(0, 0, 0, 0.42),
-    0 0 0 2px rgba(255, 255, 255, 0.88);
+    inset 0 0 0 2px rgba(255, 255, 255, 0.88),
+    inset 0 0 0 4px rgba(0, 0, 0, 0.42);
 }
 
 .desktop-lyrics__color-input {
-  width: 21px;
-  height: 21px;
+  width: var(--desktop-lyrics-settings-control-size);
+  height: var(--desktop-lyrics-settings-control-size);
+  flex: 0 0 auto;
   padding: 0;
   overflow: hidden;
   border: 0;
   border-radius: 50%;
   background: transparent;
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.desktop-lyrics__color-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.desktop-lyrics__color-input::-webkit-color-swatch {
+  border: 0;
+  border-radius: 50%;
 }
 
 .desktop-lyrics-settings-enter-active,
@@ -363,11 +382,20 @@ body:has(.desktop-lyrics) {
   width: 23px;
   height: 23px;
   place-items: center;
+  padding: 0;
   border: 0;
   border-radius: 50%;
   color: rgba(255, 255, 255, 0.78);
   background: transparent;
+  line-height: 0;
   cursor: pointer;
+  appearance: none;
+}
+
+.desktop-lyrics__settings button > svg,
+.desktop-lyrics__toolbar button > svg {
+  display: block;
+  margin: auto;
 }
 
 .desktop-lyrics__toolbar button:hover,
@@ -389,7 +417,7 @@ body:has(.desktop-lyrics) {
   transform: translate(-50%, -8px);
 }
 
-@media (max-width: 700px) {
+@media (max-width: 699px) {
   .desktop-lyrics {
     padding: 61px 18px 8px;
   }

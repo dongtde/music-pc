@@ -71,8 +71,8 @@
         <button
           class="desktop-lyrics__settings-back"
           type="button"
-          title="Back"
-          aria-label="Back"
+          title="返回"
+          aria-label="返回"
           @click="closeSettings"
         >
           <ChevronLeft :size="16" />
@@ -80,8 +80,8 @@
         <div class="desktop-lyrics__settings-row">
           <button
             type="button"
-            title="Smaller"
-            aria-label="Smaller"
+            title="减小字号"
+            aria-label="减小字号"
             @click="adjustFontSize(-2)"
           >
             <Minus :size="15" />
@@ -92,14 +92,14 @@
             :max="fontSizeLimits.max"
             :step="1"
             :value="lyricSettings.fontSize"
-            title="Font size"
-            aria-label="Font size"
+            title="字号"
+            aria-label="字号"
             @input="setFontSize($event.target.value)"
           >
           <button
             type="button"
-            title="Larger"
-            aria-label="Larger"
+            title="增大字号"
+            aria-label="增大字号"
             @click="adjustFontSize(2)"
           >
             <Plus :size="15" />
@@ -112,8 +112,8 @@
             :key="color"
             class="desktop-lyrics__swatch"
             type="button"
-            title="Lyric color"
-            aria-label="Lyric color"
+            title="歌词颜色"
+            aria-label="歌词颜色"
             :class="{ active: isLyricColor(color) }"
             :style="{ '--swatch-color': color }"
             @click="setLyricColor(color)"
@@ -122,8 +122,8 @@
             class="desktop-lyrics__color-input"
             type="color"
             :value="lyricSettings.color"
-            title="Custom color"
-            aria-label="Custom color"
+            title="自定义颜色"
+            aria-label="自定义颜色"
             @input="setLyricColor($event.target.value)"
           >
         </div>
@@ -134,41 +134,41 @@
       <nav
         v-if="toolbarVisible"
         class="desktop-lyrics__toolbar"
-        aria-label="Desktop lyrics controls"
+        aria-label="桌面歌词控制"
         @pointerenter="handlePointerEnter"
         @pointermove="handlePointerMove"
         @pointerleave="handlePointerLeave"
       >
         <button
           type="button"
-          title="Settings"
-          aria-label="Settings"
+          title="设置"
+          aria-label="设置"
           :class="{ active: settingsOpen }"
           @click="toggleSettings"
         >
           <Settings2 :size="16" />
         </button>
-        <button type="button" title="Previous" aria-label="Previous" @click="sendCommand('previous')">
+        <button type="button" title="上一首" aria-label="上一首" @click="sendCommand('previous')">
           <SkipBack :size="16" />
         </button>
         <button type="button" :title="playTitle" :aria-label="playTitle" @click="sendCommand('toggle-play')">
           <Pause v-if="playback.isPlaying" :size="16" fill="currentColor" />
           <Play v-else :size="16" fill="currentColor" />
         </button>
-        <button type="button" title="Next" aria-label="Next" @click="sendCommand('next')">
+        <button type="button" title="下一首" aria-label="下一首" @click="sendCommand('next')">
           <SkipForward :size="16" />
         </button>
         <button
           type="button"
-          :title="locked ? 'Unlock lyrics' : 'Lock lyrics'"
-          :aria-label="locked ? 'Unlock lyrics' : 'Lock lyrics'"
+          :title="locked ? '解锁歌词' : '锁定歌词'"
+          :aria-label="locked ? '解锁歌词' : '锁定歌词'"
           :class="{ active: locked }"
           @click="toggleLocked"
         >
           <Lock v-if="locked" :size="16" />
           <Unlock v-else :size="16" />
         </button>
-        <button type="button" title="Close" aria-label="Close" @click="hide">
+        <button type="button" title="关闭" aria-label="关闭" @click="hide">
           <X :size="18" />
         </button>
       </nav>
@@ -239,7 +239,7 @@ const lyricProgressWidth = computed(() => `${Math.round((lyrics.progress || 0) *
 const panelVisible = computed(() => controlsVisible.value || settingsOpen.value)
 const toolbarVisible = computed(() => !locked.value && !settingsOpen.value && panelVisible.value)
 const unlockVisible = computed(() => locked.value && panelVisible.value)
-const playTitle = computed(() => (playback.isPlaying ? 'Pause' : 'Play'))
+const playTitle = computed(() => (playback.isPlaying ? '暂停' : '播放'))
 const paletteStyle = computed(() => {
   const palette = track.coverPalette || fallbackPalette
 

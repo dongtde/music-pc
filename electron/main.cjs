@@ -18,6 +18,8 @@ const kugouApiTarget =
   process.env.KUGOU_API_TARGET || 'https://kugou.cyouhong.cn';
 const neteaseApiTarget =
   process.env.NETEASE_API_TARGET || 'https://music-api.xcj.pw';
+const DESKTOP_LYRICS_WINDOW_WIDTH = 700;
+const DESKTOP_LYRICS_WINDOW_HEIGHT = 80;
 const proxyCookieJars = new Map();
 let mainWindow = null;
 let desktopLyricsWindow = null;
@@ -137,9 +139,10 @@ async function createDesktopLyricsWindow() {
   try {
     desktopLyricsWindow = new BrowserWindow({
       ...bounds,
-      minWidth: 516,
-      minHeight: 82,
-      maxHeight: 114,
+      minWidth: DESKTOP_LYRICS_WINDOW_WIDTH,
+      maxWidth: DESKTOP_LYRICS_WINDOW_WIDTH,
+      minHeight: DESKTOP_LYRICS_WINDOW_HEIGHT,
+      maxHeight: DESKTOP_LYRICS_WINDOW_HEIGHT,
       title: 'Desktop lyrics',
       frame: false,
       transparent: true,
@@ -147,7 +150,7 @@ async function createDesktopLyricsWindow() {
       hasShadow: false,
       alwaysOnTop: true,
       skipTaskbar: true,
-      resizable: true,
+      resizable: false,
       show: false,
       autoHideMenuBar: true,
       webPreferences: {
@@ -215,15 +218,15 @@ function getDesktopLyricsInitialBounds() {
   } catch (error) {
     console.warn('[desktop-lyrics:display]', error);
     return {
-      width: 738,
-      height: 82,
+      width: DESKTOP_LYRICS_WINDOW_WIDTH,
+      height: DESKTOP_LYRICS_WINDOW_HEIGHT,
       x: 160,
       y: 680,
     };
   }
 
-  const width = Math.min(932, Math.max(738, Math.round(workArea.width * 0.52) + 60));
-  const height = 82;
+  const width = DESKTOP_LYRICS_WINDOW_WIDTH;
+  const height = DESKTOP_LYRICS_WINDOW_HEIGHT;
 
   return {
     width,

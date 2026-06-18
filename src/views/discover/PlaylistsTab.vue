@@ -1,80 +1,95 @@
 <template>
   <section class="discover-page playlists-page">
-    <div class="playlist-category-board" aria-label="歌单分类">
-      <header class="playlist-category-picker__summary">
-        <div class="playlist-category-picker__current">
-          <span>
-            <Tags :size="15" />
-            歌单分类
-          </span>
-          <strong>{{ activeCategory.name }}歌单</strong>
-          <small>{{ activeCategoryOwnerGroup?.name || '全部分类' }}</small>
-        </div>
-        <div class="playlist-category-picker__actions">
-          <button
-            v-if="!isActiveCategory(defaultCategory)"
-            class="playlist-category-reset"
-            type="button"
-            aria-label="回到全部分类"
-            title="回到全部分类"
-            @click="selectCategory(defaultCategory)"
-          >
-            <RotateCcw :size="15" />
-          </button>
-          <button
-            class="playlist-category-toggle"
-            type="button"
-            :aria-expanded="categoryPanelOpen"
-            @click="toggleCategoryPanel"
-          >
-            <ListFilter :size="16" />
-            <span>{{ categoryPanelOpen ? '收起分类' : '切换分类' }}</span>
-            <ChevronDown :size="15" :class="{ open: categoryPanelOpen }" />
-          </button>
-        </div>
-      </header>
+    <nav class="playlist-category-strip" aria-label="歌单分类">
+      <button
+        class="playlist-category-chip playlist-category-chip--all"
+        type="button"
+        :aria-current="isActiveCategory(defaultCategory) ? 'page' : undefined"
+        :class="{ active: isActiveCategory(defaultCategory) }"
+        @click="selectCategory(defaultCategory)"
+      >
+        全部
+      </button>
+      <button
+        v-for="category in featuredCategories"
+        :key="categoryKey(category)"
+        class="playlist-category-chip"
+        type="button"
+        :aria-current="isActiveCategory(category) ? 'page' : undefined"
+        :class="{ active: isActiveCategory(category) }"
+        @click="selectCategory(category)"
+      >
+        {{ category.name }}
+      </button>
+      <button
+        class="playlist-category-chip playlist-category-chip--more"
+        type="button"
+        :aria-expanded="categoryModalOpen"
+        :class="{ active: categoryModalOpen || moreCategoryActive }"
+        @click="openCategoryModal"
+      >
+        <ListFilter :size="16" />
+        <span>更多分类</span>
+        <ChevronDown :size="15" :class="{ open: categoryModalOpen }" />
+      </button>
+    </nav>
 
-      <Transition name="playlist-category-panel">
-        <div v-if="categoryPanelOpen" class="playlist-category-panel">
-          <nav class="playlist-category-groups" aria-label="歌单大分类">
-            <button
-              v-for="group in visibleCategoryGroups"
-              :key="group.id"
-              type="button"
-              :aria-label="categoryGroupAriaLabel(group)"
-              :class="{
-                active: isActiveCategoryGroup(group),
-                'contains-active': groupContainsActiveCategory(group)
-              }"
-              @click="selectCategoryGroup(group)"
-            >
-              <span class="playlist-category-group__mark" aria-hidden="true" />
-              <span>{{ group.name }}</span>
-              <small>{{ group.tags.length }}</small>
-            </button>
-          </nav>
-
-          <div class="playlist-category-options">
-            <header>
-              <strong>{{ activeCategoryGroup?.name || '全部分类' }}</strong>
-              <small>{{ activeCategoryGroup?.tags.length || 0 }} 个分类</small>
-            </header>
-            <div>
+    <Teleport to="body">
+      <Transition name="playlist-category-modal">
+        <div
+          v-if="categoryModalOpen"
+          class="playlist-category-modal__overlay"
+          @click.self="closeCategoryModal"
+        >
+          <section
+            class="playlist-category-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="playlist-category-modal-title"
+          >
+            <header class="playlist-category-modal__head">
+              <div>
+                <span>歌单分类</span>
+                <strong id="playlist-category-modal-title">更多分类</strong>
+              </div>
               <button
-                v-for="category in activeCategoryGroupTags"
-                :key="categoryKey(category)"
+                class="playlist-category-modal__close"
                 type="button"
-                :aria-label="`选择${category.name}歌单`"
-                :class="{ active: isActiveCategory(category) }"
-                @click="selectCategory(category)"
+                aria-label="关闭分类弹窗"
+                @click="closeCategoryModal"
               >
-                {{ category.name }}
+                <X :size="18" />
               </button>
+            </header>
+
+            <div class="playlist-category-modal__body">
+              <section
+                v-for="group in visibleCategoryGroups"
+                :key="group.id"
+                class="playlist-category-modal__group"
+              >
+                <header>
+                  <strong>{{ group.name }}</strong>
+                  <small>{{ group.tags.length }} 个分类</small>
+                </header>
+                <div>
+                  <button
+                    v-for="category in group.tags"
+                    :key="categoryKey(category)"
+                    type="button"
+                    :aria-current="isActiveCategory(category) ? 'page' : undefined"
+                    :class="{ active: isActiveCategory(category) }"
+                    @click="selectCategory(category, { closeModal: true })"
+                  >
+                    {{ category.name }}
+                  </button>
+                </div>
+              </section>
             </div>
-          </div>
+          </section>
         </div>
       </Transition>
-    </div>
+    </Teleport>
 
     <section
       v-if="skeletonVisible"
@@ -114,8 +129,8 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
-import { ChevronDown, ListFilter, RotateCcw, Tags } from 'lucide-vue-next'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { ChevronDown, ListFilter, X } from 'lucide-vue-next'
 import PlaylistCard from '../../components/PlaylistCard.vue'
 import SectionTitle from '../../components/SectionTitle.vue'
 import { useLoadMoreTrigger } from '../../composables/useLoadMoreTrigger'
@@ -136,8 +151,7 @@ const loadingMore = ref(false)
 const skeletonVisible = ref(false)
 const error = ref(null)
 const categoryGroups = ref([])
-const activeGroupId = ref('')
-const categoryPanelOpen = ref(true)
+const categoryModalOpen = ref(false)
 const playlists = ref([])
 const playlistsOffset = ref(0)
 const hasMore = ref(true)
@@ -152,15 +166,20 @@ const visibleCategoryGroups = computed(() => categoryGroups.value.length
       tags: [defaultCategory]
     }]
 )
-const activeCategoryOwnerGroup = computed(() =>
-  isActiveCategory(defaultCategory) ? null : findCategoryGroup(activeCategory.value) || null
+const featuredCategories = computed(() =>
+  uniqueCategories(
+    visibleCategoryGroups.value
+      .map((group) => getFeaturedCategory(group))
+      .filter(Boolean)
+  )
 )
-const activeCategoryGroup = computed(() =>
-  visibleCategoryGroups.value.find((group) => String(group.id) === String(activeGroupId.value)) ||
-    activeCategoryOwnerGroup.value ||
-    visibleCategoryGroups.value[0]
+const activeCategoryVisibleInStrip = computed(() =>
+  isActiveCategory(defaultCategory) ||
+    featuredCategories.value.some((category) => isActiveCategory(category))
 )
-const activeCategoryGroupTags = computed(() => activeCategoryGroup.value?.tags ?? [defaultCategory])
+const moreCategoryActive = computed(() =>
+  !isActiveCategory(defaultCategory) && !activeCategoryVisibleInStrip.value
+)
 const loadMoreController = useLoadMoreTrigger({
   trigger: loadMoreTrigger,
   canLoad: () => !loading.value && !loadingMore.value && hasMore.value && !error.value,
@@ -171,28 +190,47 @@ const loadMoreController = useLoadMoreTrigger({
 
 onMounted(() => {
   loadData({ reset: true })
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('keydown', handleCategoryModalKeydown)
+  }
 })
 
-function toggleCategoryPanel() {
-  categoryPanelOpen.value = !categoryPanelOpen.value
+onBeforeUnmount(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('keydown', handleCategoryModalKeydown)
+  }
+})
+
+function openCategoryModal() {
+  categoryModalOpen.value = true
 }
 
-function selectCategoryGroup(group) {
-  activeGroupId.value = group.id
+function closeCategoryModal() {
+  categoryModalOpen.value = false
 }
 
-function selectCategory(category) {
+function handleCategoryModalKeydown(event) {
+  if (event.key === 'Escape' && categoryModalOpen.value) {
+    closeCategoryModal()
+  }
+}
+
+function selectCategory(category, { closeModal = false } = {}) {
   const nextCategory = normalizeCategory(category)
 
   if (categoryKey(activeCategory.value) === categoryKey(nextCategory)) {
+    if (closeModal) {
+      closeCategoryModal()
+    }
+
     return
   }
 
   activeCategory.value = nextCategory
-  const ownerGroup = findCategoryGroup(nextCategory)
 
-  if (ownerGroup) {
-    activeGroupId.value = ownerGroup.id
+  if (closeModal) {
+    closeCategoryModal()
   }
 
   loadData({ reset: true })
@@ -246,7 +284,6 @@ async function loadData({ reset = false } = {}) {
       id: data.activeCategoryId ?? activeCategory.value.id,
       name: data.activeCategory || activeCategory.value.name
     })
-    syncActiveGroup()
   } catch (loadError) {
     if (requestId !== playlistRequestId) {
       return
@@ -308,35 +345,6 @@ function isActiveCategory(category) {
   return categoryKey(activeCategory.value) === categoryKey(category)
 }
 
-function isActiveCategoryGroup(group) {
-  return String(activeCategoryGroup.value?.id) === String(group.id)
-}
-
-function groupContainsActiveCategory(group) {
-  return Boolean(group?.tags?.some((category) => isActiveCategory(category)))
-}
-
-function findCategoryGroup(category) {
-  const key = categoryKey(category)
-
-  return visibleCategoryGroups.value.find((group) =>
-    group.tags.some((tag) => categoryKey(tag) === key)
-  )
-}
-
-function syncActiveGroup() {
-  const ownerGroup = findCategoryGroup(activeCategory.value)
-
-  if (!ownerGroup) {
-    activeGroupId.value = visibleCategoryGroups.value[0]?.id ?? ''
-    return
-  }
-
-  if (!activeGroupId.value || ownerGroup.tags.some((tag) => isActiveCategory(tag))) {
-    activeGroupId.value = ownerGroup.id
-  }
-}
-
 function categoryKey(category) {
   const normalized = normalizeCategory(category)
 
@@ -350,11 +358,7 @@ function normalizeCategoryGroups(groups = []) {
     .map((group, index) => {
       const groupTags = Array.isArray(group.tags) ? group.tags.map(normalizeCategory) : []
       const groupName = getCategoryGroupName(group, groupTags, index)
-      const groupCategory = normalizeCategory({
-        id: group.id,
-        name: groupName ? `全部${groupName}` : '全部'
-      })
-      const tags = uniqueCategories([groupCategory, ...groupTags])
+      const tags = uniqueCategories(groupTags)
 
       return {
         id: group.id ?? `group-${index}`,
@@ -428,10 +432,12 @@ function hasAnyTag(tags, candidates) {
   return candidates.some((candidate) => tags.includes(candidate))
 }
 
-function categoryGroupAriaLabel(group) {
-  return group?.name?.endsWith('分类')
-    ? `切换到${group.name}`
-    : `切换到${group.name}分类`
+function getFeaturedCategory(group) {
+  return group?.tags?.find((category) => !isDefaultCategory(category)) || null
+}
+
+function isDefaultCategory(category) {
+  return categoryKey(category) === categoryKey(defaultCategory)
 }
 
 </script>
