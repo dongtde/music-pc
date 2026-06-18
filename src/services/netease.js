@@ -57,6 +57,7 @@ import {
   getLyric,
   getCloudSearch,
   checkSongLike,
+  createUserPlaylist,
   getMvComments,
   getMvDetail,
   getMvDetailInfo,
@@ -98,8 +99,7 @@ import {
   getToplist,
   getTopPlaylists,
   getTopAlbums,
-  getUserCollectedPlaylists,
-  getUserCreatedPlaylists,
+  getUserPlaylists,
   getUgcMv,
   likeResource,
   searchVoiceListPrograms,
@@ -129,6 +129,8 @@ import {
 } from '../api/modules/neteaseLegacy'
 import { CACHE_TTL, COVER_TYPES } from '../config/app'
 import { cacheKey, getCachedData } from './cache'
+import { normalizeAudioQualities } from '../utils/audioQuality'
+import { isVipSong, normalizeSongAccess } from '../utils/songAccess'
 
 let playlistCategoryMetaPromise = null
 let artistToplistPromise = null
@@ -822,25 +824,235 @@ export async function getUserPlaylistLibraryData(uid, { limit = 100, offset = 0 
     }
   }
 
-  const [createdResponse, collectedResponse] = await Promise.all([
-    getUserCreatedPlaylists({ uid: userId, limit, offset, timestamp: Date.now() }).catch(() => ({})),
-    getUserCollectedPlaylists({ uid: userId, limit, offset, timestamp: Date.now() }).catch(() => ({}))
-  ])
+  const response = await getUserPlaylists({
+    userid: userId,
+    limit,
+    offset,
+    timestamp: Date.now()
+  }).catch(() => ({}))
+  const { createdPlaylists, collectedPlaylists } = splitUserPlaylistItems(
+    getUserPlaylistItems(response),
+    userId
+  )
 
   return {
-    createdPlaylists: mapUserPlaylists(
-      createdResponse.playlist ??
-        createdResponse.playlists ??
-        createdResponse.result ??
-        createdResponse.data
-    ),
-    collectedPlaylists: mapUserPlaylists(
-      collectedResponse.playlist ??
-        collectedResponse.playlists ??
-        collectedResponse.result ??
-        collectedResponse.data
-    )
+    createdPlaylists: mapRemoteUserPlaylists(createdPlaylists),
+    collectedPlaylists: mapRemoteUserPlaylists(collectedPlaylists, { collected: true })
   }
+}
+
+export async function createUserPlaylistData({ name, isPrivate = false } = {}) {
+  const title = String(name ?? '').trim()
+
+  if (!title) {
+    throw new Error('Playlist name is required')
+  }
+
+  const response = await createUserPlaylist({
+    name: title,
+    type: 0,
+    is_pri: isPrivate ? 1 : 0,
+    timestamp: Date.now()
+  })
+  const playlist = getPlaylistFromMutationResponse(response, title)
+
+  return {
+    response,
+    playlist: playlist ? mapRemoteUserPlaylist(playlist) : null
+  }
+}
+
+function getUserPlaylistItems(response = {}) {
+  const data = response.data ?? response
+
+  return firstArrayValue(
+    response.playlist,
+    response.playlists,
+    response.result,
+    Array.isArray(data) ? data : undefined,
+    data.playlist,
+    data.playlists,
+    data.list,
+    data.lists,
+    data.special_list,
+    data.info
+  ).filter(Boolean)
+}
+
+function getPlaylistFromMutationResponse(response = {}, fallbackName = '') {
+  const data = response.data ?? response
+  const playlist = firstArrayValue(
+    response.playlist,
+    response.playlists,
+    response.result,
+    data.playlist,
+    data.playlists,
+    data.list,
+    data.lists,
+    data.info,
+    Array.isArray(data) ? data : undefined
+  )[0] ?? [
+    response.playlist,
+    data.playlist,
+    data.info,
+    data.list,
+    data
+  ].find((item) => item && typeof item === 'object' && !Array.isArray(item))
+
+  if (!playlist || typeof playlist !== 'object') {
+    return null
+  }
+
+  const identity = firstPresentValue(
+    playlist.globalCollectionId,
+    playlist.global_collection_id,
+    playlist.id,
+    playlist.listid,
+    playlist.listId,
+    playlist.list_id,
+    playlist.list_create_listid
+  )
+
+  if (!identity) {
+    return null
+  }
+
+  return {
+    ...playlist,
+    name: playlist.name || playlist.title || playlist.listname || fallbackName
+  }
+}
+
+function splitUserPlaylistItems(playlists = [], userId = '') {
+  return playlists.reduce((groups, playlist) => {
+    if (isCollectedUserPlaylist(playlist, userId)) {
+      groups.collectedPlaylists.push(playlist)
+    } else {
+      groups.createdPlaylists.push(playlist)
+    }
+
+    return groups
+  }, {
+    createdPlaylists: [],
+    collectedPlaylists: []
+  })
+}
+
+function isCollectedUserPlaylist(playlist = {}, userId = '') {
+  const kind = getUserPlaylistKind(playlist)
+
+  if (kind === 'collected') {
+    return true
+  }
+
+  if (kind === 'created') {
+    return false
+  }
+
+  const collectedFlag = toBooleanFlag(firstPresentValue(
+    playlist.subscribed,
+    playlist.is_subscribed,
+    playlist.isSubscribed,
+    playlist.collected,
+    playlist.is_collected,
+    playlist.isCollected,
+    playlist.is_collect,
+    playlist.isCollect,
+    playlist.favorite,
+    playlist.is_favorite,
+    playlist.isFavorite
+  ))
+
+  if (collectedFlag === true) {
+    return true
+  }
+
+  const ownerId = getPlaylistSourceOwnerId(playlist)
+  const currentUserId = normalizePlaylistUserId(userId)
+
+  return Boolean(ownerId && currentUserId && ownerId !== currentUserId)
+}
+
+function getUserPlaylistKind(playlist = {}) {
+  const value = firstPresentValue(
+    playlist.list_type,
+    playlist.listType,
+    playlist.playlist_type,
+    playlist.playlistType,
+    playlist.type
+  )
+
+  if (value === undefined || value === null || value === '') {
+    return ''
+  }
+
+  const normalizedValue = String(value).trim().toLowerCase()
+
+  if (normalizedValue === '1' || /collect|collected|subscribe|subscribed|favorite/.test(normalizedValue)) {
+    return 'collected'
+  }
+
+  if (normalizedValue === '0' || /create|created|owner|self/.test(normalizedValue)) {
+    return 'created'
+  }
+
+  return ''
+}
+
+function getPlaylistSourceOwnerId(playlist = {}) {
+  return normalizePlaylistUserId(firstPresentValue(
+    playlist.list_create_userid,
+    playlist.listCreateUserid,
+    playlist.list_create_user_id,
+    playlist.create_userid,
+    playlist.create_user_id,
+    playlist.creator_userid,
+    playlist.creatorUserId,
+    getCollectionOwnerId(playlist.globalCollectionId || playlist.global_collection_id || playlist.id),
+    playlist.creator?.userId,
+    playlist.creator?.userid,
+    playlist.userid,
+    playlist.user_id,
+    playlist.userId
+  ))
+}
+
+function getCollectionOwnerId(id = '') {
+  return String(id ?? '').match(/^collection_[^_]+_([^_]+)_/i)?.[1] || ''
+}
+
+function normalizePlaylistUserId(value = '') {
+  return String(value ?? '').trim()
+}
+
+function firstPresentValue(...values) {
+  return values.find((value) => value !== undefined && value !== null && value !== '')
+}
+
+function toBooleanFlag(value) {
+  if (value === undefined || value === null || value === '') {
+    return null
+  }
+
+  if (typeof value === 'boolean') {
+    return value
+  }
+
+  if (typeof value === 'number') {
+    return value > 0
+  }
+
+  const normalizedValue = String(value).trim().toLowerCase()
+
+  if (/^(1|true|yes|y|collected|collect|subscribed|subscribe|favorite|fav)$/i.test(normalizedValue)) {
+    return true
+  }
+
+  if (/^(0|false|no|n|none)$/i.test(normalizedValue)) {
+    return false
+  }
+
+  return null
 }
 
 export async function getDownloadedSongsData({ limit = 50, offset = 0 } = {}) {
@@ -2018,7 +2230,7 @@ function mapRadioSongTrack(song = {}, index = 0, radio = {}) {
     thumbnailUrl: normalizeKugouMediaUrl(coverUrl, 96),
     source: radio.title ? `电台 · ${radio.title}` : '酷狗电台',
     category: radio.category || '',
-    vip: Boolean(song.fee || song.vip || Number(song.pay_type) > 0),
+    vip: isVipSong(song),
     hasVideo: Boolean(song.mv || song.mvhash),
     mvId: song.mv || song.mvhash || '',
     radioId: radio.id || radio.fmid || '',
@@ -2247,7 +2459,7 @@ function mapBannerSong(song, index) {
     time: formatDuration(song.dt ?? song.duration),
     duration: formatDuration(song.dt ?? song.duration),
     coverUrl: album.picUrl ?? album.blurPicUrl,
-    vip: Boolean(song.fee && song.fee !== 0),
+    vip: isVipSong(song),
     hasVideo: Boolean(song.mv),
     mvId: song.mv || ''
   }
@@ -2803,12 +3015,20 @@ function getArtistIds(artists = []) {
 }
 
 function getKugouTrackMeta(song = {}) {
+  const access = normalizeSongAccess(song)
+
   return {
     hash: song.hash || song.file_hash || song.audio_hash || song.hash_128 || song['128hash'] || '',
     album_audio_id: song.album_audio_id ?? song.mixsongid ?? song.add_mixsongid ?? song.audio_id ?? '',
     mixsongid: song.mixsongid ?? song.add_mixsongid ?? song.album_audio_id ?? '',
     album_id: song.album_id ?? song.album?.id ?? song.al?.id ?? '',
-    audio_id: song.audio_id ?? song.rp_id ?? ''
+    audio_id: song.audio_id ?? song.rp_id ?? '',
+    qualities: normalizeAudioQualities(song),
+    fee: access.fee,
+    vip: access.vip,
+    accessType: access.accessType,
+    accessBadges: access.badges,
+    songAccess: access
   }
 }
 
@@ -2902,22 +3122,71 @@ function mapPlaylistDetail(playlist) {
   }
 }
 
-function mapUserPlaylists(playlists = []) {
+function mapRemoteUserPlaylists(playlists = [], { collected = false } = {}) {
   return Array.isArray(playlists)
-    ? playlists.map((playlist) => ({
-      id: playlist.id,
-      globalCollectionId: playlist.globalCollectionId,
-      listid: playlist.listid ?? playlist.listId,
-      title: playlist.name || '未命名歌单',
-      description: playlist.description || playlist.copywriter || '',
-      trackIds: [],
-      remote: true,
-      coverUrl: resizeNeteaseImage(playlist.coverImgUrl || playlist.picUrl, 120),
-      trackCount: playlist.trackCount ?? 0,
-      updatedAt: playlist.updateTime || playlist.createTime || Date.now(),
-      collectedAt: playlist.subscribed ? playlist.updateTime || Date.now() : 0
-    }))
+    ? playlists.map((playlist) => mapRemoteUserPlaylist(playlist, { collected })).filter(Boolean)
     : []
+}
+
+function mapRemoteUserPlaylist(playlist = {}, { collected = false } = {}) {
+  const globalCollectionId = firstPresentValue(
+    playlist.globalCollectionId,
+    playlist.global_collection_id,
+    playlist.global_collectionid,
+    playlist.collection_id,
+    playlist.collectionid,
+    playlist.gid,
+    playlist.list_create_gid,
+    playlist.list_create_gid_v2
+  )
+  const listid = firstPresentValue(
+    playlist.listid,
+    playlist.listId,
+    playlist.list_id,
+    playlist.list_create_listid
+  )
+  const id = firstPresentValue(globalCollectionId, playlist.id, playlist.specialId, playlist.specialid, listid)
+
+  if (!id) {
+    return null
+  }
+
+  const updatedAt = normalizePlaylistTimestamp(
+    firstPresentValue(playlist.updateTime, playlist.update_time, playlist.updatedAt, playlist.createTime, playlist.create_time),
+    Date.now()
+  )
+  const createdAt = normalizePlaylistTimestamp(
+    firstPresentValue(playlist.createTime, playlist.create_time, playlist.createdAt),
+    updatedAt
+  )
+
+  return {
+    id,
+    globalCollectionId: globalCollectionId || '',
+    listid: listid || '',
+    title: playlist.name || playlist.title || playlist.specialname || playlist.listname || '\u672a\u547d\u540d\u6b4c\u5355',
+    description: playlist.description || playlist.copywriter || playlist.desc || playlist.intro || '',
+    trackIds: [],
+    remote: true,
+    coverUrl: resizeNeteaseImage(playlist.coverImgUrl || playlist.picUrl || playlist.pic || playlist.imgurl, 120),
+    trackCount: playlist.trackCount ?? playlist.track_count ?? playlist.songcount ?? playlist.song_count ?? 0,
+    creatorUserId: getPlaylistSourceOwnerId(playlist),
+    createdAt,
+    updatedAt,
+    collectedAt: collected ? updatedAt : 0
+  }
+}
+
+function normalizePlaylistTimestamp(value, fallback = Date.now()) {
+  const number = Number(value)
+
+  if (Number.isFinite(number) && number > 0) {
+    return number < 10000000000 ? number * 1000 : number
+  }
+
+  const parsed = Date.parse(value)
+
+  return Number.isFinite(parsed) ? parsed : fallback
 }
 
 function mapPlaylistTrack(song, index) {
@@ -2941,7 +3210,7 @@ function mapPlaylistTrack(song, index) {
     coverUrl: album.picUrl || album.blurPicUrl,
     thumbnailUrl: resizeNeteaseImage(album.picUrl, 96),
     to: `/playlist/song-${trackId}`,
-    vip: Boolean(song.fee && song.fee !== 0),
+    vip: isVipSong(song),
     hasVideo: Boolean(song.mv),
     mvId: song.mv || ''
   }
@@ -2967,7 +3236,7 @@ function mapFmTrack(song, index) {
     time: formatDuration(song.dt ?? song.duration),
     duration: formatDuration(song.dt ?? song.duration),
     coverUrl: resizeNeteaseImage(album.picUrl ?? song.picUrl, 520),
-    vip: Boolean(song.fee && song.fee !== 0),
+    vip: isVipSong(song),
     hasVideo: Boolean(song.mv),
     mvId: song.mv || '',
     reason,
@@ -3104,7 +3373,7 @@ function mapSearchSong(song, index = 0) {
     duration: formatDuration(song.dt ?? song.duration),
     coverUrl: album.picUrl,
     to: `/playlist/song-${song.id}`,
-    vip: Boolean(song.fee && song.fee !== 0),
+    vip: isVipSong(song),
     hasVideo: Boolean(song.mv),
     mvId: song.mv || ''
   }
@@ -3204,7 +3473,7 @@ function mapNewsong(item, index) {
     type: coverType(index),
     time: formatDuration(song.duration ?? song.dt),
     coverUrl: item.picUrl ?? album.picUrl,
-    vip: Boolean(song.fee && song.fee !== 0),
+    vip: isVipSong(song),
     hasVideo: Boolean(song.mv),
     mvId: song.mv || ''
   }

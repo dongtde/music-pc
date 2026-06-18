@@ -3,14 +3,9 @@
     <header class="settings-header">
       <div>
         <span class="settings-kicker">偏好设置</span>
-        <h1>主题与过渡</h1>
+        <h1>整理你的听歌界面</h1>
+        <p>把颜色、主题和弹窗动效调成顺手的样子。</p>
       </div>
-      <n-button round type="primary" @click="theme.previewTransition">
-        <template #icon>
-          <Sparkles :size="18" />
-        </template>
-        演示当前效果
-      </n-button>
     </header>
 
     <section class="settings-layout">
@@ -20,7 +15,7 @@
             <Palette :size="22" />
             <div>
               <h2>主题模式</h2>
-              <p>选择整个音乐客户端的显示主题。</p>
+              <p>切换适合当前环境的显示方式。</p>
             </div>
           </div>
 
@@ -33,7 +28,7 @@
               <Moon :size="22" />
               <span>
                 <strong>深色主题</strong>
-                <small>贴近当前播放器视觉</small>
+                <small>适合夜间和沉浸播放</small>
               </span>
             </button>
             <button
@@ -44,7 +39,7 @@
               <Sun :size="22" />
               <span>
                 <strong>浅色主题</strong>
-                <small>更适合白天浏览</small>
+                <small>适合白天浏览和整理</small>
               </span>
             </button>
           </div>
@@ -55,7 +50,7 @@
             <Paintbrush :size="22" />
             <div>
               <h2>主题色</h2>
-              <p>选择全局强调色，导航、按钮、进度和选中态会一起同步。</p>
+              <p>用于导航、按钮、进度和选中状态。</p>
             </div>
           </div>
 
@@ -89,7 +84,7 @@
             <Wand2 :size="22" />
             <div>
               <h2>过渡效果</h2>
-              <p>切换主题时使用选中的动画，也可以单独演示。</p>
+              <p>选择切换主题时使用的动画。</p>
             </div>
           </div>
 
@@ -99,7 +94,7 @@
               :key="effect.value"
               type="button"
               :class="{ active: theme.state.transition === effect.value }"
-              @click="selectEffect(effect.value)"
+              @click="theme.setTransition(effect.value)"
             >
               <strong>{{ effect.label }}</strong>
               <small>{{ effect.desc }}</small>
@@ -112,7 +107,7 @@
             <ListMusic :size="22" />
             <div>
               <h2>播放列表动效</h2>
-              <p>点击播放器右侧列表按钮时使用的弹窗过渡。</p>
+              <p>打开播放器右侧列表时使用的弹窗过渡。</p>
             </div>
           </div>
 
@@ -130,51 +125,14 @@
           </div>
         </div>
       </div>
-
-      <aside class="transition-demo">
-        <div class="demo-player">
-          <div class="demo-cover" />
-          <div class="demo-copy">
-            <span>Theme Preview</span>
-            <strong>{{ currentEffect?.label }}</strong>
-            <small>{{ currentEffect?.desc }}</small>
-          </div>
-          <button type="button" @click="theme.previewTransition">
-            <Play :size="18" fill="currentColor" />
-          </button>
-        </div>
-
-        <div
-          class="demo-stage"
-          :class="[`demo-stage--${theme.state.transition}`, { 'is-playing': theme.state.animating }]"
-        >
-          <span />
-          <span />
-          <span />
-          <div class="demo-stage__card">
-            <strong>{{ theme.state.mode === 'dark' ? 'Dark' : 'Light' }}</strong>
-            <span class="theme-color-pill" :style="{ '--swatch-color': theme.state.primaryColor }">
-              {{ theme.state.primaryColor }}
-            </span>
-            <small>点击左侧选项或这里的播放按钮查看过渡</small>
-          </div>
-        </div>
-      </aside>
     </section>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { ListMusic, Moon, Paintbrush, Palette, Play, Sparkles, Sun, Wand2 } from 'lucide-vue-next'
+import { ListMusic, Moon, Paintbrush, Palette, Sun, Wand2 } from 'lucide-vue-next'
 import { useThemeStore } from '../stores/theme'
 import '../styles/settings.css'
 
 const theme = useThemeStore()
-const currentEffect = computed(() => theme.effects.find((effect) => effect.value === theme.state.transition))
-
-function selectEffect(effect) {
-  theme.setTransition(effect)
-  theme.previewTransition()
-}
 </script>

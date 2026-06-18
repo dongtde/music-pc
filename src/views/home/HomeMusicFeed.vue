@@ -64,8 +64,24 @@
                   <AudioLines :size="16" />
                   {{ getMoodSignal(index) }}
                 </span>
-                <span v-if="song.vip" class="soda-slide__meta-tag">VIP</span>
-                <span v-if="song.hasVideo" class="soda-slide__meta-tag">视频</span>
+                <span
+                  v-for="badge in getSongAccessBadges(song)"
+                  :key="`access-${badge.value}`"
+                  class="soda-slide__meta-tag"
+                  :class="`soda-slide__meta-tag--${badge.value}`"
+                  :title="badge.label"
+                >
+                  {{ badge.badgeLabel }}
+                </span>
+                <span
+                  v-for="quality in getAudioQualityBadges(song, { limit: 1, includeDefault: true })"
+                  :key="`quality-${quality.value}`"
+                  class="soda-slide__meta-tag soda-slide__meta-tag--quality"
+                  :class="`soda-slide__meta-tag--quality-${quality.value}`"
+                  :title="quality.label"
+                >
+                  {{ quality.badgeLabel }}
+                </span>
               </div>
               <h1>{{ song.name }}</h1>
               <p>{{ song.artist }}<span v-if="song.album"> · {{ song.album }}</span></p>
@@ -217,6 +233,8 @@ import {
 } from 'lucide-vue-next'
 import DanmakuLayer from '../../components/DanmakuLayer.vue'
 import LyricsScroller from '../../components/LyricsScroller.vue'
+import { getAudioQualityBadges } from '../../utils/audioQuality'
+import { getSongAccessBadges } from '../../utils/songAccess'
 import { useHomeMusicFeed } from './useHomeMusicFeed'
 
 const CommentModal = defineAsyncComponent(() => import('../../components/CommentModal.vue'))

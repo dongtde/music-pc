@@ -12,6 +12,7 @@ export const STORAGE_KEYS = {
   dailyVipClaim: 'mappic:daily-vip-claim',
   libraryData: 'mappic:library:data',
   playerSnapshot: 'mappic:player:last-track',
+  playbackQuality: 'mappic:player:quality',
   themePreferences: 'mappic-theme-preferences',
   searchHistory: 'mappic.searchHistory',
   fullPlayerVisualizerMode: 'mappic:full-player:visualizer-mode',

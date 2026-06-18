@@ -32,7 +32,25 @@
       <span class="song-list-row__title">
         <span class="song-list-row__name">
           <strong>{{ track.name }}</strong>
-          <span v-if="track.vip" class="song-list-row__badge">VIP</span>
+          <span
+            v-for="badge in accessBadges"
+            :key="badge.value"
+            class="song-list-row__badge"
+            :class="`song-list-row__badge--${badge.value}`"
+            :title="badge.label"
+            :aria-label="badge.label"
+          >
+            <span>{{ badge.badgeLabel }}</span>
+          </span>
+          <span
+            v-for="quality in qualityBadges"
+            :key="quality.value"
+            class="song-list-row__quality"
+            :class="`song-list-row__quality--${quality.value}`"
+            :title="quality.label"
+          >
+            {{ quality.badgeLabel }}
+          </span>
           <RouterLink
             v-if="videoTarget"
             class="song-list-row__video"
@@ -73,6 +91,8 @@ import { computed } from 'vue'
 import { useMessage } from 'naive-ui'
 import { AudioLines, Play, Video } from 'lucide-vue-next'
 import { usePlayerStore } from '../stores/player'
+import { getAudioQualityBadges } from '../utils/audioQuality'
+import { getSongAccessBadges } from '../utils/songAccess'
 
 const player = usePlayerStore()
 const message = useMessage()
@@ -97,6 +117,10 @@ const emit = defineEmits(['play'])
 const artistTarget = computed(() => getArtistTarget(props.track))
 const albumTarget = computed(() => getAlbumTarget(props.track))
 const videoTarget = computed(() => getVideoTarget(props.track))
+const accessBadges = computed(() => getSongAccessBadges(props.track))
+const qualityBadges = computed(() =>
+  getAudioQualityBadges(props.track, { limit: 1, includeDefault: true })
+)
 
 function isPlaying(track) {
   return track.isPlaying || (player.state.currentTrack.id === track.id && player.state.isPlaying)
@@ -233,11 +257,13 @@ function normalizeRouteId(value) {
 .song-list-row.is-playing .song-list-row__album,
 .song-list-row.is-playing .song-list-row__time,
 .song-list-row.is-playing .song-list-row__badge,
+.song-list-row.is-playing .song-list-row__quality,
 .song-list-row.is-playing .song-list-row__video {
   color: var(--accent);
 }
 
 .song-list-row.is-playing .song-list-row__badge,
+.song-list-row.is-playing .song-list-row__quality,
 .song-list-row.is-playing .song-list-row__video {
   border-color: rgba(var(--accent-rgb), 0.58);
 }
@@ -389,6 +415,7 @@ function normalizeRouteId(value) {
 }
 
 .song-list-row__title strong {
+  min-width: 0;
   color: var(--text-strong);
   font-size: 13px;
   font-weight: 500;
@@ -396,6 +423,7 @@ function normalizeRouteId(value) {
 }
 
 .song-list-row__badge,
+.song-list-row__quality,
 .song-list-row__video {
   display: inline-flex;
   height: 14px;
@@ -407,11 +435,43 @@ function normalizeRouteId(value) {
 }
 
 .song-list-row__badge {
-  padding: 0 3px;
-  border: 1px solid #20d783;
-  color: #20d783;
-  font-size: 9px;
+  gap: 2px;
+  min-width: 28px;
+  padding: 0 4px 0 3px;
+  border: 1px solid rgba(245, 196, 66, 0.7);
+  color: #f5c442;
+  background: rgba(245, 196, 66, 0.1);
+  font-size: 8px;
   font-weight: 800;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.song-list-row__badge svg {
+  flex: 0 0 auto;
+}
+
+.song-list-row__badge--trial {
+  border-color: rgba(78, 168, 255, 0.58);
+  color: #4ea8ff;
+  background: rgba(78, 168, 255, 0.1);
+}
+
+.song-list-row__quality {
+  min-width: 20px;
+  padding: 0 4px;
+  border: 1px solid rgba(78, 168, 255, 0.58);
+  color: #4ea8ff;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.song-list-row__quality--flac,
+.song-list-row__quality--high {
+  border-color: rgba(245, 158, 11, 0.66);
+  color: #f59e0b;
 }
 
 .song-list-row__video {

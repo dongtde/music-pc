@@ -4,13 +4,21 @@ import { STORAGE_KEYS } from '../config/app'
 import { currentTrack as fallbackTrack, newSongs } from '../data/music'
 import { useAuthStore } from './auth'
 import { useLibraryStore } from './library'
-import { readJsonStorage, writeJsonStorage } from '../utils/storage'
+import { readJsonStorage, readStorage, writeJsonStorage, writeStorage } from '../utils/storage'
 import { parseCookieString } from '../utils/kugouAuth'
 import { clampTime, formatTime, parseDuration, toFiniteNumber } from '../utils/time'
+import {
+  DEFAULT_AUDIO_QUALITY,
+  getAudioQualityDefinition,
+  getAudioQualityValuesForTrack,
+  getTrackHighestAudioQuality,
+  normalizeAudioQualityValue
+} from '../utils/audioQuality'
 
 const audio = new Audio()
 const endedListeners = new Set()
 const restoredSnapshot = readPlaybackSnapshot()
+const initialPlaybackQuality = readPlaybackQuality()
 const initialTrack = restoredSnapshot?.track
   ? normalizeRestoredTrack(restoredSnapshot.track)
   : createEmptyTrack()
@@ -31,6 +39,7 @@ const state = reactive({
   currentTime: initialCurrentTime,
   duration: initialDuration,
   error: null,
+  playbackQuality: initialPlaybackQuality,
   volume: 1
 })
 
@@ -94,17 +103,20 @@ export function usePlayerStore() {
     state.error = null
 
     try {
-      const songUrl = await resolvePlaybackUrl(track)
+      const preferredQuality = getTrackHighestAudioQuality(track)
+      const playbackSource = await resolveBestPlaybackSource(track, preferredQuality)
 
-      if (!songUrl) {
+      if (!playbackSource.url) {
         throw new Error('当前歌曲暂无可播放链接')
       }
 
-      state.currentTrack = normalizeTrack(track, songUrl)
+      state.playbackQuality = playbackSource.quality
+      persistPlaybackQuality(playbackSource.quality)
+      state.currentTrack = normalizeTrack(track, playbackSource.url, playbackSource.quality)
       state.duration = parseDuration(state.currentTrack.duration)
       state.currentTime = 0
       lastPersistedSecond = 0
-      audio.src = songUrl
+      audio.src = playbackSource.url
       audio.currentTime = 0
       await audio.play()
       persistPlaybackSnapshot()
@@ -204,6 +216,81 @@ export function usePlayerStore() {
       : state.currentTime
   }
 
+  async function setPlaybackQuality(value) {
+    const nextQuality = normalizeSelectablePlaybackQuality(value, state.currentTrack)
+    const previousQuality = state.playbackQuality
+
+    state.playbackQuality = nextQuality
+    persistPlaybackQuality(nextQuality)
+
+    if (previousQuality === nextQuality) {
+      return true
+    }
+
+    if (!shouldReloadCurrentTrackForQuality(state.currentTrack)) {
+      if (isRestorableTrack(state.currentTrack)) {
+        state.currentTrack.playbackQuality = nextQuality
+        state.currentTrack.playbackQualityLabel = getAudioQualityDefinition(nextQuality).shortLabel
+        persistPlaybackSnapshot()
+      }
+
+      return true
+    }
+
+    const resumeTime = clampTime(getCurrentTime(), state.duration)
+    const shouldResume = !audio.paused
+    let appliedQuality = false
+
+    state.isLoading = true
+    state.error = null
+
+    try {
+      const songUrl = await resolvePlaybackUrl(state.currentTrack, nextQuality)
+
+      if (!songUrl) {
+        const quality = getAudioQualityDefinition(nextQuality)
+        throw new Error(`${quality.shortLabel} 暂无可播放链接`)
+      }
+
+      state.currentTrack = normalizeTrack(state.currentTrack, songUrl, nextQuality)
+      state.currentTrack.elapsed = formatTime(resumeTime)
+      state.currentTime = resumeTime
+      audio.src = songUrl
+      appliedQuality = true
+
+      try {
+        audio.currentTime = resumeTime
+      } catch (error) {
+        console.warn('Failed to restore playback position after quality switch:', error)
+      }
+
+      if (shouldResume) {
+        await audio.play()
+      }
+
+      persistPlaybackSnapshot()
+      useLibraryStore().addRecentTrack(state.currentTrack)
+      return true
+    } catch (error) {
+      if (!appliedQuality) {
+        state.playbackQuality = previousQuality
+        persistPlaybackQuality(previousQuality)
+
+        if (isRestorableTrack(state.currentTrack)) {
+          state.currentTrack.playbackQuality = previousQuality
+          state.currentTrack.playbackQualityLabel = getAudioQualityDefinition(previousQuality).shortLabel
+        }
+      }
+
+      state.error = error
+      state.isPlaying = !audio.paused
+      console.warn('Failed to switch playback quality:', error)
+      return false
+    } finally {
+      state.isLoading = false
+    }
+  }
+
   return {
     state,
     playTrack,
@@ -211,13 +298,47 @@ export function usePlayerStore() {
     restartCurrentTrack,
     setQueue,
     setVolume,
+    setPlaybackQuality,
     seekTo,
     getCurrentTime,
     onTrackEnded
   }
 }
 
-async function resolvePlaybackUrl(track) {
+async function resolveBestPlaybackSource(track, preferredQuality) {
+  for (const quality of getPlaybackQualityCandidates(track, preferredQuality)) {
+    const url = await resolvePlaybackUrl(track, quality)
+
+    if (url) {
+      return { url, quality }
+    }
+  }
+
+  return { url: '', quality: normalizeSelectablePlaybackQuality(preferredQuality, track) }
+}
+
+function getPlaybackQualityCandidates(track, preferredQuality) {
+  const availableQualities = getAudioQualityValuesForTrack(track)
+  const normalizedPreferred = normalizeSelectablePlaybackQuality(preferredQuality, track)
+
+  return [
+    normalizedPreferred,
+    ...availableQualities.filter((quality) => quality !== normalizedPreferred)
+  ]
+}
+
+function normalizeSelectablePlaybackQuality(value, track = state.currentTrack) {
+  const requestedQuality = normalizeAudioQualityValue(value)
+  const availableQualities = getAudioQualityValuesForTrack(track)
+
+  if (requestedQuality && availableQualities.includes(requestedQuality)) {
+    return requestedQuality
+  }
+
+  return availableQualities[0] || DEFAULT_AUDIO_QUALITY
+}
+
+async function resolvePlaybackUrl(track, quality = state.playbackQuality) {
   if (track.localUrl) {
     return track.localUrl
   }
@@ -227,10 +348,8 @@ async function resolvePlaybackUrl(track) {
   }
 
   const auth = useAuthStore()
-  if (!auth.state.cookie) {
-    await auth.loginAsGuest()
-  }
-  await ensurePlaybackCookie(auth)
+  const playbackCookie = await ensurePlaybackCookie(auth)
+  const playbackQuality = normalizeAudioQualityValue(quality) || DEFAULT_AUDIO_QUALITY
 
   const response = await getSongUrl({
     id: track.id,
@@ -238,8 +357,8 @@ async function resolvePlaybackUrl(track) {
     album_audio_id: track.album_audio_id ?? track.mixsongid ?? track.audio_id,
     mixsongid: track.mixsongid,
     album_id: track.album_id ?? track.albumId,
-    quality: '128',
-    cookie: auth.state.cookie
+    quality: playbackQuality,
+    cookie: playbackCookie
   })
   return normalizeDesktopPlaybackUrl(response.data?.[0]?.url || '')
 }
@@ -281,10 +400,15 @@ function notifyTrackEnded() {
   })
 }
 
-function normalizeTrack(track, url) {
+function normalizeTrack(track, url, quality = state.playbackQuality) {
+  const playbackQuality = normalizeAudioQualityValue(quality) || DEFAULT_AUDIO_QUALITY
+  const qualityDefinition = getAudioQualityDefinition(playbackQuality)
+
   return {
     ...track,
     url,
+    playbackQuality,
+    playbackQualityLabel: qualityDefinition.shortLabel,
     elapsed: '0:00',
     duration: track.time ?? track.duration ?? '0:00',
     coverPalette: track.coverPalette ?? fallbackTrack.coverPalette
@@ -309,6 +433,8 @@ function createEmptyTrack() {
     artist: '选择歌曲开始播放',
     elapsed: '0:00',
     duration: '0:00',
+    playbackQuality: initialPlaybackQuality,
+    qualities: [],
     coverPalette: fallbackTrack.coverPalette
   }
 }
@@ -388,6 +514,8 @@ function serializeTrack(track) {
     mixsongid: track.mixsongid,
     album_id: track.album_id,
     audio_id: track.audio_id,
+    qualities: track.qualities,
+    playbackQuality: track.playbackQuality,
     likedCount: track.likedCount,
     likedCountLabel: track.likedCountLabel,
     commentCount: track.commentCount,
@@ -404,4 +532,27 @@ function isRestorableTrack(track) {
 
 function parseCookie(cookie = '') {
   return parseCookieString(cookie)
+}
+
+function shouldReloadCurrentTrackForQuality(track) {
+  return Boolean(
+    isRestorableTrack(track) &&
+      audio.src &&
+      !track.localUrl &&
+      !String(track.id).startsWith('local-')
+  )
+}
+
+function readPlaybackQuality() {
+  const storedQuality = readStorage(STORAGE_KEYS.playbackQuality, DEFAULT_AUDIO_QUALITY)
+
+  return normalizeAudioQualityValue(storedQuality) || DEFAULT_AUDIO_QUALITY
+}
+
+function persistPlaybackQuality(value) {
+  const quality = normalizeAudioQualityValue(value) || DEFAULT_AUDIO_QUALITY
+
+  if (!writeStorage(STORAGE_KEYS.playbackQuality, quality)) {
+    console.warn('Failed to persist playback quality')
+  }
 }

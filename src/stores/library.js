@@ -311,6 +311,17 @@ export function useLibraryStore() {
     persist()
   }
 
+  function replaceRemotePlaylists({ createdPlaylists = [], collectedPlaylists = [] } = {}) {
+    state.createdPlaylists = Array.isArray(createdPlaylists)
+      ? createdPlaylists.map(normalizePlaylist)
+      : []
+    state.collectedPlaylists = Array.isArray(collectedPlaylists)
+      ? collectedPlaylists.map(normalizePlaylist)
+      : []
+
+    persist()
+  }
+
   function seedLikedIfEmpty() {
     if (state.likedTracks.length) {
       return
@@ -337,6 +348,7 @@ export function useLibraryStore() {
     createPlaylist,
     addTrackToPlaylist,
     mergeRemotePlaylists,
+    replaceRemotePlaylists,
     seedLikedIfEmpty
   }
 }
@@ -355,12 +367,8 @@ function createInitialState() {
     likedTracks: canReuseStoredDefaults && Array.isArray(stored?.likedTracks)
       ? stored.likedTracks.map(normalizeTrack)
       : fallbackTracks.slice(0, 6),
-    createdPlaylists: canReuseStoredDefaults && Array.isArray(stored?.createdPlaylists)
-      ? stored.createdPlaylists.map(normalizePlaylist)
-      : defaultCreatedPlaylists,
-    collectedPlaylists: canReuseStoredDefaults && Array.isArray(stored?.collectedPlaylists)
-      ? stored.collectedPlaylists.map(normalizePlaylist)
-      : defaultCollectedPlaylists
+    createdPlaylists: [],
+    collectedPlaylists: []
   }
 }
 

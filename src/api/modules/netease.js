@@ -1,5 +1,7 @@
 import http from '../http'
 import { readStoredKugouAuth, toKugouAuthCookie } from '../../utils/kugouAuth'
+import { normalizeAudioQualities } from '../../utils/audioQuality'
+import { normalizeSongAccess } from '../../utils/songAccess'
 
 /**
  * KuGouMusic API compatibility layer.
@@ -49,6 +51,15 @@ function withStoredKugouSearchCookie(path, params = {}, config = {}) {
 
 const songRegistry = new Map()
 const lyricRequestRegistry = new Map()
+const pagesizeParamPaths = new Set([
+  '/lastest/songs/listen',
+  '/playlist/track/all',
+  '/playlist/track/all/new',
+  '/user/cloud',
+  '/user/playlist',
+  '/user/video/collect',
+  '/user/video/love'
+])
 
 function normalizeParams(path, params) {
   const normalized = { ...params }
@@ -133,6 +144,21 @@ function normalizeParams(path, params) {
     delete normalized.type
   }
 
+  if (path === '/playlist/add') {
+    normalized.type ??= 0
+
+    if (normalized.isPrivate !== undefined && normalized.is_pri === undefined) {
+      normalized.is_pri = normalized.isPrivate ? 1 : 0
+    }
+
+    if (normalized.private !== undefined && normalized.is_pri === undefined) {
+      normalized.is_pri = normalized.private ? 1 : 0
+    }
+
+    delete normalized.isPrivate
+    delete normalized.private
+  }
+
   if (isSearchPath(path)) {
     if (normalized.pageSize !== undefined && normalized.pagesize === undefined) {
       normalized.pagesize = normalized.pageSize
@@ -142,6 +168,14 @@ function normalizeParams(path, params) {
   }
 
   if (isCommentPath(path)) {
+    if (normalized.pageSize !== undefined && normalized.pagesize === undefined) {
+      normalized.pagesize = normalized.pageSize
+    }
+
+    delete normalized.pageSize
+  }
+
+  if (pagesizeParamPaths.has(path)) {
     if (normalized.pageSize !== undefined && normalized.pagesize === undefined) {
       normalized.pagesize = normalized.pageSize
     }
@@ -226,6 +260,20 @@ function isSearchPath(path = '') {
   return path === '/search' || path.startsWith('/search/')
 }
 
+function withStoredKugouAuthParams(params = {}) {
+  const auth = readStoredKugouAuth()
+  const authParams = {
+    token: auth.token,
+    userid: auth.userid,
+    dfid: auth.dfid
+  }
+
+  return {
+    ...authParams,
+    ...params
+  }
+}
+
 function isCommentPath(path = '') {
   return path === '/comment/playlist' || path === '/comment/album' || path === '/comment/music'
 }
@@ -308,7 +356,8 @@ function rememberSong(song) {
     album_audio_id: song.album_audio_id,
     mixsongid: song.mixsongid,
     album_id: song.album_id,
-    audio_id: song.audio_id
+    audio_id: song.audio_id,
+    qualities: song.qualities
   })
 
   return song
@@ -505,6 +554,8 @@ function normalizeSong(song = {}, index = 0) {
     source.video_info?.video_hash ||
     source.mv_hash ||
     ''
+  const qualities = normalizeAudioQualities(source)
+  const access = normalizeSongAccess(source)
   const normalized = {
     ...source,
     id,
@@ -524,10 +575,15 @@ function normalizeSong(song = {}, index = 0) {
     mixsongid: source.mixsongid ?? source.add_mixsongid ?? source.album_audio_id ?? id,
     audio_id: source.audio_id ?? source.rp_id ?? '',
     album_id: albumId,
+    qualities,
     duration,
     dt: duration,
     mv: mvId,
-    fee: source.pay_type || source.feetype || 0,
+    fee: access.fee,
+    vip: access.vip,
+    accessType: access.accessType,
+    accessBadges: access.badges,
+    songAccess: access,
     ar: [{
       id: artistId,
       name: artistName
@@ -1410,6 +1466,7 @@ function normalizeSearchSong(song = {}, index = 0) {
     ]) || song.trans_param?.union_cover,
     480
   )
+  const access = normalizeSongAccess(song)
   const normalized = {
     ...song,
     id: pickField(song, ['AlbumAudioID', 'AlbumAudioId', 'album_audio_id', 'MixSongID', 'mixsongid', 'AudioID', 'audio_id', 'ID', 'id', 'FileHash', 'Hash', 'hash']),
@@ -1420,6 +1477,12 @@ function normalizeSearchSong(song = {}, index = 0) {
     mixsongid: pickField(song, ['MixSongID', 'mixsongid', 'AlbumAudioID', 'album_audio_id']),
     audio_id: pickField(song, ['AudioID', 'AudioId', 'audio_id']),
     album_id: pickField(song, ['AlbumID', 'AlbumId', 'album_id', 'albumid']),
+    qualities: normalizeAudioQualities(song),
+    fee: access.fee,
+    vip: access.vip,
+    accessType: access.accessType,
+    accessBadges: access.badges,
+    songAccess: access,
     duration: toMilliseconds(pickField(song, ['Duration', 'duration', 'TimeLength', 'timelength', 'FileTime', 'FileDuration'])),
     dt: toMilliseconds(pickField(song, ['Duration', 'duration', 'TimeLength', 'timelength', 'FileTime', 'FileDuration'])),
     mv: pickField(song, ['MvID', 'MVID', 'mv_id', 'mvid', 'VideoID', 'video_id', 'MvHash', 'MVHash', 'mvhash']),
@@ -1935,9 +1998,20 @@ export const getSportRadio = (params = {}) => getKugou('/fm/recommend', params)
 // User library
 export const checkSongLike = (params = {}) => getKugou('/favorite/count', { mixsongids: params.ids, ...params })
 export const updateSongLike = (params = {}) => getKugou('/playlist/tracks/add', params)
-export const getUserCreatedPlaylists = (params = {}) => getKugou('/user/playlist', params).then(toPlaylistListResponse)
-export const getUserCollectedPlaylists = (params = {}) => getKugou('/user/playlist', params).then(toPlaylistListResponse)
-export const getSongDownloadList = (params = {}) => getKugou('/user/cloud', params).then(toSongListResponse)
+export const getUserPlaylists = (params = {}) =>
+  getKugou('/user/playlist', withStoredKugouAuthParams(params)).then(toPlaylistListResponse)
+export const getUserCreatedPlaylists = getUserPlaylists
+export const getUserCollectedPlaylists = getUserPlaylists
+export const createUserPlaylist = (params = {}) =>
+  getKugou('/playlist/add', withStoredKugouAuthParams({ type: 0, ...params }))
+export const deleteUserPlaylist = (params = {}) =>
+  getKugou('/playlist/del', withStoredKugouAuthParams(params))
+export const addUserPlaylistTracks = (params = {}) =>
+  getKugou('/playlist/tracks/add', withStoredKugouAuthParams(params))
+export const deleteUserPlaylistTracks = (params = {}) =>
+  getKugou('/playlist/tracks/del', withStoredKugouAuthParams(params))
+export const getSongDownloadList = (params = {}) =>
+  getKugou('/user/cloud', withStoredKugouAuthParams(params)).then(toSongListResponse)
 
 // Playlists and charts
 export const getPlaylistDetail = (params = {}) => {

@@ -251,6 +251,27 @@
   background: rgba(255, 255, 255, 0.07);
   font-size: 12px;
   font-weight: 800;
+  letter-spacing: 0;
+}
+
+.soda-slide__meta-tag--vip {
+  border-color: rgba(245, 196, 66, 0.5);
+  color: #f5c442;
+  background: rgba(245, 196, 66, 0.13);
+}
+
+.soda-slide__meta-tag--trial,
+.soda-slide__meta-tag--quality {
+  border-color: rgba(78, 168, 255, 0.46);
+  color: #9dccff;
+  background: rgba(78, 168, 255, 0.12);
+}
+
+.soda-slide__meta-tag--quality-flac,
+.soda-slide__meta-tag--quality-high {
+  border-color: rgba(245, 158, 11, 0.52);
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.13);
 }
 
 .soda-slide__caption h1 {

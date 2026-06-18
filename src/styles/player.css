@@ -288,6 +288,19 @@
   overflow: visible;
 }
 
+.quality-popover {
+  width: 190px;
+  padding: 5px;
+  overflow: visible;
+}
+
+.player-tools > .control-popover-wrap > .quality-button {
+  width: auto;
+  min-width: 42px;
+  padding: 0 7px;
+  border-radius: 999px;
+}
+
 .mode-option {
   position: relative;
   z-index: 1;
@@ -325,6 +338,74 @@
   cursor: pointer;
 }
 
+.quality-option {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  align-items: center;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-main);
+  cursor: pointer;
+  text-align: left;
+}
+
+.quality-option:disabled {
+  cursor: progress;
+  opacity: 0.58;
+}
+
+.quality-button__badge {
+  display: inline-flex;
+  height: 14px;
+  min-width: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 1px solid rgba(78, 168, 255, 0.58);
+  border-radius: 4px;
+  color: #4ea8ff;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.quality-button__badge--flac,
+.quality-button__badge--high {
+  border-color: rgba(245, 158, 11, 0.66);
+  color: #f59e0b;
+}
+
+.quality-option__text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.quality-option__text strong,
+.quality-option__text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quality-option__text strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.quality-option__text small {
+  font-size: 11px;
+}
+
 .mode-option svg {
   width: 18px;
   height: 18px;
@@ -354,6 +435,10 @@
 }
 
 .visualizer-option + .visualizer-option {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.quality-option + .quality-option {
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -700,15 +785,16 @@
   position: relative;
   display: block;
   overflow: hidden;
-  min-width: var(--track-meta-width);
-  max-width: var(--track-meta-width);
+  width: fit-content;
+  min-width: 0;
+  max-width: min(100%, var(--track-meta-width));
   line-height: 1.2;
   white-space: nowrap;
 }
 
 .track-summary__marquee-title {
   display: inline-block;
-  width: var(--track-title-width);
+  max-width: var(--track-title-width);
   color: var(--text-strong);
   font-size: 14px;
   font-weight: 400;
@@ -719,7 +805,7 @@
 
 .track-summary__marquee-artist {
   display: inline-block;
-  width: var(--track-artist-width);
+  max-width: var(--track-artist-width);
   color: var(--text-muted);
   font-size: 14px;
   font-weight: 400;
@@ -744,7 +830,7 @@
 
 .track-summary__marquee-measure .track-summary__marquee-title,
 .track-summary__marquee-measure .track-summary__marquee-artist {
-  width: auto;
+  max-width: none;
   overflow: visible;
 }
 
@@ -764,7 +850,7 @@
 
 .track-summary__marquee.is-overflowing .track-summary__marquee-title,
 .track-summary__marquee.is-overflowing .track-summary__marquee-artist {
-  width: auto;
+  max-width: none;
   overflow: visible;
 }
 
@@ -888,6 +974,7 @@
 .volume-button.active,
 .player-tools > .icon-button.active,
 .queue-popover-wrap .icon-button.active,
+.quality-popover-wrap .quality-button.active,
 .visualizer-popover-wrap .icon-button.active {
   color: var(--accent);
   background: rgba(var(--accent-rgb), 0.14);
@@ -915,18 +1002,22 @@
 .mode-option:hover,
 .mode-option.active,
 .visualizer-option:hover,
-.visualizer-option.active {
+.visualizer-option.active,
+.quality-option:hover,
+.quality-option.active {
   color: var(--accent);
   background: rgba(var(--accent-rgb), 0.12);
 }
 
 .mode-option,
-.visualizer-option {
+.visualizer-option,
+.quality-option {
   color: var(--text-main);
 }
 
 .mode-option span,
 .visualizer-option span,
+.quality-option__text small,
 .queue-popover__head small {
   color: var(--text-muted);
 }
@@ -934,12 +1025,15 @@
 .mode-option:hover span,
 .mode-option.active span,
 .visualizer-option:hover span,
-.visualizer-option.active span {
+.visualizer-option.active span,
+.quality-option:hover .quality-option__text small,
+.quality-option.active .quality-option__text small {
   color: var(--accent);
 }
 
 .mode-option + .mode-option,
-.visualizer-option + .visualizer-option {
+.visualizer-option + .visualizer-option,
+.quality-option + .quality-option {
   border-top-color: var(--border-subtle);
 }
 

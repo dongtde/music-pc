@@ -253,6 +253,41 @@
         </div>
       </div>
       <button class="icon-button" type="button" aria-label="麦克风"><Mic2 :size="17" /></button>
+      <div class="control-popover-wrap quality-popover-wrap">
+        <button
+          class="icon-button quality-button"
+          type="button"
+          :aria-label="qualityButtonLabel"
+          :title="qualityButtonLabel"
+          :aria-pressed="qualityMenuOpen"
+          :class="{ active: qualityMenuOpen }"
+          @click="toggleQualityMenu"
+        >
+          <span
+            class="quality-button__badge"
+            :class="`quality-button__badge--${activeAudioQuality.value}`"
+          >
+            {{ activeAudioQuality.badgeLabel }}
+          </span>
+        </button>
+        <div v-if="qualityMenuOpen" class="player-popover quality-popover">
+          <button
+            v-for="option in playbackQualityOptions"
+            :key="option.value"
+            class="quality-option"
+            type="button"
+            :aria-pressed="option.value === activePlaybackQualityValue"
+            :class="{ active: option.value === activePlaybackQualityValue }"
+            :disabled="player.state.isLoading"
+            @click="selectPlaybackQuality(option.value)"
+          >
+            <span class="quality-option__text">
+              <strong>{{ option.label }}</strong>
+              <small>{{ option.description }}</small>
+            </span>
+          </button>
+        </div>
+      </div>
       <button
         v-if="desktopLyricsAvailable"
         class="icon-button"
@@ -329,6 +364,7 @@ import { getSongCommentsData, getSongInteractionStatsData, getTrackLyricData, up
 import { useSongComments } from '../composables/useSongComments'
 import { readStorage, writeStorage } from '../utils/storage'
 import { formatTime } from '../utils/time'
+import { getAudioQualityDefinition, getAudioQualityOptions } from '../utils/audioQuality'
 import {
   createLyricPlaceholder,
   findCurrentLyricIndex
@@ -347,6 +383,7 @@ const validFullPlayerVisualizerModes = new Set(['halo', 'breath', 'trails', 'nee
 const modeMenuOpen = ref(false)
 const volumeMenuOpen = ref(false)
 const queueMenuOpen = ref(false)
+const qualityMenuOpen = ref(false)
 const visualizerMenuOpen = ref(false)
 const fullPlayerOpen = ref(false)
 const fullPlayerMounted = ref(false)
@@ -449,6 +486,17 @@ const activeVisualizerMode = computed(() =>
   visualizerModes.find((mode) => mode.value === fullPlayerVisualizerMode.value) ?? visualizerModes[0]
 )
 const currentTrack = computed(() => player.state.currentTrack)
+const playbackQualityOptions = computed(() =>
+  getAudioQualityOptions(currentTrack.value, { selected: player.state.playbackQuality })
+)
+const activePlaybackQualityValue = computed(
+  () =>
+    playbackQualityOptions.value.find((option) => option.value === player.state.playbackQuality)?.value ??
+    playbackQualityOptions.value[0]?.value ??
+    player.state.playbackQuality
+)
+const activeAudioQuality = computed(() => getAudioQualityDefinition(activePlaybackQualityValue.value))
+const qualityButtonLabel = computed(() => `音质：${activeAudioQuality.value.label}`)
 const currentTrackLiked = computed(() => library.isTrackLiked(currentTrack.value))
 const songCommentState = useSongComments({
   track: currentTrack,
@@ -597,6 +645,7 @@ function toggleModeMenu() {
   modeMenuOpen.value = !modeMenuOpen.value
   volumeMenuOpen.value = false
   queueMenuOpen.value = false
+  qualityMenuOpen.value = false
   visualizerMenuOpen.value = false
 }
 
@@ -604,6 +653,7 @@ function toggleVolumeMenu() {
   volumeMenuOpen.value = !volumeMenuOpen.value
   modeMenuOpen.value = false
   queueMenuOpen.value = false
+  qualityMenuOpen.value = false
   visualizerMenuOpen.value = false
 }
 
@@ -612,6 +662,15 @@ function toggleQueueMenu() {
   queueMenuOpen.value = !queueMenuOpen.value
   modeMenuOpen.value = false
   volumeMenuOpen.value = false
+  qualityMenuOpen.value = false
+  visualizerMenuOpen.value = false
+}
+
+function toggleQualityMenu() {
+  qualityMenuOpen.value = !qualityMenuOpen.value
+  modeMenuOpen.value = false
+  volumeMenuOpen.value = false
+  queueMenuOpen.value = false
   visualizerMenuOpen.value = false
 }
 
@@ -620,6 +679,7 @@ function toggleVisualizerMenu() {
   modeMenuOpen.value = false
   volumeMenuOpen.value = false
   queueMenuOpen.value = false
+  qualityMenuOpen.value = false
 }
 
 function selectPlayMode(value) {
@@ -634,6 +694,16 @@ function selectVisualizerMode(value) {
 
   fullPlayerVisualizerMode.value = value
   visualizerMenuOpen.value = false
+}
+
+async function selectPlaybackQuality(value) {
+  qualityMenuOpen.value = false
+
+  const switched = await player.setPlaybackQuality(value)
+
+  if (!switched) {
+    showPlaybackError(false)
+  }
 }
 
 function readFullPlayerVisualizerMode() {
@@ -1021,6 +1091,7 @@ function closePlayerPopovers() {
   modeMenuOpen.value = false
   volumeMenuOpen.value = false
   queueMenuOpen.value = false
+  qualityMenuOpen.value = false
   visualizerMenuOpen.value = false
 }
 

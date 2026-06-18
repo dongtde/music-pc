@@ -60,6 +60,7 @@
             class="mini-action"
             type="button"
             :aria-label="group.actionLabel || group.action"
+            :disabled="group.disabled"
             @click="handleGroupAction(group)"
           >
             {{ group.action }}
@@ -85,7 +86,7 @@
 
 <script setup>
 import { useRoute } from 'vue-router'
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useMessage } from 'naive-ui'
 import {
   ChevronRight,
@@ -103,7 +104,7 @@ import {
 } from 'lucide-vue-next'
 import { useAuthStore } from '../stores/auth'
 import { useLibraryStore } from '../stores/library'
-import { getUserPlaylistLibraryData } from '../services/netease'
+import { createUserPlaylistData, getUserPlaylistLibraryData } from '../services/netease'
 
 defineProps({
   compact: {
@@ -116,11 +117,13 @@ const route = useRoute()
 const auth = useAuthStore()
 const library = useLibraryStore()
 const message = useMessage()
+const creatingPlaylist = ref(false)
 const displayName = auth.displayName
 const avatarUrl = auth.avatarUrl
 const icons = { CloudDownload, Compass, Heart, History, House, Music2, Radio, RadioTower, Users, Video }
 const endTimeLabel = '\u5230\u671f'
 const showVipButton = computed(() => auth.state.isLoggedIn && !auth.isGuest.value)
+const showUserPlaylistGroups = computed(() => auth.state.isLoggedIn && !auth.isGuest.value)
 const vipButtonText = computed(() => {
   if (auth.state.vip.claiming) {
     return '领取中'
@@ -192,8 +195,10 @@ const sidebarGroups = computed(() => [
   },
   {
     title: '创建的歌单',
-    action: '+',
+    visible: showUserPlaylistGroups.value,
+    action: creatingPlaylist.value ? '...' : '+',
     actionLabel: '新建歌单',
+    disabled: creatingPlaylist.value,
     type: 'created',
     items: library.state.createdPlaylists.map((playlist) => ({
       label: playlist.title,
@@ -203,17 +208,23 @@ const sidebarGroups = computed(() => [
   },
   {
     title: '收藏的歌单',
+    visible: showUserPlaylistGroups.value,
     items: library.state.collectedPlaylists.map((playlist) => ({
       label: playlist.title,
       to: `/playlist/${playlist.id}`,
       icon: 'Music2'
     }))
   }
-])
+].filter((group) => group.visible !== false))
 
 watch(
-  () => auth.userId.value,
-  (uid) => {
+  () => [auth.userId.value, auth.state.isLoggedIn, auth.isGuest.value],
+  ([uid, isLoggedIn, isGuest]) => {
+    if (!isLoggedIn || isGuest || !uid) {
+      library.replaceRemotePlaylists()
+      return
+    }
+
     syncRemotePlaylists(uid)
   },
   { immediate: true }
@@ -223,8 +234,18 @@ function isActive(item) {
   return item.activeMatch ? route.path.startsWith(item.activeMatch) : route.path === item.to
 }
 
-function handleGroupAction(group) {
+async function handleGroupAction(group) {
   if (group.type !== 'created') {
+    return
+  }
+
+  if (!auth.state.isLoggedIn || auth.isGuest.value) {
+    auth.openLoginModal()
+    message.info('\u8bf7\u5148\u767b\u5f55\u9177\u72d7\u8d26\u53f7')
+    return
+  }
+
+  if (creatingPlaylist.value) {
     return
   }
 
@@ -234,7 +255,23 @@ function handleGroupAction(group) {
     return
   }
 
-  library.createPlaylist(title)
+  creatingPlaylist.value = true
+
+  try {
+    await createUserPlaylistData({ name: title })
+
+    const data = await syncRemotePlaylists(auth.userId.value)
+    if (data) {
+      message.success('\u6b4c\u5355\u5df2\u521b\u5efa')
+    } else {
+      message.warning('\u6b4c\u5355\u5df2\u521b\u5efa\uff0c\u5217\u8868\u5237\u65b0\u5931\u8d25')
+    }
+  } catch (error) {
+    console.warn('Failed to create user playlist:', error)
+    message.error(error?.message || '\u6b4c\u5355\u521b\u5efa\u5931\u8d25')
+  } finally {
+    creatingPlaylist.value = false
+  }
 }
 
 async function handleVipButtonClick() {
@@ -281,14 +318,19 @@ function isFutureTime(value) {
 
 async function syncRemotePlaylists(uid) {
   if (!uid) {
-    return
+    library.replaceRemotePlaylists()
+    return null
   }
+
+  library.replaceRemotePlaylists()
 
   try {
     const data = await getUserPlaylistLibraryData(uid)
-    library.mergeRemotePlaylists(data)
+    library.replaceRemotePlaylists(data)
+    return data
   } catch (error) {
     console.warn('Failed to sync user playlists:', error)
+    return null
   }
 }
 </script>

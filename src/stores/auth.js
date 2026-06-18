@@ -11,7 +11,6 @@ import {
   loginByEmail,
   logout as requestLogout,
   refreshLogin,
-  registerAnonymous,
   sendCaptcha,
   upgradeYouthDayVip
 } from '../api/modules/netease'
@@ -31,6 +30,7 @@ const storedSession = readStoredSession(storedCookie)
 const initialSession = storedSession.profile || storedSession.account
   ? storedSession
   : createSessionFromCookie(storedCookie)
+const hasInitialSession = Boolean(initialSession.profile || initialSession.account)
 
 const state = reactive({
   initialized: false,
@@ -38,10 +38,10 @@ const state = reactive({
   formLoading: false,
   captchaLoading: false,
   loginModalVisible: false,
-  isLoggedIn: Boolean(storedCookie && (initialSession.profile || initialSession.account)),
-  loginType: storedCookie ? initialSession.loginType : '',
-  account: storedCookie ? initialSession.account : null,
-  profile: storedCookie ? initialSession.profile : null,
+  isLoggedIn: hasInitialSession,
+  loginType: hasInitialSession ? initialSession.loginType || 'account' : '',
+  account: hasInitialSession ? initialSession.account : null,
+  profile: hasInitialSession ? initialSession.profile : null,
   auth: storedAuth,
   cookie: storedCookie,
   error: '',
@@ -66,6 +66,10 @@ let dailyVipClaimRequest = null
 let vipStatusRequest = null
 
 export function useAuthStore() {
+  if (state.loginType === 'guest') {
+    clearAccountState(false)
+  }
+
   const displayName = computed(() =>
     state.profile?.nickname || state.account?.userName || '点击登录'
   )
@@ -74,6 +78,10 @@ export function useAuthStore() {
   const isGuest = computed(() => state.loginType === 'guest')
 
   async function initAuth() {
+    if (state.loginType === 'guest') {
+      clearAccountState(false)
+    }
+
     if (state.initialized || state.loading) {
       return
     }
@@ -336,37 +344,6 @@ export function useAuthStore() {
     return true
   }
 
-  async function loginAsGuest() {
-    state.formLoading = true
-    state.error = ''
-    state.notice = ''
-
-    try {
-      const response = await registerAnonymous({
-        timestamp: Date.now(),
-        noCookie: true
-      })
-      saveCookie(response.cookie || state.cookie)
-      setAccountState({
-        profile: {
-          userId: response.userId || response.data?.userId || 'guest',
-          nickname: '游客账号',
-          avatarUrl: ''
-        },
-        account: null,
-        loginType: 'guest'
-      })
-      state.loginModalVisible = false
-      return true
-    } catch (error) {
-      console.warn('Failed to login as guest:', error)
-      setError(error?.message || '游客登录失败')
-      return false
-    } finally {
-      state.formLoading = false
-    }
-  }
-
   async function loginWithCookie(cookie) {
     const normalizedCookie = String(cookie ?? '').trim()
 
@@ -474,7 +451,6 @@ export function useAuthStore() {
     mergeAuthCookie,
     sendLoginCaptcha,
     verifyLoginCaptcha,
-    loginAsGuest,
     logout,
     openLoginModal,
     closeLoginModal
@@ -482,9 +458,11 @@ export function useAuthStore() {
 }
 
 function setAccountState({ profile, account, loginType }) {
-  state.profile = profile
-  state.account = account
-  state.isLoggedIn = Boolean(profile || account)
+  const isGuestLogin = loginType === 'guest'
+
+  state.profile = isGuestLogin ? null : profile
+  state.account = isGuestLogin ? null : account
+  state.isLoggedIn = !isGuestLogin && Boolean(state.profile || state.account)
   state.loginType = state.isLoggedIn ? loginType || 'account' : ''
   state.error = ''
 
@@ -757,6 +735,11 @@ function readStoredSession(cookie) {
     return {}
   }
 
+  if (session.loginType === 'guest') {
+    clearSession()
+    return {}
+  }
+
   return {
     account: session.account ?? null,
     profile: session.profile ?? null,
@@ -786,23 +769,11 @@ function createSessionFromCookie(cookie) {
     }
   }
 
-  if (cookieValues.dfid) {
-    return {
-      account: null,
-      profile: {
-        userId: 'guest',
-        nickname: '游客账号',
-        avatarUrl: ''
-      },
-      loginType: 'guest'
-    }
-  }
-
   return {}
 }
 
 function saveSession() {
-  if (!state.cookie || (!state.profile && !state.account)) {
+  if (!state.cookie || state.loginType === 'guest' || (!state.profile && !state.account)) {
     clearSession()
     return
   }
