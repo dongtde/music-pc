@@ -18,6 +18,47 @@
   transition: none;
 }
 
+.soda-feed__load-status {
+  position: absolute;
+  top: 22px;
+  left: 24px;
+  z-index: 6;
+  display: inline-flex;
+  max-width: min(340px, calc(100% - 48px));
+  min-height: 32px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.82);
+  background: rgba(8, 8, 9, 0.46);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(16px);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.soda-feed__load-status .soda-spin {
+  flex: 0 0 auto;
+  color: #ffffff;
+  background: transparent;
+  box-shadow: none;
+}
+
+.soda-feed__load-status span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.soda-feed__load-status--error {
+  border-color: rgba(248, 113, 113, 0.34);
+  color: rgba(255, 226, 226, 0.9);
+  background: rgba(95, 18, 18, 0.44);
+}
+
 .soda-feed__tabs {
   position: absolute;
   top: 20px;
@@ -1193,5 +1234,14 @@
 
   .soda-mv-slide__danmaku.soda-danmaku {
     inset: 72px 76px 118px 28px;
+  }
+}
+
+@media (max-width: 760px) {
+  .soda-feed__load-status {
+    top: 62px;
+    left: 50%;
+    max-width: calc(100% - 32px);
+    transform: translateX(-50%);
   }
 }

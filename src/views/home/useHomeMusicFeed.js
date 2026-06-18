@@ -42,6 +42,8 @@ export function useHomeMusicFeed({ active }) {
   const activeMood = ref('daily')
   const activeIndex = ref(0)
   const musicFeedSettling = ref(false)
+  const recommendationsLoading = ref(false)
+  const recommendationsError = ref('')
   const autoPlayAfterGesture = ref(false)
   const allSongs = shallowRef(prepareQueue(recommendedSingles))
   const recommendationQueue = shallowRef(applyMoodQueue(allSongs.value, activeMood.value))
@@ -63,6 +65,7 @@ export function useHomeMusicFeed({ active }) {
   let feedScrollLocked = false
   let syncedQueue = null
   let feedSnapRequestId = 0
+  let recommendationsRequestId = 0
 
   const lyrics = useHomeLyrics({ player })
   const activeSong = computed(() => recommendationQueue.value[activeIndex.value])
@@ -168,8 +171,18 @@ export function useHomeMusicFeed({ active }) {
   }
 
   async function loadRecommendations() {
+    const requestId = ++recommendationsRequestId
+
+    recommendationsLoading.value = true
+    recommendationsError.value = ''
+
     try {
       const data = await getMusicFeedData({ limit: recommendationLimit })
+
+      if (requestId !== recommendationsRequestId) {
+        return
+      }
+
       const songs = data.songs.length ? data.songs : recommendedSingles
       allSongs.value = prepareQueue(songs)
       recommendationQueue.value = applyMoodQueue(allSongs.value, activeMood.value)
@@ -178,7 +191,14 @@ export function useHomeMusicFeed({ active }) {
       hydrateVisibleCoverTints()
       await snapFeedToActiveIndex('auto')
     } catch (error) {
-      console.warn('Failed to load home recommendations:', error)
+      if (requestId === recommendationsRequestId) {
+        console.warn('Failed to load home recommendations:', error)
+        recommendationsError.value = error?.message || '首页推荐加载失败'
+      }
+    } finally {
+      if (requestId === recommendationsRequestId) {
+        recommendationsLoading.value = false
+      }
     }
   }
 
@@ -693,6 +713,8 @@ export function useHomeMusicFeed({ active }) {
   return {
     feedScroller,
     musicFeedSettling,
+    recommendationsLoading,
+    recommendationsError,
     feedDragging,
     recommendationQueue,
     activeIndex,

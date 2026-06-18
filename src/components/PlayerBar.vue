@@ -367,7 +367,8 @@ import { formatTime } from '../utils/time'
 import { getAudioQualityDefinition, getAudioQualityOptions } from '../utils/audioQuality'
 import {
   createLyricPlaceholder,
-  findCurrentLyricIndex
+  findCurrentLyricIndex,
+  getLyricLineProgress
 } from '../utils/lyrics'
 import '../styles/player.css'
 
@@ -378,6 +379,7 @@ const player = usePlayerStore()
 const library = useLibraryStore()
 const auth = useAuthStore()
 const message = useMessage()
+const hasAccountLogin = computed(() => auth.state.isLoggedIn && auth.state.loginType !== 'guest')
 const fallbackFullPlayerVisualizerMode = 'halo'
 const validFullPlayerVisualizerModes = new Set(['halo', 'breath', 'trails', 'needle', 'particles'])
 const modeMenuOpen = ref(false)
@@ -414,7 +416,7 @@ const desktopLyricsAvailable = computed(() =>
 )
 const desktopLyricsWindowOpen = ref(false)
 const desktopLyricsLocked = ref(false)
-const desktopLyricLines = ref(createLyricPlaceholder('Play a song to show lyrics'))
+const desktopLyricLines = ref(createLyricPlaceholder('播放歌曲后显示歌词'))
 const desktopLyricsLoading = ref(false)
 const desktopLyricsButtonLabel = computed(() => {
   if (desktopLyricsWindowOpen.value && desktopLyricsLocked.value) {
@@ -442,12 +444,13 @@ const fullPlayerDanmakuPrefetchThreshold = 12
 const fullPlayerDanmakuMaxItems = 36
 const fullPlayerDanmakuActivationDelay = 520
 const fullPlayerDanmakuLoadDelay = 560
+const desktopLyricsClockIntervalMs = 250
 let progressLyricRequestId = 0
 let progressLyricLoadedTrackId = ''
 let progressLyricLoadingTrackId = ''
 let desktopLyricRequestId = 0
-let desktopLyricsPublishFrame = 0
-let desktopLyricsClockFrame = 0
+let desktopLyricsPublishTimer = 0
+let desktopLyricsClockTimer = 0
 let songCommentStatsRequestId = 0
 let fullPlayerDanmakuRequestId = 0
 let fullPlayerDanmakuLoadTimer = 0
@@ -757,13 +760,13 @@ async function loadDesktopLyrics(track) {
   const requestId = desktopLyricRequestId
   desktopLyricsLoading.value = Boolean(trackId)
   desktopLyricLines.value = createLyricPlaceholder(
-    trackId ? 'Loading lyrics...' : 'Play a song to show lyrics'
+    trackId ? '歌词加载中...' : '播放歌曲后显示歌词'
   )
 
   if (!isNeteaseTrackId(trackId)) {
     desktopLyricsLoading.value = false
     desktopLyricLines.value = createLyricPlaceholder(
-      trackId ? 'No lyrics' : 'Play a song to show lyrics'
+      trackId ? '暂无歌词' : '播放歌曲后显示歌词'
     )
     return
   }
@@ -777,14 +780,14 @@ async function loadDesktopLyrics(track) {
 
     desktopLyricLines.value = lines?.length
       ? lines
-      : createLyricPlaceholder('No lyrics')
+      : createLyricPlaceholder('暂无歌词')
   } catch (error) {
     if (requestId !== desktopLyricRequestId) {
       return
     }
 
     console.warn('Failed to load desktop lyrics:', error)
-    desktopLyricLines.value = createLyricPlaceholder('Lyrics failed to load')
+    desktopLyricLines.value = createLyricPlaceholder('歌词加载失败')
   } finally {
     if (requestId === desktopLyricRequestId) {
       desktopLyricsLoading.value = false
@@ -797,14 +800,14 @@ function scheduleDesktopLyricsPublish() {
     return
   }
 
-  if (desktopLyricsPublishFrame) {
+  if (desktopLyricsPublishTimer) {
     return
   }
 
-  desktopLyricsPublishFrame = window.requestAnimationFrame(() => {
-    desktopLyricsPublishFrame = 0
+  desktopLyricsPublishTimer = window.setTimeout(() => {
+    desktopLyricsPublishTimer = 0
     publishDesktopLyricsState()
-  })
+  }, 0)
 }
 
 function publishDesktopLyricsState() {
@@ -819,9 +822,9 @@ function createDesktopLyricsPayload() {
   const lines = normalizeDesktopLyricLines(desktopLyricLines.value)
   const currentTime = getDesktopLyricsCurrentTime()
   const activeIndex = findCurrentLyricIndex(lines, currentTime)
-  const activeLine = lines[activeIndex] ?? lines[0] ?? createLyricPlaceholder('No lyrics')[0]
+  const activeLine = lines[activeIndex] ?? lines[0] ?? createLyricPlaceholder('暂无歌词')[0]
   const nextLine = lines[activeIndex + 1] ?? null
-  const progress = getDesktopLyricProgress(activeLine, nextLine, currentTime)
+  const progress = getLyricLineProgress(activeLine, nextLine, currentTime)
 
   return {
     track: {
@@ -835,6 +838,7 @@ function createDesktopLyricsPayload() {
       currentTime,
       duration: player.state.duration,
       isPlaying: player.state.isPlaying,
+      updatedAt: Date.now(),
     },
     lyrics: {
       lines,
@@ -850,7 +854,7 @@ function createDesktopLyricsPayload() {
 function normalizeDesktopLyricLines(lines = []) {
   const normalizedLines = (Array.isArray(lines) && lines.length
     ? lines
-    : createLyricPlaceholder('No lyrics')
+    : createLyricPlaceholder('暂无歌词')
   ).map((line, index) => ({
     index,
     time: line.time || '--:--',
@@ -870,7 +874,7 @@ function normalizeDesktopLyricLines(lines = []) {
 
   return normalizedLines.length
     ? normalizedLines
-    : createLyricPlaceholder('No lyrics')
+    : createLyricPlaceholder('暂无歌词')
 }
 
 function normalizeDesktopLyricsPalette(palette = {}) {
@@ -891,31 +895,28 @@ function syncDesktopLyricsClock() {
 }
 
 function startDesktopLyricsClock() {
-  if (!desktopLyricsAvailable.value || desktopLyricsClockFrame) {
+  if (!desktopLyricsAvailable.value || desktopLyricsClockTimer) {
     return
   }
 
-  const tick = () => {
-    desktopLyricsClockFrame = 0
-
+  desktopLyricsClockTimer = window.setInterval(() => {
     if (!desktopLyricsWindowOpen.value || !player.state.isPlaying) {
+      stopDesktopLyricsClock()
       return
     }
 
     publishDesktopLyricsState()
-    desktopLyricsClockFrame = window.requestAnimationFrame(tick)
-  }
-
-  desktopLyricsClockFrame = window.requestAnimationFrame(tick)
+  }, desktopLyricsClockIntervalMs)
+  publishDesktopLyricsState()
 }
 
 function stopDesktopLyricsClock() {
-  if (!desktopLyricsClockFrame) {
+  if (!desktopLyricsClockTimer) {
     return
   }
 
-  window.cancelAnimationFrame(desktopLyricsClockFrame)
-  desktopLyricsClockFrame = 0
+  window.clearInterval(desktopLyricsClockTimer)
+  desktopLyricsClockTimer = 0
 }
 
 function getDesktopLyricsCurrentTime() {
@@ -924,76 +925,6 @@ function getDesktopLyricsCurrentTime() {
     : player.state.currentTime
 
   return Math.max(0, Number(currentTime) || 0)
-}
-
-function getDesktopLyricProgress(line, nextLine, currentTime) {
-  if (line?.placeholder) {
-    return 0
-  }
-
-  const wordProgress = getDesktopLyricWordProgress(line, currentTime)
-
-  if (wordProgress !== null) {
-    return wordProgress
-  }
-
-  const lineDuration = getDesktopLyricLineDuration(line, nextLine)
-
-  return clampDesktopLyricProgress((currentTime - line.seconds) / lineDuration)
-}
-
-function getDesktopLyricWordProgress(line, currentTime) {
-  const words = Array.isArray(line?.words)
-    ? line.words.filter((word) => word.text && Number.isFinite(Number(word.seconds)))
-    : []
-
-  if (!words.length) {
-    return null
-  }
-
-  const textLength = Math.max(1, words.reduce((total, word) => total + getLyricTextWeight(word.text), 0))
-  let consumedLength = 0
-
-  for (const word of words) {
-    const wordLength = getLyricTextWeight(word.text)
-    const start = Number(word.seconds) || 0
-    const duration = Math.max(0.08, Number(word.duration) || 0)
-    const end = start + duration
-
-    if (currentTime >= end) {
-      consumedLength += wordLength
-      continue
-    }
-
-    if (currentTime <= start) {
-      return clampDesktopLyricProgress(consumedLength / textLength)
-    }
-
-    consumedLength += wordLength * ((currentTime - start) / duration)
-    return clampDesktopLyricProgress(consumedLength / textLength)
-  }
-
-  return 1
-}
-
-function getDesktopLyricLineDuration(line, nextLine) {
-  if (line?.duration) {
-    return Math.max(0.08, Number(line.duration) || 0.08)
-  }
-
-  if (nextLine && Number(nextLine.seconds) > Number(line?.seconds)) {
-    return Math.max(0.08, Number(nextLine.seconds) - Number(line.seconds))
-  }
-
-  return 4.2
-}
-
-function getLyricTextWeight(text = '') {
-  return Math.max(1, Array.from(String(text)).length)
-}
-
-function clampDesktopLyricProgress(value) {
-  return Math.min(1, Math.max(0, Number(value) || 0))
 }
 
 function updateDesktopLyricsWindowState(state = {}) {
@@ -1007,21 +938,26 @@ async function handleDesktopLyricsCommand(command) {
   if (action === 'toggle-play') {
     const toggled = await player.togglePlay()
     showPlaybackError(toggled)
+    publishDesktopLyricsState()
+    syncDesktopLyricsClock()
     return
   }
 
   if (action === 'previous') {
     await playPreviousTrack()
+    publishDesktopLyricsState()
     return
   }
 
   if (action === 'next') {
     await playNextTrack()
+    publishDesktopLyricsState()
     return
   }
 
   if (action === 'hide') {
     desktopLyricsWindowOpen.value = false
+    stopDesktopLyricsClock()
   }
 }
 
@@ -1529,7 +1465,7 @@ function getRandomQueueTrack(queue, currentIndex) {
 async function playTrackFromControls(track, options = {}) {
   const { showVipWarning = true } = options
 
-  if (showVipWarning && track.vip) {
+  if (showVipWarning && track.vip && !hasAccountLogin.value) {
     message.warning('当前歌曲为 VIP 歌曲，将尝试播放试听')
   }
 
@@ -1681,9 +1617,9 @@ onUnmounted(() => {
     trackMarqueeMeasureFrame = 0
   }
   clearFullPlayerDanmakuLoadTimer()
-  if (desktopLyricsPublishFrame) {
-    window.cancelAnimationFrame(desktopLyricsPublishFrame)
-    desktopLyricsPublishFrame = 0
+  if (desktopLyricsPublishTimer) {
+    window.clearTimeout(desktopLyricsPublishTimer)
+    desktopLyricsPublishTimer = 0
   }
   stopDesktopLyricsClock()
   removeTrackEndedListener?.()

@@ -1,4 +1,15 @@
 .full-player-page {
+  --full-player-lyric-font-size-max: 24px;
+  --full-player-lyric-active-font-size-max: 34px;
+  --full-player-lyric-translation-font-size-max: 15px;
+  --full-player-lyric-font-size: clamp(18px, 2.75vmin, var(--full-player-lyric-font-size-max));
+  --full-player-lyric-active-font-size: clamp(24px, 3.85vmin, var(--full-player-lyric-active-font-size-max));
+  --full-player-lyric-translation-font-size: clamp(
+    12px,
+    1.7vmin,
+    var(--full-player-lyric-translation-font-size-max)
+  );
+  --full-player-lyric-line-min-height: clamp(72px, 11.2vmin, 96px);
   position: fixed;
   inset: 0;
   z-index: 30;
@@ -738,7 +749,7 @@
 .full-player__lyric-line {
   display: grid;
   width: 100%;
-  min-height: 86px;
+  min-height: var(--full-player-lyric-line-min-height);
   margin: 0;
   align-content: center;
   padding: 9px 0;
@@ -782,14 +793,14 @@
 .full-player__lyric-text {
   display: block;
   overflow-wrap: anywhere;
-  font-size: 24px;
+  font-size: var(--full-player-lyric-font-size);
   font-weight: 750;
   line-height: 1.25;
   letter-spacing: 0;
 }
 
 .full-player__lyric-line.active .full-player__lyric-text {
-  font-size: 30px;
+  font-size: var(--full-player-lyric-active-font-size);
   font-weight: 850;
 }
 
@@ -847,7 +858,7 @@
   display: block;
   margin-top: 7px;
   color: rgba(255, 255, 255, 0.34);
-  font-size: 15px;
+  font-size: var(--full-player-lyric-translation-font-size);
   font-weight: 600;
   line-height: 1.45;
   letter-spacing: 0;
@@ -1109,14 +1120,6 @@
     width: min(1040px, calc(100vw - 70px));
   }
 
-  .full-player__lyric-text {
-    font-size: 24px;
-  }
-
-  .full-player__lyric-line.active .full-player__lyric-text {
-    font-size: 34px;
-  }
-
   .full-player-page .full-player__danmaku.soda-danmaku {
     inset: 76px 48px 148px;
   }
@@ -1133,14 +1136,6 @@
     left: calc(var(--full-player-cover-size) + clamp(18px, 4vw, 52px));
     width: clamp(380px, 44vw, 620px);
     opacity: 0.5;
-  }
-
-  .full-player__lyric-text {
-    font-size: 22px;
-  }
-
-  .full-player__lyric-line.active .full-player__lyric-text {
-    font-size: 31px;
   }
 
   .full-player-page .full-player__danmaku .soda-danmaku__item {
@@ -1169,18 +1164,6 @@
 
   .full-player__lyrics-panel {
     height: min(54vh, 470px);
-  }
-
-  .full-player__lyric-text {
-    font-size: 23px;
-  }
-
-  .full-player__lyric-line.active .full-player__lyric-text {
-    font-size: 32px;
-  }
-
-  .full-player__lyric-translation {
-    font-size: 14px;
   }
 
   .full-player__lyric-line {
@@ -1215,18 +1198,6 @@
   .full-player__lyric-line {
     padding-top: 5px;
     padding-bottom: 5px;
-  }
-
-  .full-player__lyric-text {
-    font-size: 21px;
-  }
-
-  .full-player__lyric-line.active .full-player__lyric-text {
-    font-size: 29px;
-  }
-
-  .full-player__lyric-translation {
-    font-size: 13px;
   }
 
   .full-player__deck {

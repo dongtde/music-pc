@@ -91,10 +91,12 @@ import { computed } from 'vue'
 import { useMessage } from 'naive-ui'
 import { AudioLines, Play, Video } from 'lucide-vue-next'
 import { usePlayerStore } from '../stores/player'
+import { useAuthStore } from '../stores/auth'
 import { getAudioQualityBadges } from '../utils/audioQuality'
 import { getSongAccessBadges } from '../utils/songAccess'
 
 const player = usePlayerStore()
+const auth = useAuthStore()
 const message = useMessage()
 
 const props = defineProps({
@@ -121,6 +123,7 @@ const accessBadges = computed(() => getSongAccessBadges(props.track))
 const qualityBadges = computed(() =>
   getAudioQualityBadges(props.track, { limit: 1, includeDefault: true })
 )
+const hasAccountLogin = computed(() => auth.state.isLoggedIn && auth.state.loginType !== 'guest')
 
 function isPlaying(track) {
   return track.isPlaying || (player.state.currentTrack.id === track.id && player.state.isPlaying)
@@ -139,7 +142,7 @@ function handlePlayIconClick() {
 }
 
 function playTrack() {
-  if (props.showVipPlaybackWarning && props.track.vip) {
+  if (props.showVipPlaybackWarning && props.track.vip && !hasAccountLogin.value) {
     message.warning('当前歌曲为 VIP 歌曲，将尝试播放试听')
   }
 

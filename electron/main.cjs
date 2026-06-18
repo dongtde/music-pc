@@ -22,6 +22,7 @@ const DESKTOP_LYRICS_WINDOW_WIDTH = 700;
 const DESKTOP_LYRICS_WINDOW_BASE_HEIGHT = 80;
 const DESKTOP_LYRICS_WINDOW_MAX_HEIGHT = 108;
 const DESKTOP_LYRICS_BASE_FONT_SIZE = 15;
+const DESKTOP_LYRICS_ALWAYS_ON_TOP_LEVEL = 'screen-saver';
 const proxyCookieJars = new Map();
 let mainWindow = null;
 let desktopLyricsWindow = null;
@@ -64,6 +65,7 @@ async function createMainWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      backgroundThrottling: false,
     },
   });
 
@@ -130,6 +132,7 @@ async function createMainWindow() {
 
 async function createDesktopLyricsWindow() {
   if (isDesktopLyricsWindowOpen()) {
+    elevateDesktopLyricsWindow();
     safelyCallWindowMethod(desktopLyricsWindow, 'showInactive');
     sendDesktopLyricsWindowState();
     sendDesktopLyricsPayload();
@@ -160,6 +163,7 @@ async function createDesktopLyricsWindow() {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
+        backgroundThrottling: false,
       },
     });
   } catch (error) {
@@ -170,7 +174,7 @@ async function createDesktopLyricsWindow() {
     return null;
   }
 
-  safelyCallWindowMethod(desktopLyricsWindow, 'setAlwaysOnTop', true, 'floating');
+  elevateDesktopLyricsWindow();
 
   try {
     desktopLyricsWindow.setVisibleOnAllWorkspaces(true, {
@@ -187,10 +191,12 @@ async function createDesktopLyricsWindow() {
 
   desktopLyricsWindow.once('ready-to-show', () => {
     safelyCallWindowMethod(desktopLyricsWindow, 'showInactive');
+    elevateDesktopLyricsWindow();
     sendDesktopLyricsWindowState();
   });
 
   desktopLyricsWindow.webContents.on('did-finish-load', () => {
+    elevateDesktopLyricsWindow();
     sendDesktopLyricsWindowState();
     sendDesktopLyricsPayload();
   });
@@ -240,6 +246,20 @@ function getDesktopLyricsInitialBounds() {
 
 function isDesktopLyricsWindowOpen() {
   return Boolean(desktopLyricsWindow && !desktopLyricsWindow.isDestroyed());
+}
+
+function elevateDesktopLyricsWindow() {
+  if (!isDesktopLyricsWindowOpen()) {
+    return;
+  }
+
+  safelyCallWindowMethod(
+    desktopLyricsWindow,
+    'setAlwaysOnTop',
+    true,
+    DESKTOP_LYRICS_ALWAYS_ON_TOP_LEVEL,
+  );
+  safelyCallWindowMethod(desktopLyricsWindow, 'moveTop');
 }
 
 function getDesktopLyricsWindowState() {

@@ -179,6 +179,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ChevronLeft, Lock, Minus, Pause, Play, Plus, Settings2, SkipBack, SkipForward, Unlock, X } from 'lucide-vue-next'
+import { findCurrentLyricIndex, getLyricLineProgress } from '../utils/lyrics'
 import '../styles/desktop-lyrics.css'
 
 const settingsStorageKey = 'mappic:desktop-lyrics:settings'
@@ -223,18 +224,25 @@ const playback = reactive({
   isPlaying: false,
 })
 const lyrics = reactive({
-  activeLine: createPlaceholderLine('Play a song to show lyrics'),
+  activeLine: createPlaceholderLine('播放歌曲后显示歌词'),
   nextLine: null,
   progress: 0,
   loading: false,
+  lines: [createPlaceholderLine('播放歌曲后显示歌词')],
+  activeIndex: 0,
 })
+const playbackSync = {
+  currentTime: 0,
+  updatedAt: 0,
+}
 let removeStateListener = null
 let removeWindowStateListener = null
 let controlsHideTimer = 0
 let lyricDragFrame = 0
+let lyricPlaybackFrame = 0
 let lyricDragPointerId = null
 
-const activeLine = computed(() => lyrics.activeLine || createPlaceholderLine('No lyrics'))
+const activeLine = computed(() => lyrics.activeLine || createPlaceholderLine('暂无歌词'))
 const lyricProgressWidth = computed(() => `${Math.round((lyrics.progress || 0) * 1000) / 10}%`)
 const panelVisible = computed(() => controlsVisible.value || settingsOpen.value)
 const toolbarVisible = computed(() => !locked.value && !settingsOpen.value && panelVisible.value)
@@ -278,11 +286,19 @@ onMounted(() => {
 onBeforeUnmount(() => {
   clearControlsHideTimer()
   stopLyricDrag()
+  stopLyricPlaybackClock()
   removeStateListener?.()
   removeWindowStateListener?.()
 })
 
 function applyDesktopLyricsState(payload = {}) {
+  const payloadPlayback = payload.playback || {}
+  const currentTime = Math.max(0, Number(payloadPlayback.currentTime) || 0)
+  const lineFallbackText = payload.lyrics?.loading ? '歌词加载中...' : '暂无歌词'
+  const payloadLines = Array.isArray(payload.lyrics?.lines) && payload.lyrics.lines.length
+    ? payload.lyrics.lines
+    : [payload.lyrics?.activeLine].filter(Boolean)
+
   Object.assign(track, {
     id: payload.track?.id ?? null,
     name: payload.track?.name || '',
@@ -290,17 +306,95 @@ function applyDesktopLyricsState(payload = {}) {
     coverUrl: payload.track?.coverUrl || '',
     coverPalette: payload.track?.coverPalette || fallbackPalette,
   })
+  playbackSync.currentTime = currentTime
+  playbackSync.updatedAt = normalizeTimestamp(payloadPlayback.updatedAt)
   Object.assign(playback, {
-    currentTime: Number(payload.playback?.currentTime) || 0,
-    duration: Number(payload.playback?.duration) || 0,
-    isPlaying: Boolean(payload.playback?.isPlaying),
+    currentTime,
+    duration: Number(payloadPlayback.duration) || 0,
+    isPlaying: Boolean(payloadPlayback.isPlaying),
   })
+  lyrics.lines = normalizeLyricLines(payloadLines, lineFallbackText)
+  lyrics.activeIndex = Number(payload.lyrics?.activeIndex) || 0
+  lyrics.activeLine = payload.lyrics?.activeLine || lyrics.lines[lyrics.activeIndex] || lyrics.lines[0] || createPlaceholderLine('暂无歌词')
+  lyrics.nextLine = payload.lyrics?.nextLine || lyrics.lines[lyrics.activeIndex + 1] || null
+  lyrics.progress = Number(payload.lyrics?.progress) || 0
   Object.assign(lyrics, {
-    activeLine: payload.lyrics?.activeLine || createPlaceholderLine('No lyrics'),
-    nextLine: payload.lyrics?.nextLine || null,
-    progress: Number(payload.lyrics?.progress) || 0,
     loading: Boolean(payload.lyrics?.loading),
   })
+  syncProjectedLyrics()
+  syncLyricPlaybackClock()
+}
+
+function syncProjectedLyrics() {
+  const lines = Array.isArray(lyrics.lines) && lyrics.lines.length
+    ? lyrics.lines
+    : [createPlaceholderLine('暂无歌词')]
+  const currentTime = getProjectedPlaybackTime()
+  const activeIndex = findCurrentLyricIndex(lines, currentTime)
+  const activeLyricLine = lines[activeIndex] ?? lines[0] ?? createPlaceholderLine('暂无歌词')
+  const nextLyricLine = lines[activeIndex + 1] ?? null
+
+  playback.currentTime = currentTime
+  lyrics.activeIndex = activeIndex
+  lyrics.activeLine = activeLyricLine
+  lyrics.nextLine = nextLyricLine
+  lyrics.progress = getLyricLineProgress(activeLyricLine, nextLyricLine, currentTime)
+}
+
+function getProjectedPlaybackTime() {
+  const baseTime = Math.max(0, Number(playbackSync.currentTime) || 0)
+
+  if (!playback.isPlaying || !playbackSync.updatedAt) {
+    return clampPlaybackTime(baseTime)
+  }
+
+  const elapsedSeconds = Math.max(0, (Date.now() - playbackSync.updatedAt) / 1000)
+
+  return clampPlaybackTime(baseTime + elapsedSeconds)
+}
+
+function clampPlaybackTime(value) {
+  const currentTime = Math.max(0, Number(value) || 0)
+  const duration = Number(playback.duration) || 0
+
+  return duration > 0 ? Math.min(currentTime, duration) : currentTime
+}
+
+function syncLyricPlaybackClock() {
+  if (playback.isPlaying && !activeLine.value.placeholder) {
+    startLyricPlaybackClock()
+    return
+  }
+
+  stopLyricPlaybackClock()
+}
+
+function startLyricPlaybackClock() {
+  if (lyricPlaybackFrame) {
+    return
+  }
+
+  const tick = () => {
+    lyricPlaybackFrame = 0
+
+    if (!playback.isPlaying) {
+      return
+    }
+
+    syncProjectedLyrics()
+    lyricPlaybackFrame = window.requestAnimationFrame(tick)
+  }
+
+  lyricPlaybackFrame = window.requestAnimationFrame(tick)
+}
+
+function stopLyricPlaybackClock() {
+  if (!lyricPlaybackFrame) {
+    return
+  }
+
+  window.cancelAnimationFrame(lyricPlaybackFrame)
+  lyricPlaybackFrame = 0
 }
 
 function applyWindowState(state = {}) {
@@ -494,6 +588,35 @@ function createPlaceholderLine(text) {
     placeholder: true,
     words: [],
   }
+}
+
+function normalizeLyricLines(lines = [], fallbackText = '暂无歌词') {
+  const sourceLines = Array.isArray(lines) && lines.length
+    ? lines
+    : [createPlaceholderLine(fallbackText)]
+
+  return sourceLines.map((line, index) => ({
+    index,
+    time: line?.time || '--:--',
+    text: line?.text || '...',
+    translation: line?.translation || '',
+    seconds: Number(line?.seconds) || 0,
+    duration: Number(line?.duration) || 0,
+    placeholder: Boolean(line?.placeholder),
+    words: Array.isArray(line?.words)
+      ? line.words.map((word) => ({
+          text: word.text || '',
+          seconds: Number(word.seconds) || 0,
+          duration: Number(word.duration) || 0,
+        }))
+      : [],
+  }))
+}
+
+function normalizeTimestamp(value) {
+  const timestamp = Number(value)
+
+  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : Date.now()
 }
 
 function readLyricSettings() {

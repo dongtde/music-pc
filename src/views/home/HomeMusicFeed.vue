@@ -7,6 +7,19 @@
     :aria-hidden="!active"
   >
     <div
+      v-if="recommendationsLoading || recommendationsError"
+      class="soda-feed__load-status"
+      :class="{ 'soda-feed__load-status--error': recommendationsError }"
+      role="status"
+      aria-live="polite"
+    >
+      <Loader2 v-if="recommendationsLoading" class="soda-spin" :size="16" />
+      <span>
+        {{ recommendationsLoading ? '正在加载首页推荐' : '推荐接口暂不可用，已显示本地推荐' }}
+      </span>
+    </div>
+
+    <div
       ref="feedScroller"
       class="soda-feed__scroller"
       :class="{ 'soda-feed__scroller--dragging': feedDragging }"
@@ -249,6 +262,8 @@ const active = toRef(props, 'active')
 const {
   feedScroller,
   musicFeedSettling,
+  recommendationsLoading,
+  recommendationsError,
   feedDragging,
   recommendationQueue,
   activeIndex,
