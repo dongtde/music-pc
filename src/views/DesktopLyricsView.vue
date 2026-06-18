@@ -254,6 +254,7 @@ const paletteStyle = computed(() => {
 
 onMounted(() => {
   scheduleControlsHide()
+  syncDesktopLyricsLayout()
 
   const desktopLyrics = window.mappicDesktop?.desktopLyrics
 
@@ -455,6 +456,7 @@ function setFontSize(value) {
     fallbackSettings.fontSize
   )
   persistLyricSettings()
+  syncDesktopLyricsLayout()
 }
 
 function setLyricColor(value) {
@@ -541,6 +543,12 @@ function persistLyricSettings() {
   } catch (error) {
     console.warn('Failed to persist desktop lyric settings:', error)
   }
+}
+
+function syncDesktopLyricsLayout() {
+  window.mappicDesktop?.desktopLyrics?.setLayout?.({
+    fontSize: lyricSettings.fontSize,
+  })
 }
 
 function normalizeColor(value) {

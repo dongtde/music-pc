@@ -19,7 +19,9 @@ const kugouApiTarget =
 const neteaseApiTarget =
   process.env.NETEASE_API_TARGET || 'https://music-api.xcj.pw';
 const DESKTOP_LYRICS_WINDOW_WIDTH = 700;
-const DESKTOP_LYRICS_WINDOW_HEIGHT = 80;
+const DESKTOP_LYRICS_WINDOW_BASE_HEIGHT = 80;
+const DESKTOP_LYRICS_WINDOW_MAX_HEIGHT = 108;
+const DESKTOP_LYRICS_BASE_FONT_SIZE = 15;
 const proxyCookieJars = new Map();
 let mainWindow = null;
 let desktopLyricsWindow = null;
@@ -141,8 +143,8 @@ async function createDesktopLyricsWindow() {
       ...bounds,
       minWidth: DESKTOP_LYRICS_WINDOW_WIDTH,
       maxWidth: DESKTOP_LYRICS_WINDOW_WIDTH,
-      minHeight: DESKTOP_LYRICS_WINDOW_HEIGHT,
-      maxHeight: DESKTOP_LYRICS_WINDOW_HEIGHT,
+      minHeight: DESKTOP_LYRICS_WINDOW_BASE_HEIGHT,
+      maxHeight: DESKTOP_LYRICS_WINDOW_MAX_HEIGHT,
       title: 'Desktop lyrics',
       frame: false,
       transparent: true,
@@ -150,7 +152,7 @@ async function createDesktopLyricsWindow() {
       hasShadow: false,
       alwaysOnTop: true,
       skipTaskbar: true,
-      resizable: false,
+      resizable: true,
       show: false,
       autoHideMenuBar: true,
       webPreferences: {
@@ -219,14 +221,14 @@ function getDesktopLyricsInitialBounds() {
     console.warn('[desktop-lyrics:display]', error);
     return {
       width: DESKTOP_LYRICS_WINDOW_WIDTH,
-      height: DESKTOP_LYRICS_WINDOW_HEIGHT,
+      height: DESKTOP_LYRICS_WINDOW_BASE_HEIGHT,
       x: 160,
       y: 680,
     };
   }
 
   const width = DESKTOP_LYRICS_WINDOW_WIDTH;
-  const height = DESKTOP_LYRICS_WINDOW_HEIGHT;
+  const height = DESKTOP_LYRICS_WINDOW_BASE_HEIGHT;
 
   return {
     width,
@@ -241,10 +243,57 @@ function isDesktopLyricsWindowOpen() {
 }
 
 function getDesktopLyricsWindowState() {
+  const bounds = isDesktopLyricsWindowOpen()
+    ? desktopLyricsWindow.getBounds()
+    : null;
+
   return {
     open: isDesktopLyricsWindowOpen(),
     locked: desktopLyricsLocked,
+    height: bounds?.height || DESKTOP_LYRICS_WINDOW_BASE_HEIGHT,
   };
+}
+
+function getDesktopLyricsHeightForFontSize(fontSize) {
+  const normalizedFontSize = clampNumber(
+    Number(fontSize),
+    12,
+    36,
+    DESKTOP_LYRICS_BASE_FONT_SIZE,
+  );
+  const lineHeight = Math.ceil(normalizedFontSize * 1.08);
+  const extraLineHeight = Math.max(0, lineHeight - Math.ceil(DESKTOP_LYRICS_BASE_FONT_SIZE * 1.08));
+
+  return clampNumber(
+    DESKTOP_LYRICS_WINDOW_BASE_HEIGHT + extraLineHeight,
+    DESKTOP_LYRICS_WINDOW_BASE_HEIGHT,
+    DESKTOP_LYRICS_WINDOW_MAX_HEIGHT,
+    DESKTOP_LYRICS_WINDOW_BASE_HEIGHT,
+  );
+}
+
+function resizeDesktopLyricsWindowForFontSize(fontSize) {
+  if (!isDesktopLyricsWindowOpen()) {
+    return;
+  }
+
+  const nextHeight = getDesktopLyricsHeightForFontSize(fontSize);
+  const bounds = desktopLyricsWindow.getBounds();
+
+  if (bounds.height === nextHeight) {
+    return;
+  }
+
+  desktopLyricsWindow.setBounds(
+    {
+      x: bounds.x,
+      y: bounds.y + bounds.height - nextHeight,
+      width: DESKTOP_LYRICS_WINDOW_WIDTH,
+      height: nextHeight,
+    },
+    false,
+  );
+  broadcastDesktopLyricsWindowState();
 }
 
 function sendDesktopLyricsWindowState(targetWindow = desktopLyricsWindow) {
@@ -324,17 +373,26 @@ function registerDesktopLyricsIpc() {
     if (isDesktopLyricsWindowOpen()) {
       safelyCallWindowMethod(
         desktopLyricsWindow,
-        'setResizable',
-        !desktopLyricsLocked,
-      );
-      safelyCallWindowMethod(
-        desktopLyricsWindow,
         'setMovable',
         !desktopLyricsLocked,
       );
     }
 
     broadcastDesktopLyricsWindowState();
+  });
+
+  ipcMain.on('desktop-lyrics:set-layout', (event, layout = {}) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender);
+
+    if (
+      !senderWindow ||
+      senderWindow !== desktopLyricsWindow ||
+      senderWindow.isDestroyed()
+    ) {
+      return;
+    }
+
+    resizeDesktopLyricsWindowForFontSize(layout.fontSize);
   });
 
   ipcMain.on('desktop-lyrics:start-drag', (event) => {
@@ -430,6 +488,14 @@ function sendToWindow(window, channel, payload) {
   } catch (error) {
     console.warn(`[desktop-lyrics:send:${channel}]`, error);
   }
+}
+
+function clampNumber(value, min, max, fallback) {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.min(max, Math.max(min, Math.round(value)));
 }
 
 function openExternalUrl(url) {

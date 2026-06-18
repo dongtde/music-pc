@@ -5,7 +5,7 @@ body:has(.desktop-lyrics),
   overflow: hidden;
   background: transparent;
   width: 700px;
-  height: 80px;
+  height: 100vh;
 }
 
 body:has(.desktop-lyrics) {
@@ -16,7 +16,7 @@ body:has(.desktop-lyrics) {
   position: relative;
   display: grid;
   width: 700px;
-  height: 80px;
+  height: 100vh;
   min-width: 0;
   place-items: end center;
   overflow: hidden;
