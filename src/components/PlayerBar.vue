@@ -18,7 +18,12 @@
     @cover-flight-end="handleCoverFlightEnd"
   />
 
-  <footer class="player" :class="{ 'player--full-screen': fullPlayerOpen }" :style="currentTrackCoverStyle">
+  <footer
+    ref="playerBar"
+    class="player"
+    :class="{ 'player--full-screen': fullPlayerOpen }"
+    :style="playerStyle"
+  >
     <div class="track-summary">
       <button
         ref="albumArtButton"
@@ -256,7 +261,7 @@
             <div class="queue-popover__list">
               <SongListRow
                 v-for="track in queueTracks"
-                :key="track.id"
+                :key="track.queueKey"
                 :track="track"
                 compact
                 :show-vip-playback-warning="false"
@@ -321,9 +326,11 @@ const fullPlayerOpen = ref(false)
 const fullPlayerMounted = ref(false)
 const fullPlayerCoverRect = ref(null)
 const albumArtButton = ref(null)
+const playerBar = ref(null)
 const progressBar = ref(null)
 const albumArtHidden = ref(false)
 const lastAlbumArtToggleAt = ref(0)
+const playerBarHeight = ref(92)
 const playMode = ref('list')
 const volume = ref(100)
 const lastAudibleVolume = ref(100)
@@ -380,6 +387,9 @@ let fullPlayerDanmakuLoadTimer = 0
 let removeTrackEndedListener = null
 let removeDesktopLyricsWindowStateListener = null
 let removeDesktopLyricsCommandListener = null
+let playerBarResizeObserver = null
+let lastQueueTrackKey = ''
+let lastQueueTrackRequestedAt = 0
 
 const fallbackCoverPalette = {
   primary: '#213245',
@@ -434,6 +444,10 @@ const currentTrackCoverStyle = computed(() => {
     '--cover-image': currentTrack.value.coverUrl ? `url("${currentTrack.value.coverUrl}")` : 'none'
   }
 })
+const playerStyle = computed(() => ({
+  ...currentTrackCoverStyle.value,
+  '--player-bar-actual-height': `${playerBarHeight.value}px`
+}))
 const progressPercentage = computed(() => {
   if (!player.state.duration) {
     return 0
@@ -464,6 +478,7 @@ const progressTooltipPercent = computed(() =>
 const queueTracks = computed(() => player.state.queue.map((song, index) => ({
   ...song,
   id: song.id ?? `queue-${index + 1}`,
+  queueKey: `${song.id ?? 'queue'}-${index}`,
   rank: String(index + 1).padStart(2, '0'),
   to: `/playlist/new-${String(index + 1).padStart(2, '0')}`,
   vip: Boolean(song.vip),
@@ -550,6 +565,7 @@ function toggleVolumeMenu() {
 }
 
 function toggleQueueMenu() {
+  syncPlayerBarHeight()
   queueMenuOpen.value = !queueMenuOpen.value
   modeMenuOpen.value = false
   volumeMenuOpen.value = false
@@ -1366,8 +1382,10 @@ function getRandomQueueTrack(queue, currentIndex) {
   return queue[nextIndex]
 }
 
-async function playTrackFromControls(track) {
-  if (track.vip) {
+async function playTrackFromControls(track, options = {}) {
+  const { showVipWarning = true } = options
+
+  if (showVipWarning && track.vip) {
     message.warning('当前歌曲为 VIP 歌曲，将尝试播放试听')
   }
 
@@ -1376,13 +1394,30 @@ async function playTrackFromControls(track) {
 }
 
 async function playQueueTrack(track) {
+  if (shouldIgnoreQueueTrackRequest(track)) {
+    return
+  }
+
   if (player.state.currentTrack.id === track.id) {
     const toggled = await player.togglePlay()
     showPlaybackError(toggled)
     return
   }
 
-  await playTrackFromControls(track)
+  await playTrackFromControls(track, { showVipWarning: false })
+}
+
+function shouldIgnoreQueueTrackRequest(track) {
+  const key = String(track?.queueKey ?? track?.id ?? '')
+  const now = performance.now()
+
+  if (key && key === lastQueueTrackKey && now - lastQueueTrackRequestedAt < 450) {
+    return true
+  }
+
+  lastQueueTrackKey = key
+  lastQueueTrackRequestedAt = now
+  return false
 }
 
 function showPlaybackError(success) {
@@ -1407,7 +1442,22 @@ function handleOutsideClick(event) {
   closePlayerPopovers()
 }
 
+function syncPlayerBarHeight() {
+  const height = playerBar.value?.getBoundingClientRect?.().height
+
+  if (Number.isFinite(height) && height > 0) {
+    playerBarHeight.value = Math.ceil(height)
+  }
+}
+
 onMounted(() => {
+  syncPlayerBarHeight()
+  window.addEventListener('resize', syncPlayerBarHeight)
+  if (typeof ResizeObserver !== 'undefined' && playerBar.value) {
+    playerBarResizeObserver = new ResizeObserver(syncPlayerBarHeight)
+    playerBarResizeObserver.observe(playerBar.value)
+  }
+
   document.addEventListener('pointerdown', handleOutsideClick)
   removeTrackEndedListener = player.onTrackEnded(handleTrackEnded)
 
@@ -1428,7 +1478,10 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  window.removeEventListener('resize', syncPlayerBarHeight)
   document.removeEventListener('pointerdown', handleOutsideClick)
+  playerBarResizeObserver?.disconnect()
+  playerBarResizeObserver = null
   clearFullPlayerDanmakuLoadTimer()
   if (desktopLyricsPublishFrame) {
     window.cancelAnimationFrame(desktopLyricsPublishFrame)

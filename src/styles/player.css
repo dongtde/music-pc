@@ -368,11 +368,13 @@
   position: fixed;
   left: auto;
   right: 0;
-  bottom: var(--player-bar-height);
+  bottom: calc(var(--player-bar-actual-height, var(--player-bar-height)) - 1px);
   display: flex;
   width: 380px;
-  height: calc(100vh - var(--queue-popover-top-offset) - var(--player-bar-height));
+  height: calc(100vh - var(--queue-popover-top-offset) - var(--player-bar-actual-height, var(--player-bar-height)) + 1px);
+  height: calc(100dvh - var(--queue-popover-top-offset) - var(--player-bar-actual-height, var(--player-bar-height)) + 1px);
   max-height: none;
+  min-height: 220px;
   flex-direction: column;
   overflow: hidden;
   padding: 0;
@@ -428,9 +430,12 @@
   position: relative;
   z-index: 1;
   flex: 1;
+  min-height: 0;
   max-height: none;
   overflow: auto;
-  padding: 6px;
+  padding: 6px 6px 14px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .queue-popover .song-list-row {
@@ -1037,6 +1042,7 @@
 
 @media (max-width: 520px) {
   .queue-popover {
+    right: 8px;
     width: calc(100vw - 16px);
   }
 }

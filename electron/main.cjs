@@ -23,6 +23,7 @@ let mainWindow = null;
 let desktopLyricsWindow = null;
 let desktopLyricsLocked = false;
 let lastDesktopLyricsPayload = null;
+let desktopLyricsDragState = null;
 
 process.on('uncaughtException', (error) => {
   console.error('[main:uncaught-exception]', error);
@@ -136,9 +137,9 @@ async function createDesktopLyricsWindow() {
   try {
     desktopLyricsWindow = new BrowserWindow({
       ...bounds,
-      minWidth: 520,
-      minHeight: 104,
-      maxHeight: 220,
+      minWidth: 516,
+      minHeight: 82,
+      maxHeight: 114,
       title: 'Desktop lyrics',
       frame: false,
       transparent: true,
@@ -214,15 +215,15 @@ function getDesktopLyricsInitialBounds() {
   } catch (error) {
     console.warn('[desktop-lyrics:display]', error);
     return {
-      width: 760,
-      height: 128,
+      width: 738,
+      height: 82,
       x: 160,
       y: 680,
     };
   }
 
-  const width = Math.min(980, Math.max(640, Math.round(workArea.width * 0.58)));
-  const height = 128;
+  const width = Math.min(932, Math.max(738, Math.round(workArea.width * 0.52) + 60));
+  const height = 82;
 
   return {
     width,
@@ -313,6 +314,10 @@ function registerDesktopLyricsIpc() {
   ipcMain.on('desktop-lyrics:set-locked', (_event, locked) => {
     desktopLyricsLocked = Boolean(locked);
 
+    if (desktopLyricsLocked) {
+      desktopLyricsDragState = null;
+    }
+
     if (isDesktopLyricsWindowOpen()) {
       safelyCallWindowMethod(
         desktopLyricsWindow,
@@ -327,6 +332,57 @@ function registerDesktopLyricsIpc() {
     }
 
     broadcastDesktopLyricsWindowState();
+  });
+
+  ipcMain.on('desktop-lyrics:start-drag', (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender);
+
+    if (
+      desktopLyricsLocked ||
+      !senderWindow ||
+      senderWindow !== desktopLyricsWindow ||
+      senderWindow.isDestroyed()
+    ) {
+      return;
+    }
+
+    const cursorPoint = screen.getCursorScreenPoint();
+    const windowBounds = senderWindow.getBounds();
+
+    desktopLyricsDragState = {
+      startCursor: cursorPoint,
+      startBounds: windowBounds,
+    };
+  });
+
+  ipcMain.on('desktop-lyrics:drag-move', (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender);
+
+    if (
+      desktopLyricsLocked ||
+      !desktopLyricsDragState ||
+      !senderWindow ||
+      senderWindow !== desktopLyricsWindow ||
+      senderWindow.isDestroyed()
+    ) {
+      return;
+    }
+
+    const cursorPoint = screen.getCursorScreenPoint();
+    const nextX =
+      desktopLyricsDragState.startBounds.x +
+      cursorPoint.x -
+      desktopLyricsDragState.startCursor.x;
+    const nextY =
+      desktopLyricsDragState.startBounds.y +
+      cursorPoint.y -
+      desktopLyricsDragState.startCursor.y;
+
+    senderWindow.setPosition(Math.round(nextX), Math.round(nextY), false);
+  });
+
+  ipcMain.on('desktop-lyrics:end-drag', () => {
+    desktopLyricsDragState = null;
   });
 
   ipcMain.on('desktop-lyrics:command', (_event, command) => {

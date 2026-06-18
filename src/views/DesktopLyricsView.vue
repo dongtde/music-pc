@@ -5,25 +5,42 @@
       'desktop-lyrics--locked': locked,
       'desktop-lyrics--playing': playback.isPlaying,
       'desktop-lyrics--settings-open': settingsOpen,
+      'desktop-lyrics--panel-hidden': !panelVisible,
     }"
     :style="paletteStyle"
-    @mouseenter="hovering = true"
-    @mouseleave="hovering = false"
+    @pointerenter="handlePointerEnter"
+    @pointermove="handlePointerMove"
+    @pointerleave="handlePointerLeave"
   >
     <div class="desktop-lyrics__drag-zone" />
 
-    <button
-      v-if="locked"
-      class="desktop-lyrics__unlock-button"
-      type="button"
-      title="Unlock lyrics"
-      aria-label="Unlock lyrics"
-      @click="setLocked(false)"
-    >
-      <Unlock :size="16" />
-    </button>
+    <Transition name="desktop-lyrics-unlock">
+      <button
+        v-if="unlockVisible"
+        class="desktop-lyrics__unlock-button"
+        type="button"
+        title="解锁歌词"
+        aria-label="解锁歌词"
+        @pointerenter="handlePointerEnter"
+        @pointermove="handlePointerMove"
+        @pointerleave="handlePointerLeave"
+        @click="setLocked(false)"
+      >
+        <Lock :size="16" />
+        <span>解锁</span>
+      </button>
+    </Transition>
 
-    <section class="desktop-lyrics__line-wrap" aria-live="polite">
+    <section
+      class="desktop-lyrics__line-wrap"
+      aria-live="polite"
+      @pointerenter="handlePointerEnter"
+      @pointermove="handleLyricPointerMove"
+      @pointerleave="handlePointerLeave"
+      @pointerdown="startLyricDrag"
+      @pointerup="stopLyricDrag"
+      @pointercancel="stopLyricDrag"
+    >
       <p
         class="desktop-lyrics__line"
         :class="{ 'desktop-lyrics__line--placeholder': activeLine.placeholder }"
@@ -45,6 +62,9 @@
       <div
         v-if="settingsOpen && !locked"
         class="desktop-lyrics__settings"
+        @pointerenter="handlePointerEnter"
+        @pointermove="handlePointerMove"
+        @pointerleave="handlePointerLeave"
         @click.stop
         @pointerdown.stop
       >
@@ -115,6 +135,9 @@
         v-if="toolbarVisible"
         class="desktop-lyrics__toolbar"
         aria-label="Desktop lyrics controls"
+        @pointerenter="handlePointerEnter"
+        @pointermove="handlePointerMove"
+        @pointerleave="handlePointerLeave"
       >
         <button
           type="button"
@@ -146,7 +169,7 @@
           <Unlock v-else :size="16" />
         </button>
         <button type="button" title="Close" aria-label="Close" @click="hide">
-          <X :size="17" />
+          <X :size="18" />
         </button>
       </nav>
     </Transition>
@@ -159,12 +182,13 @@ import { ChevronLeft, Lock, Minus, Pause, Play, Plus, Settings2, SkipBack, SkipF
 import '../styles/desktop-lyrics.css'
 
 const settingsStorageKey = 'mappic:desktop-lyrics:settings'
+const settingsStorageVersion = 2
 const fontSizeLimits = {
-  min: 24,
-  max: 58,
+  min: 12,
+  max: 36,
 }
 const fallbackSettings = {
-  fontSize: 34,
+  fontSize: 15,
   color: '#ffe16d',
 }
 const colorPresets = [
@@ -179,8 +203,10 @@ const fallbackPalette = {
   secondary: '#ff3f73',
   tertiary: '#ffd166',
 }
+const controlsHideDelay = 2600
 
-const hovering = ref(false)
+const pointerInside = ref(false)
+const controlsVisible = ref(true)
 const locked = ref(false)
 const settingsOpen = ref(false)
 const lyricSettings = reactive(readLyricSettings())
@@ -204,10 +230,15 @@ const lyrics = reactive({
 })
 let removeStateListener = null
 let removeWindowStateListener = null
+let controlsHideTimer = 0
+let lyricDragFrame = 0
+let lyricDragPointerId = null
 
 const activeLine = computed(() => lyrics.activeLine || createPlaceholderLine('No lyrics'))
 const lyricProgressWidth = computed(() => `${Math.round((lyrics.progress || 0) * 1000) / 10}%`)
-const toolbarVisible = computed(() => !locked.value && !settingsOpen.value)
+const panelVisible = computed(() => controlsVisible.value || settingsOpen.value)
+const toolbarVisible = computed(() => !locked.value && !settingsOpen.value && panelVisible.value)
+const unlockVisible = computed(() => locked.value && panelVisible.value)
 const playTitle = computed(() => (playback.isPlaying ? 'Pause' : 'Play'))
 const paletteStyle = computed(() => {
   const palette = track.coverPalette || fallbackPalette
@@ -222,6 +253,8 @@ const paletteStyle = computed(() => {
 })
 
 onMounted(() => {
+  scheduleControlsHide()
+
   const desktopLyrics = window.mappicDesktop?.desktopLyrics
 
   if (!desktopLyrics) {
@@ -242,6 +275,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  clearControlsHideTimer()
+  stopLyricDrag()
   removeStateListener?.()
   removeWindowStateListener?.()
 })
@@ -273,6 +308,8 @@ function applyWindowState(state = {}) {
   if (locked.value) {
     settingsOpen.value = false
   }
+
+  showControls()
 }
 
 function toggleLocked() {
@@ -286,6 +323,7 @@ function setLocked(nextLocked) {
     settingsOpen.value = false
   }
 
+  showControls()
   window.mappicDesktop?.desktopLyrics?.setLocked(locked.value)
 }
 
@@ -295,10 +333,114 @@ function toggleSettings() {
   }
 
   settingsOpen.value = !settingsOpen.value
+  showControls()
 }
 
 function closeSettings() {
   settingsOpen.value = false
+  showControls()
+}
+
+function handlePointerEnter() {
+  pointerInside.value = true
+  showControls()
+}
+
+function handlePointerMove() {
+  if (!pointerInside.value) {
+    pointerInside.value = true
+  }
+
+  showControls()
+}
+
+function handleLyricPointerMove(event) {
+  handlePointerMove()
+
+  if (!lyricDragPointerId || event.pointerId !== lyricDragPointerId) {
+    return
+  }
+
+  scheduleLyricDragMove()
+}
+
+function handlePointerLeave() {
+  if (lyricDragPointerId) {
+    return
+  }
+
+  pointerInside.value = false
+  scheduleControlsHide()
+}
+
+function startLyricDrag(event) {
+  if (locked.value || event.button !== 0) {
+    return
+  }
+
+  lyricDragPointerId = event.pointerId
+  event.currentTarget.setPointerCapture?.(event.pointerId)
+  showControls()
+  window.mappicDesktop?.desktopLyrics?.startDrag?.()
+}
+
+function stopLyricDrag(event) {
+  if (event && lyricDragPointerId && event.pointerId !== lyricDragPointerId) {
+    return
+  }
+
+  if (lyricDragFrame) {
+    window.cancelAnimationFrame(lyricDragFrame)
+    lyricDragFrame = 0
+  }
+
+  event?.currentTarget?.releasePointerCapture?.(lyricDragPointerId)
+  lyricDragPointerId = null
+  window.mappicDesktop?.desktopLyrics?.endDrag?.()
+}
+
+function scheduleLyricDragMove() {
+  if (lyricDragFrame) {
+    return
+  }
+
+  lyricDragFrame = window.requestAnimationFrame(() => {
+    lyricDragFrame = 0
+    window.mappicDesktop?.desktopLyrics?.dragMove?.()
+  })
+}
+
+function showControls() {
+  controlsVisible.value = true
+
+  if (settingsOpen.value || pointerInside.value) {
+    clearControlsHideTimer()
+    return
+  }
+
+  scheduleControlsHide()
+}
+
+function scheduleControlsHide() {
+  clearControlsHideTimer()
+
+  if (settingsOpen.value || pointerInside.value) {
+    return
+  }
+
+  controlsHideTimer = window.setTimeout(() => {
+    controlsHideTimer = 0
+    controlsVisible.value = false
+  }, controlsHideDelay)
+}
+
+function clearControlsHideTimer() {
+  if (!controlsHideTimer) {
+    return
+  }
+
+  window.clearTimeout(controlsHideTimer)
+  controlsHideTimer = 0
 }
 
 function adjustFontSize(delta) {
@@ -366,13 +508,18 @@ function readLyricSettings() {
 }
 
 function normalizeLyricSettings(settings = {}) {
+  const shouldUseDefaultFontSize = settings.version !== settingsStorageVersion
+
   return {
-    fontSize: clampNumber(
-      Number(settings.fontSize),
-      fontSizeLimits.min,
-      fontSizeLimits.max,
-      fallbackSettings.fontSize
-    ),
+    version: settingsStorageVersion,
+    fontSize: shouldUseDefaultFontSize
+      ? fallbackSettings.fontSize
+      : clampNumber(
+          Number(settings.fontSize),
+          fontSizeLimits.min,
+          fontSizeLimits.max,
+          fallbackSettings.fontSize
+        ),
     color: normalizeColor(settings.color) || fallbackSettings.color,
   }
 }
@@ -388,6 +535,7 @@ function persistLyricSettings() {
       JSON.stringify({
         fontSize: lyricSettings.fontSize,
         color: lyricSettings.color,
+        version: settingsStorageVersion,
       })
     )
   } catch (error) {
