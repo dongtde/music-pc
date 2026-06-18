@@ -226,9 +226,10 @@
         v-if="desktopLyricsAvailable"
         class="icon-button"
         type="button"
-        aria-label="Desktop lyrics"
-        title="Desktop lyrics"
-        :class="{ active: desktopLyricsWindowOpen }"
+        :aria-label="desktopLyricsButtonLabel"
+        :aria-pressed="desktopLyricsWindowOpen"
+        :title="desktopLyricsButtonLabel"
+        :class="{ active: desktopLyricsWindowOpen, locked: desktopLyricsLocked }"
         @click="toggleDesktopLyrics"
       >
         <Captions :size="18" />
@@ -258,6 +259,7 @@
                 :key="track.id"
                 :track="track"
                 compact
+                :show-vip-playback-warning="false"
                 @play="playQueueTrack"
               />
             </div>
@@ -341,6 +343,13 @@ const desktopLyricsWindowOpen = ref(false)
 const desktopLyricsLocked = ref(false)
 const desktopLyricLines = ref(createLyricPlaceholder('Play a song to show lyrics'))
 const desktopLyricsLoading = ref(false)
+const desktopLyricsButtonLabel = computed(() => {
+  if (desktopLyricsWindowOpen.value && desktopLyricsLocked.value) {
+    return 'Unlock desktop lyrics'
+  }
+
+  return desktopLyricsWindowOpen.value ? 'Close desktop lyrics' : 'Desktop lyrics'
+})
 const danmakuEnabled = ref(true)
 const fullPlayerVisualizerMode = ref(readFullPlayerVisualizerMode())
 const songCommentsModalVisible = ref(false)
@@ -365,6 +374,7 @@ let progressLyricLoadedTrackId = ''
 let progressLyricLoadingTrackId = ''
 let desktopLyricRequestId = 0
 let desktopLyricsPublishFrame = 0
+let desktopLyricsClockFrame = 0
 let fullPlayerDanmakuRequestId = 0
 let fullPlayerDanmakuLoadTimer = 0
 let removeTrackEndedListener = null
@@ -515,6 +525,16 @@ watch(
   { immediate: true }
 )
 
+watch(
+  () => [
+    desktopLyricsWindowOpen.value,
+    player.state.isPlaying,
+    currentTrack.value.id,
+  ],
+  syncDesktopLyricsClock,
+  { immediate: true }
+)
+
 function toggleModeMenu() {
   modeMenuOpen.value = !modeMenuOpen.value
   volumeMenuOpen.value = false
@@ -586,6 +606,13 @@ async function toggleDesktopLyrics() {
   }
 
   try {
+    if (desktopLyricsWindowOpen.value && desktopLyricsLocked.value) {
+      window.mappicDesktop.desktopLyrics.setLocked(false)
+      updateDesktopLyricsWindowState({ open: true, locked: false })
+      publishDesktopLyricsState()
+      return
+    }
+
     const state = await window.mappicDesktop.desktopLyrics.toggle()
     updateDesktopLyricsWindowState(state)
     publishDesktopLyricsState()
@@ -661,16 +688,11 @@ function publishDesktopLyricsState() {
 
 function createDesktopLyricsPayload() {
   const lines = normalizeDesktopLyricLines(desktopLyricLines.value)
-  const activeIndex = findCurrentLyricIndex(lines, player.state.currentTime)
+  const currentTime = getDesktopLyricsCurrentTime()
+  const activeIndex = findCurrentLyricIndex(lines, currentTime)
   const activeLine = lines[activeIndex] ?? lines[0] ?? createLyricPlaceholder('No lyrics')[0]
   const nextLine = lines[activeIndex + 1] ?? null
-  const lineDuration = getDesktopLyricLineDuration(activeLine, nextLine)
-  const progress = activeLine.placeholder
-    ? 0
-    : Math.min(
-        1,
-        Math.max(0, (player.state.currentTime - activeLine.seconds) / lineDuration)
-      )
+  const progress = getDesktopLyricProgress(activeLine, nextLine, currentTime)
 
   return {
     track: {
@@ -681,7 +703,7 @@ function createDesktopLyricsPayload() {
       coverPalette: normalizeDesktopLyricsPalette(currentTrack.value.coverPalette),
     },
     playback: {
-      currentTime: player.state.currentTime,
+      currentTime,
       duration: player.state.duration,
       isPlaying: player.state.isPlaying,
     },
@@ -730,16 +752,119 @@ function normalizeDesktopLyricsPalette(palette = {}) {
   }
 }
 
+function syncDesktopLyricsClock() {
+  if (desktopLyricsWindowOpen.value && player.state.isPlaying) {
+    startDesktopLyricsClock()
+    return
+  }
+
+  stopDesktopLyricsClock()
+}
+
+function startDesktopLyricsClock() {
+  if (!desktopLyricsAvailable.value || desktopLyricsClockFrame) {
+    return
+  }
+
+  const tick = () => {
+    desktopLyricsClockFrame = 0
+
+    if (!desktopLyricsWindowOpen.value || !player.state.isPlaying) {
+      return
+    }
+
+    publishDesktopLyricsState()
+    desktopLyricsClockFrame = window.requestAnimationFrame(tick)
+  }
+
+  desktopLyricsClockFrame = window.requestAnimationFrame(tick)
+}
+
+function stopDesktopLyricsClock() {
+  if (!desktopLyricsClockFrame) {
+    return
+  }
+
+  window.cancelAnimationFrame(desktopLyricsClockFrame)
+  desktopLyricsClockFrame = 0
+}
+
+function getDesktopLyricsCurrentTime() {
+  const currentTime = typeof player.getCurrentTime === 'function'
+    ? player.getCurrentTime()
+    : player.state.currentTime
+
+  return Math.max(0, Number(currentTime) || 0)
+}
+
+function getDesktopLyricProgress(line, nextLine, currentTime) {
+  if (line?.placeholder) {
+    return 0
+  }
+
+  const wordProgress = getDesktopLyricWordProgress(line, currentTime)
+
+  if (wordProgress !== null) {
+    return wordProgress
+  }
+
+  const lineDuration = getDesktopLyricLineDuration(line, nextLine)
+
+  return clampDesktopLyricProgress((currentTime - line.seconds) / lineDuration)
+}
+
+function getDesktopLyricWordProgress(line, currentTime) {
+  const words = Array.isArray(line?.words)
+    ? line.words.filter((word) => word.text && Number.isFinite(Number(word.seconds)))
+    : []
+
+  if (!words.length) {
+    return null
+  }
+
+  const textLength = Math.max(1, words.reduce((total, word) => total + getLyricTextWeight(word.text), 0))
+  let consumedLength = 0
+
+  for (const word of words) {
+    const wordLength = getLyricTextWeight(word.text)
+    const start = Number(word.seconds) || 0
+    const duration = Math.max(0.08, Number(word.duration) || 0)
+    const end = start + duration
+
+    if (currentTime >= end) {
+      consumedLength += wordLength
+      continue
+    }
+
+    if (currentTime <= start) {
+      return clampDesktopLyricProgress(consumedLength / textLength)
+    }
+
+    consumedLength += wordLength * ((currentTime - start) / duration)
+    return clampDesktopLyricProgress(consumedLength / textLength)
+  }
+
+  return 1
+}
+
 function getDesktopLyricLineDuration(line, nextLine) {
   if (line?.duration) {
-    return Math.max(0.8, Number(line.duration) || 0.8)
+    return Math.max(0.08, Number(line.duration) || 0.08)
   }
 
   if (nextLine && Number(nextLine.seconds) > Number(line?.seconds)) {
-    return Math.max(0.8, Number(nextLine.seconds) - Number(line.seconds))
+    return Math.max(0.08, Number(nextLine.seconds) - Number(line.seconds))
   }
 
   return 4.2
+}
+
+function getLyricTextWeight(text = '') {
+  return Math.max(1, Array.from(String(text)).length)
+}
+
+function clampDesktopLyricProgress(value) {
+  return Math.min(1, Math.max(0, Number(value) || 0))
 }
 
 function updateDesktopLyricsWindowState(state = {}) {
@@ -1309,6 +1434,7 @@ onUnmounted(() => {
     window.cancelAnimationFrame(desktopLyricsPublishFrame)
     desktopLyricsPublishFrame = 0
   }
+  stopDesktopLyricsClock()
   removeTrackEndedListener?.()
   removeTrackEndedListener = null
   removeDesktopLyricsWindowStateListener?.()

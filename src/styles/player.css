@@ -1,7 +1,9 @@
 .player {
   --full-player-transition-duration: 420ms;
+  --player-bar-height: 92px;
+  --queue-popover-top-offset: 72px;
   position: relative;
-  z-index: 5;
+  z-index: 30;
   isolation: isolate;
   grid-column: 1 / 3;
   display: grid;
@@ -366,10 +368,10 @@
   position: fixed;
   left: auto;
   right: 0;
-  bottom: 86px;
+  bottom: var(--player-bar-height);
   display: flex;
   width: 380px;
-  height: calc(100vh - 86px);
+  height: calc(100vh - var(--queue-popover-top-offset) - var(--player-bar-height));
   max-height: none;
   flex-direction: column;
   overflow: hidden;
@@ -818,6 +820,11 @@
   background: rgba(var(--accent-rgb), 0.14);
 }
 
+.player-tools > .icon-button.locked {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.16);
+}
+
 .player-popover {
   border: 1px solid var(--border-subtle);
   color: var(--text-main);
@@ -1025,5 +1032,11 @@
 
   .player-tools .n-progress {
     width: 78px;
+  }
+}
+
+@media (max-width: 520px) {
+  .queue-popover {
+    width: calc(100vw - 16px);
   }
 }

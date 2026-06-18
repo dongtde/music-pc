@@ -133,6 +133,11 @@ import { cacheKey, getCachedData } from './cache'
 let playlistCategoryMetaPromise = null
 let artistToplistPromise = null
 
+const PLAYLIST_DEFAULT_CATEGORY = {
+  id: 0,
+  name: '全部'
+}
+
 export async function getHomeDiscoverData() {
   return getCachedData('home-discover', CACHE_TTL.discovery, async () => {
   const [bannerResponse, playlistResponse, newsongResponse, mvResponse, radioResponse] = await Promise.all([
@@ -1022,15 +1027,23 @@ export async function getSearchResultData({ keyword, type = 1, limit = 20, offse
 }
 
 export async function getPlaylistDiscoveryData(category = '全部', { limit = 50, offset = 0 } = {}) {
-  const cat = category || '全部'
+  const requestedCategory = normalizePlaylistCategoryOption(category)
+  const requestedCategoryCacheKey =
+    requestedCategory.id !== '' ? requestedCategory.id : requestedCategory.name
   return getCachedData(
-    cacheKey('playlist-discovery', { cat, limit, offset }),
+    cacheKey('playlist-discovery', { category: requestedCategoryCacheKey, limit, offset }),
     CACHE_TTL.discovery,
     async () => {
-  const [categoryMeta, playlistResponse] = await Promise.all([
-    getPlaylistCategoryMeta(),
-    getTopPlaylists({ cat, order: 'hot', limit, offset }).catch(() => ({}))
-  ])
+  const categoryMeta = await getPlaylistCategoryMeta()
+  const activeCategory = resolvePlaylistCategory(requestedCategory, categoryMeta)
+  const activeCategoryId =
+    activeCategory.id !== '' ? activeCategory.id : normalizePlaylistCategoryId(activeCategory.name) || 0
+  const playlistResponse = await getTopPlaylists({
+    category_id: activeCategoryId,
+    withtag: 1,
+    limit,
+    offset
+  }).catch(() => ({}))
   const playlists = playlistResponse.playlists ?? []
   const total = playlistResponse.total ?? 0
 
@@ -1039,7 +1052,8 @@ export async function getPlaylistDiscoveryData(category = '全部', { limit = 50
     playlists: playlists.map((playlist, index) => mapPlaylist(playlist, offset + index)),
     total,
     more: Boolean(playlistResponse.more || (total && offset + playlists.length < total)),
-    activeCategory: playlistResponse.cat || cat
+    activeCategory: activeCategory.name,
+    activeCategoryId
   }
     }
   )
@@ -1050,10 +1064,7 @@ function getPlaylistCategoryMeta() {
     playlistCategoryMetaPromise = Promise.all([
       getPlaylistHotCategories().catch(() => ({})),
       getPlaylistCategories().catch(() => ({}))
-    ]).then(([hotResponse, catResponse]) => ({
-      hotCategories: (hotResponse.tags ?? []).map((item) => item.name).filter(Boolean),
-      categoryGroups: mapPlaylistCategoryGroups(catResponse)
-    }))
+    ]).then(([hotResponse, catResponse]) => mapPlaylistCategoryMeta(hotResponse, catResponse))
   }
 
   return playlistCategoryMetaPromise
@@ -2314,15 +2325,267 @@ function mapPlaylist(playlist, index) {
   }
 }
 
-function mapPlaylistCategoryGroups(response = {}) {
-  const categories = response.categories ?? {}
-  const sub = response.sub ?? []
+function mapPlaylistCategoryMeta(hotResponse = {}, catResponse = {}) {
+  const fallbackTags = getPlaylistTagItems(catResponse)
+  const mappedCategoryGroups = mapPlaylistCategoryGroups(catResponse)
+  const categoryGroups = mappedCategoryGroups.length
+    ? mappedCategoryGroups
+    : fallbackTags.length
+      ? [{
+          id: 'playlist-tags',
+          name: '全部分类',
+          tags: fallbackTags
+        }]
+      : []
+  const allTags = uniquePlaylistCategories([
+    ...categoryGroups.flatMap((group) => group.tags),
+    ...fallbackTags,
+    ...getPlaylistTagItems(hotResponse)
+  ])
+  const visibleTags = uniquePlaylistCategories([
+    PLAYLIST_DEFAULT_CATEGORY,
+    ...allTags
+  ])
+  const flattenedCategories = uniquePlaylistCategories([
+    ...visibleTags,
+    ...categoryGroups.flatMap((group) => group.tags)
+  ])
+  const categoryByName = Object.fromEntries(
+    flattenedCategories.map((category) => [normalizePlaylistCategoryKey(category.name), category])
+  )
+  const categoryById = Object.fromEntries(
+    flattenedCategories.map((category) => [String(category.id), category])
+  )
 
-  return Object.entries(categories).map(([key, name]) => ({
-    id: key,
-    name,
-    tags: sub.filter((item) => String(item.category) === String(key)).map((item) => item.name)
-  }))
+  return {
+    hotCategories: visibleTags,
+    categoryGroups,
+    categories: flattenedCategories,
+    categoryByName,
+    categoryById
+  }
+}
+
+function resolvePlaylistCategory(category, categoryMeta = {}) {
+  const normalized = normalizePlaylistCategoryOption(category)
+  const categoryByName = categoryMeta.categoryByName ?? {}
+  const categoryById = categoryMeta.categoryById ?? {}
+
+  if (normalized.id !== '' && normalized.id !== undefined && normalized.id !== null) {
+    return categoryById[String(normalized.id)] ?? normalized
+  }
+
+  return categoryByName[normalizePlaylistCategoryKey(normalized.name)] ?? normalized
+}
+
+function normalizePlaylistCategoryOption(category) {
+  if (category && typeof category === 'object') {
+    const name = getPlaylistCategoryName(category) || PLAYLIST_DEFAULT_CATEGORY.name
+    const id = getPlaylistCategoryId(category)
+
+    return {
+      id: id === '' ? normalizePlaylistCategoryId(name) : id,
+      name
+    }
+  }
+
+  const name = String(category || PLAYLIST_DEFAULT_CATEGORY.name).trim() || PLAYLIST_DEFAULT_CATEGORY.name
+
+  return {
+    id: normalizePlaylistCategoryId(name),
+    name
+  }
+}
+
+function normalizePlaylistCategoryId(category) {
+  const value = String(category ?? '').trim()
+
+  if (!value || value === '全部' || value === '推荐') {
+    return 0
+  }
+
+  if (value.toUpperCase() === 'HI-RES') {
+    return 11292
+  }
+
+  return /^\d+$/.test(value) ? Number(value) : ''
+}
+
+function mapPlaylistCategoryGroups(response = {}) {
+  const data = response.data ?? response
+  const legacyGroups = mapLegacyPlaylistCategoryGroups(data)
+
+  if (legacyGroups.length) {
+    return legacyGroups
+  }
+
+  return getPlaylistGroupItems(data)
+    .map((group, groupIndex) => {
+      const tags = uniquePlaylistCategories(getPlaylistGroupTags(group))
+
+      if (!tags.length) {
+        return null
+      }
+
+      return {
+        id: getPlaylistCategoryId(group) || `group-${groupIndex}`,
+        name:
+          group.category_name ||
+          group.categoryName ||
+          group.classname ||
+          group.class_name ||
+          group.name ||
+          group.title ||
+          `分类 ${groupIndex + 1}`,
+        tags
+      }
+    })
+    .filter(Boolean)
+}
+
+function mapLegacyPlaylistCategoryGroups(data = {}) {
+  const categories = data.categories ?? {}
+  const sub = Array.isArray(data.sub) ? data.sub : []
+
+  if (!categories || Array.isArray(categories) || !Object.keys(categories).length || !sub.length) {
+    return []
+  }
+
+  return Object.entries(categories)
+    .map(([key, name]) => ({
+      id: key,
+      name,
+      tags: uniquePlaylistCategories(
+        sub
+          .filter((item) => String(item.category) === String(key))
+          .map(mapPlaylistCategoryItem)
+      )
+    }))
+    .filter((group) => group.tags.length)
+}
+
+function getPlaylistGroupItems(data = {}) {
+  const groups = firstArrayValue(
+    Array.isArray(data) ? data : null,
+    data.category,
+    data.categories,
+    data.category_list,
+    data.categoryList,
+    data.info,
+    data.list,
+    data.tags
+  )
+
+  return groups.filter((item) => getPlaylistGroupTags(item).length)
+}
+
+function getPlaylistTagItems(response = {}) {
+  const data = response.data ?? response
+  const directTags = firstArrayValue(
+    Array.isArray(data) ? data : null,
+    data.tags,
+    data.hot,
+    data.hot_tags,
+    data.hotTags,
+    data.list,
+    data.info,
+    data.data
+  )
+
+  return uniquePlaylistCategories([
+    ...directTags.filter((item) => !getPlaylistGroupTags(item).length).map(mapPlaylistCategoryItem),
+    ...getPlaylistGroupItems(data).flatMap((group) => getPlaylistGroupTags(group).map(mapPlaylistCategoryItem))
+  ])
+}
+
+function getPlaylistGroupTags(group = {}) {
+  return firstArrayValue(
+    group.son,
+    group.sons,
+    group.tags,
+    group.tag_list,
+    group.tagList,
+    group.children,
+    group.child,
+    group.list,
+    group.info,
+    group.items,
+    group.sub,
+    group.subs
+  )
+}
+
+function mapPlaylistCategoryItem(item = {}) {
+  if (typeof item === 'string' || typeof item === 'number') {
+    const name = String(item).trim()
+
+    return {
+      id: normalizePlaylistCategoryId(name),
+      name
+    }
+  }
+
+  const name = getPlaylistCategoryName(item)
+  const id = getPlaylistCategoryId(item)
+
+  return {
+    id: id === '' ? normalizePlaylistCategoryId(name) : id,
+    name
+  }
+}
+
+function getPlaylistCategoryId(item = {}) {
+  return (
+    item.tag_id ??
+    item.tagId ??
+    item.id ??
+    item.category_id ??
+    item.categoryId ??
+    item.classid ??
+    item.class_id ??
+    ''
+  )
+}
+
+function getPlaylistCategoryName(item = {}) {
+  return String(
+    item.tag_name ??
+      item.tagName ??
+      item.name ??
+      item.title ??
+      item.category_name ??
+      item.categoryName ??
+      item.classname ??
+      item.class_name ??
+      item.label ??
+      ''
+  ).trim()
+}
+
+function normalizePlaylistCategoryKey(name = '') {
+  return String(name).trim().toLowerCase()
+}
+
+function uniquePlaylistCategories(categories = []) {
+  const seen = new Set()
+
+  return categories
+    .map(mapPlaylistCategoryItem)
+    .filter((category) => category.name)
+    .filter((category) => {
+      const key = category.id !== '' ? `id:${category.id}` : `name:${normalizePlaylistCategoryKey(category.name)}`
+
+      if (seen.has(key)) {
+        return false
+      }
+
+      seen.add(key)
+      return true
+    })
+}
+
+function firstArrayValue(...values) {
+  return values.find((value) => Array.isArray(value)) ?? []
 }
 
 function mapToplist(item, index) {

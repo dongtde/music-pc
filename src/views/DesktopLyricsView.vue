@@ -4,6 +4,7 @@
     :class="{
       'desktop-lyrics--locked': locked,
       'desktop-lyrics--playing': playback.isPlaying,
+      'desktop-lyrics--settings-open': settingsOpen,
     }"
     :style="paletteStyle"
     @mouseenter="hovering = true"
@@ -11,12 +12,18 @@
   >
     <div class="desktop-lyrics__drag-zone" />
 
-    <section class="desktop-lyrics__line-wrap" aria-live="polite">
-      <div class="desktop-lyrics__track">
-        <span>{{ track.name || 'Mappic Music' }}</span>
-        <small>{{ track.artist || 'Desktop lyrics' }}</small>
-      </div>
+    <button
+      v-if="locked"
+      class="desktop-lyrics__unlock-button"
+      type="button"
+      title="Unlock lyrics"
+      aria-label="Unlock lyrics"
+      @click="setLocked(false)"
+    >
+      <Unlock :size="16" />
+    </button>
 
+    <section class="desktop-lyrics__line-wrap" aria-live="polite">
       <p
         class="desktop-lyrics__line"
         :class="{ 'desktop-lyrics__line--placeholder': activeLine.placeholder }"
@@ -32,14 +39,76 @@
           {{ activeLine.text }}
         </span>
       </p>
-
-      <p
-        v-if="activeLine.translation || nextLineText"
-        class="desktop-lyrics__subline"
-      >
-        {{ activeLine.translation || nextLineText }}
-      </p>
     </section>
+
+    <Transition name="desktop-lyrics-settings">
+      <div
+        v-if="settingsOpen && !locked"
+        class="desktop-lyrics__settings"
+        @click.stop
+        @pointerdown.stop
+      >
+        <button
+          class="desktop-lyrics__settings-back"
+          type="button"
+          title="Back"
+          aria-label="Back"
+          @click="closeSettings"
+        >
+          <ChevronLeft :size="16" />
+        </button>
+        <div class="desktop-lyrics__settings-row">
+          <button
+            type="button"
+            title="Smaller"
+            aria-label="Smaller"
+            @click="adjustFontSize(-2)"
+          >
+            <Minus :size="15" />
+          </button>
+          <input
+            type="range"
+            :min="fontSizeLimits.min"
+            :max="fontSizeLimits.max"
+            :step="1"
+            :value="lyricSettings.fontSize"
+            title="Font size"
+            aria-label="Font size"
+            @input="setFontSize($event.target.value)"
+          >
+          <button
+            type="button"
+            title="Larger"
+            aria-label="Larger"
+            @click="adjustFontSize(2)"
+          >
+            <Plus :size="15" />
+          </button>
+          <output>{{ lyricSettings.fontSize }}px</output>
+        </div>
+        <div class="desktop-lyrics__settings-row desktop-lyrics__settings-row--colors">
+          <button
+            v-for="color in colorPresets"
+            :key="color"
+            class="desktop-lyrics__swatch"
+            type="button"
+            title="Lyric color"
+            aria-label="Lyric color"
+            :class="{ active: isLyricColor(color) }"
+            :style="{ '--swatch-color': color }"
+            @click="setLyricColor(color)"
+          ></button>
+          <input
+            class="desktop-lyrics__color-input"
+            type="color"
+            :value="lyricSettings.color"
+            title="Custom color"
+            aria-label="Custom color"
+            @input="setLyricColor($event.target.value)"
+          >
+        </div>
+      </div>
+    </Transition>
 
     <Transition name="desktop-lyrics-toolbar">
       <nav
@@ -47,6 +116,15 @@
         class="desktop-lyrics__toolbar"
         aria-label="Desktop lyrics controls"
       >
+        <button
+          type="button"
+          title="Settings"
+          aria-label="Settings"
+          :class="{ active: settingsOpen }"
+          @click="toggleSettings"
+        >
+          <Settings2 :size="16" />
+        </button>
         <button type="button" title="Previous" aria-label="Previous" @click="sendCommand('previous')">
           <SkipBack :size="16" />
         </button>
@@ -77,9 +155,25 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { Lock, Pause, Play, SkipBack, SkipForward, Unlock, X } from 'lucide-vue-next'
+import { ChevronLeft, Lock, Minus, Pause, Play, Plus, Settings2, SkipBack, SkipForward, Unlock, X } from 'lucide-vue-next'
 import '../styles/desktop-lyrics.css'
 
+const settingsStorageKey = 'mappic:desktop-lyrics:settings'
+const fontSizeLimits = {
+  min: 24,
+  max: 58,
+}
+const fallbackSettings = {
+  fontSize: 34,
+  color: '#ffe16d',
+}
+const colorPresets = [
+  '#ffe16d',
+  '#5eead4',
+  '#60a5fa',
+  '#fb7185',
+  '#ffffff',
+]
 const fallbackPalette = {
   primary: '#2c5364',
   secondary: '#ff3f73',
@@ -88,6 +182,8 @@ const fallbackPalette = {
 
 const hovering = ref(false)
 const locked = ref(false)
+const settingsOpen = ref(false)
+const lyricSettings = reactive(readLyricSettings())
 const track = reactive({
   id: null,
   name: '',
@@ -110,13 +206,8 @@ let removeStateListener = null
 let removeWindowStateListener = null
 
 const activeLine = computed(() => lyrics.activeLine || createPlaceholderLine('No lyrics'))
-const nextLineText = computed(() => {
-  const text = lyrics.nextLine?.text || ''
-
-  return lyrics.nextLine?.placeholder ? '' : text
-})
 const lyricProgressWidth = computed(() => `${Math.round((lyrics.progress || 0) * 1000) / 10}%`)
-const toolbarVisible = computed(() => hovering.value || !locked.value)
+const toolbarVisible = computed(() => !locked.value && !settingsOpen.value)
 const playTitle = computed(() => (playback.isPlaying ? 'Pause' : 'Play'))
 const paletteStyle = computed(() => {
   const palette = track.coverPalette || fallbackPalette
@@ -125,6 +216,8 @@ const paletteStyle = computed(() => {
     '--lyric-primary': palette.primary || fallbackPalette.primary,
     '--lyric-secondary': palette.secondary || fallbackPalette.secondary,
     '--lyric-tertiary': palette.tertiary || fallbackPalette.tertiary,
+    '--desktop-lyric-font-size': `${lyricSettings.fontSize}px`,
+    '--desktop-lyric-color': lyricSettings.color,
   }
 })
 
@@ -137,14 +230,12 @@ onMounted(() => {
 
   removeStateListener = desktopLyrics.onState(applyDesktopLyricsState)
   removeWindowStateListener = desktopLyrics.onWindowState((state) => {
-    locked.value = Boolean(state?.locked)
+    applyWindowState(state)
   })
   desktopLyrics.ready()
   desktopLyrics
     .getWindowState()
-    .then((state) => {
-      locked.value = Boolean(state?.locked)
-    })
+    .then(applyWindowState)
     .catch((error) => {
       console.warn('Failed to read desktop lyrics window state:', error)
     })
@@ -176,10 +267,67 @@ function applyDesktopLyricsState(payload = {}) {
   })
 }
 
+function applyWindowState(state = {}) {
+  locked.value = Boolean(state?.locked)
+
+  if (locked.value) {
+    settingsOpen.value = false
+  }
+}
+
 function toggleLocked() {
-  const nextLocked = !locked.value
-  locked.value = nextLocked
-  window.mappicDesktop?.desktopLyrics?.setLocked(nextLocked)
+  setLocked(!locked.value)
+}
+
+function setLocked(nextLocked) {
+  locked.value = Boolean(nextLocked)
+
+  if (locked.value) {
+    settingsOpen.value = false
+  }
+
+  window.mappicDesktop?.desktopLyrics?.setLocked(locked.value)
+}
+
+function toggleSettings() {
+  if (locked.value) {
+    return
+  }
+
+  settingsOpen.value = !settingsOpen.value
+}
+
+function closeSettings() {
+  settingsOpen.value = false
+}
+
+function adjustFontSize(delta) {
+  setFontSize(lyricSettings.fontSize + delta)
+}
+
+function setFontSize(value) {
+  lyricSettings.fontSize = clampNumber(
+    Number(value),
+    fontSizeLimits.min,
+    fontSizeLimits.max,
+    fallbackSettings.fontSize
+  )
+  persistLyricSettings()
+}
+
+function setLyricColor(value) {
+  const nextColor = normalizeColor(value)
+
+  if (!nextColor) {
+    return
+  }
+
+  lyricSettings.color = nextColor
+  persistLyricSettings()
+}
+
+function isLyricColor(color) {
+  return lyricSettings.color.toLowerCase() === color.toLowerCase()
 }
 
 function sendCommand(action) {
@@ -202,5 +350,62 @@ function createPlaceholderLine(text) {
     placeholder: true,
     words: [],
   }
+}
+
+function readLyricSettings() {
+  if (typeof window === 'undefined') {
+    return { ...fallbackSettings }
+  }
+
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(settingsStorageKey) || '{}')
+    return normalizeLyricSettings(stored)
+  } catch {
+    return { ...fallbackSettings }
+  }
+}
+
+function normalizeLyricSettings(settings = {}) {
+  return {
+    fontSize: clampNumber(
+      Number(settings.fontSize),
+      fontSizeLimits.min,
+      fontSizeLimits.max,
+      fallbackSettings.fontSize
+    ),
+    color: normalizeColor(settings.color) || fallbackSettings.color,
+  }
+}
+
+function persistLyricSettings() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.localStorage.setItem(
+      settingsStorageKey,
+      JSON.stringify({
+        fontSize: lyricSettings.fontSize,
+        color: lyricSettings.color,
+      })
+    )
+  } catch (error) {
+    console.warn('Failed to persist desktop lyric settings:', error)
+  }
+}
+
+function normalizeColor(value) {
+  const color = String(value || '').trim()
+
+  return /^#[0-9a-f]{6}$/i.test(color) ? color : ''
+}
+
+function clampNumber(value, min, max, fallback) {
+  if (!Number.isFinite(value)) {
+    return fallback
+  }
+
+  return Math.min(max, Math.max(min, Math.round(value)))
 }
 </script>

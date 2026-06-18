@@ -85,6 +85,10 @@ const props = defineProps({
   compact: {
     type: Boolean,
     default: false
+  },
+  showVipPlaybackWarning: {
+    type: Boolean,
+    default: true
   }
 })
 
@@ -111,7 +115,7 @@ function handlePlayIconClick() {
 }
 
 function playTrack() {
-  if (props.track.vip) {
+  if (props.showVipPlaybackWarning && props.track.vip) {
     message.warning('当前歌曲为 VIP 歌曲，将尝试播放试听')
   }
 

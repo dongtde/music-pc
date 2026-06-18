@@ -24,6 +24,14 @@ let desktopLyricsWindow = null;
 let desktopLyricsLocked = false;
 let lastDesktopLyricsPayload = null;
 
+process.on('uncaughtException', (error) => {
+  console.error('[main:uncaught-exception]', error);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[main:unhandled-rejection]', reason);
+});
+
 protocol.registerSchemesAsPrivileged([
   {
     scheme: APP_PROTOCOL,
@@ -60,9 +68,18 @@ async function createMainWindow() {
   });
 
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    const currentUrl = mainWindow.webContents.getURL();
-    const target = new URL(url);
-    const current = currentUrl ? new URL(currentUrl) : null;
+    let target;
+    let current = null;
+
+    try {
+      const currentUrl = mainWindow.webContents.getURL();
+      target = new URL(url);
+      current = currentUrl ? new URL(currentUrl) : null;
+    } catch (error) {
+      console.warn('[main:will-navigate]', error);
+      event.preventDefault();
+      return;
+    }
 
     if (current && target.origin !== current.origin) {
       event.preventDefault();
@@ -120,7 +137,7 @@ async function createDesktopLyricsWindow() {
     desktopLyricsWindow = new BrowserWindow({
       ...bounds,
       minWidth: 520,
-      minHeight: 78,
+      minHeight: 104,
       maxHeight: 220,
       title: 'Desktop lyrics',
       frame: false,
@@ -190,9 +207,22 @@ async function createDesktopLyricsWindow() {
 }
 
 function getDesktopLyricsInitialBounds() {
-  const workArea = screen.getPrimaryDisplay().workArea;
+  let workArea;
+
+  try {
+    workArea = screen.getPrimaryDisplay().workArea;
+  } catch (error) {
+    console.warn('[desktop-lyrics:display]', error);
+    return {
+      width: 760,
+      height: 128,
+      x: 160,
+      y: 680,
+    };
+  }
+
   const width = Math.min(980, Math.max(640, Math.round(workArea.width * 0.58)));
-  const height = 116;
+  const height = 128;
 
   return {
     width,
@@ -345,34 +375,49 @@ function sendToWindow(window, channel, payload) {
 
 function openExternalUrl(url) {
   if (/^https?:\/\//i.test(url)) {
-    shell.openExternal(url);
+    shell.openExternal(url).catch((error) => {
+      console.warn('[shell:open-external]', error);
+    });
   }
 }
 
 function registerAppProtocol() {
   protocol.handle(APP_PROTOCOL, async (request) => {
-    const url = new URL(request.url);
-    const pathname = decodeURIComponent(url.pathname);
+    try {
+      const url = new URL(request.url);
+      const pathname = safeDecodePathname(url.pathname);
 
-    if (url.hostname === 'api' || pathname.startsWith('/api/')) {
-      url.pathname = pathname.replace(/^\/api/, '') || '/';
-      return proxyRequest(request, kugouApiTarget, url);
+      if (url.hostname === 'api' || pathname.startsWith('/api/')) {
+        url.pathname = pathname.replace(/^\/api/, '') || '/';
+        return await proxyRequest(request, kugouApiTarget, url);
+      }
+
+      if (
+        url.hostname === 'netease-api' ||
+        pathname.startsWith('/netease-api/')
+      ) {
+        url.pathname = pathname.replace(/^\/netease-api/, '') || '/';
+        return await proxyRequest(request, neteaseApiTarget, url);
+      }
+
+      if (url.hostname === 'media' || pathname === '/media') {
+        return await proxyMediaRequest(request, url);
+      }
+
+      return await serveStaticAsset(url);
+    } catch (error) {
+      console.warn('[app-protocol:error]', request.url, error);
+      return new Response('App protocol request failed', { status: 500 });
     }
-
-    if (
-      url.hostname === 'netease-api' ||
-      pathname.startsWith('/netease-api/')
-    ) {
-      url.pathname = pathname.replace(/^\/netease-api/, '') || '/';
-      return proxyRequest(request, neteaseApiTarget, url);
-    }
-
-    if (url.hostname === 'media' || pathname === '/media') {
-      return proxyMediaRequest(request, url);
-    }
-
-    return serveStaticAsset(url);
   });
+}
+
+function safeDecodePathname(pathname) {
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return pathname;
+  }
 }
 
 async function serveStaticAsset(url) {
@@ -679,17 +724,23 @@ async function proxyMediaRequest(request, sourceUrl) {
   }
 }
 
-app.whenReady().then(() => {
-  registerAppProtocol();
-  registerDesktopLyricsIpc();
-  createMainWindow();
+app.whenReady()
+  .then(async () => {
+    registerAppProtocol();
+    registerDesktopLyricsIpc();
+    await createMainWindow();
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow();
-    }
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createMainWindow().catch((error) => {
+          console.error('[main:create-window:activate]', error);
+        });
+      }
+    });
+  })
+  .catch((error) => {
+    console.error('[main:ready]', error);
   });
-});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

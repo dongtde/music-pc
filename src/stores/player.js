@@ -198,6 +198,12 @@ export function usePlayerStore() {
     }
   }
 
+  function getCurrentTime() {
+    return Number.isFinite(audio.currentTime)
+      ? audio.currentTime
+      : state.currentTime
+  }
+
   return {
     state,
     playTrack,
@@ -206,6 +212,7 @@ export function usePlayerStore() {
     setQueue,
     setVolume,
     seekTo,
+    getCurrentTime,
     onTrackEnded
   }
 }

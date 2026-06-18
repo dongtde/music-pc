@@ -156,6 +156,21 @@ function normalizeParams(path, params) {
     delete normalized.area
   }
 
+  if (path === '/top/playlist') {
+    if (normalized.category_id === undefined) {
+      normalized.category_id = normalizePlaylistCategoryId(normalized.cat ?? normalized.category)
+    }
+
+    if (normalized.pageSize !== undefined && normalized.pagesize === undefined) {
+      normalized.pagesize = normalized.pageSize
+    }
+
+    delete normalized.pageSize
+    delete normalized.cat
+    delete normalized.category
+    delete normalized.order
+  }
+
   if (path === '/album') {
     normalized.album_id ??= normalized.id
     delete normalized.id
@@ -216,6 +231,20 @@ function normalizeAlbumAreaType(type) {
   }
 
   return typeMap[String(type ?? '').toUpperCase()] || ''
+}
+
+function normalizePlaylistCategoryId(category) {
+  const value = String(category ?? '').trim()
+
+  if (!value || value === '全部' || value === '推荐') {
+    return 0
+  }
+
+  if (value.toUpperCase() === 'HI-RES') {
+    return 11292
+  }
+
+  return /^\d+$/.test(value) ? Number(value) : value
 }
 
 function parseKugouPayload(payload) {

@@ -1,23 +1,24 @@
 <template>
   <section class="discover-page playlists-page">
-    <div v-if="!categoryPanelOpen" class="filter-row discover-filter-row" aria-label="热门歌单分类">
-      <button
-        v-for="category in visibleCategories"
-        :key="category"
-        type="button"
-        :class="{ active: activeCategory === category }"
-        @click="selectCategory(category)"
+    <div class="playlist-category-board" aria-label="歌单分类">
+      <div
+        v-for="group in visibleCategoryGroups"
+        :key="group.id"
+        class="playlist-category-row"
       >
-        {{ category }}
-      </button>
-      <button
-        class="discover-filter-more"
-        type="button"
-        :aria-expanded="String(categoryPanelOpen)"
-        @click="categoryPanelOpen = true"
-      >
-        更多分类
-      </button>
+        <strong>{{ group.name }}</strong>
+        <div>
+          <button
+            v-for="category in group.tags"
+            :key="categoryKey(category)"
+            type="button"
+            :class="{ active: isActiveCategory(category) }"
+            @click="selectCategory(category)"
+          >
+            {{ category.name }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <section
@@ -44,37 +45,7 @@
       <button type="button" @click="reload">重试</button>
     </div>
     <template v-else>
-      <div v-if="categoryPanelOpen && categoryGroups.length" class="playlist-category-panel">
-        <header class="playlist-category-panel__head">
-          <strong>全部分类</strong>
-          <div>
-            <button
-              type="button"
-              :class="{ active: activeCategory === '全部' }"
-              @click="selectCategory('全部')"
-            >
-              全部
-            </button>
-            <button type="button" @click="categoryPanelOpen = false">收起分类</button>
-          </div>
-        </header>
-        <article v-for="group in categoryGroups" :key="group.id">
-          <strong>{{ group.name }}</strong>
-          <div>
-            <button
-              v-for="tagName in group.tags"
-              :key="tagName"
-              type="button"
-              :class="{ active: activeCategory === tagName }"
-              @click="selectCategory(tagName)"
-            >
-              {{ tagName }}
-            </button>
-          </div>
-        </article>
-      </div>
-
-      <SectionTitle :title="`${activeCategory}歌单`" />
+      <SectionTitle :title="`${activeCategory.name}歌单`" />
       <div class="playlist-grid playlist-grid--dense">
         <PlaylistCard v-for="playlist in playlists" :key="playlist.id" :playlist="playlist" />
       </div>
@@ -98,22 +69,31 @@ import { waitForMinimumDelay } from '../../utils/time'
 const PLAYLIST_LIMIT = 50
 const PLAYLIST_SKELETON_COUNT = 24
 const PLAYLIST_SKELETON_MIN_MS = 420
+const defaultCategory = {
+  id: 0,
+  name: '全部'
+}
 
-const activeCategory = ref('全部')
+const activeCategory = ref(defaultCategory)
 const loading = ref(false)
 const loadingMore = ref(false)
 const skeletonVisible = ref(false)
 const error = ref(null)
-const hotCategories = ref(['全部'])
 const categoryGroups = ref([])
 const playlists = ref([])
-const categoryPanelOpen = ref(false)
 const playlistsOffset = ref(0)
 const hasMore = ref(true)
 const loadMoreTrigger = ref(null)
 let playlistRequestId = 0
 
-const visibleCategories = computed(() => ['全部', ...hotCategories.value.filter((item) => item !== '全部')])
+const visibleCategoryGroups = computed(() => categoryGroups.value.length
+  ? categoryGroups.value
+  : [{
+      id: 'default',
+      name: '分类',
+      tags: [defaultCategory]
+    }]
+)
 const loadMoreController = useLoadMoreTrigger({
   trigger: loadMoreTrigger,
   canLoad: () => !loading.value && !loadingMore.value && hasMore.value && !error.value,
@@ -128,13 +108,13 @@ onMounted(() => {
 
 
 function selectCategory(category) {
-  categoryPanelOpen.value = false
+  const nextCategory = normalizeCategory(category)
 
-  if (activeCategory.value === category) {
+  if (categoryKey(activeCategory.value) === categoryKey(nextCategory)) {
     return
   }
 
-  activeCategory.value = category
+  activeCategory.value = nextCategory
   loadData({ reset: true })
 }
 
@@ -178,12 +158,14 @@ async function loadData({ reset = false } = {}) {
       return
     }
 
-    hotCategories.value = data.hotCategories.length ? data.hotCategories : hotCategories.value
-    categoryGroups.value = data.categoryGroups
+    categoryGroups.value = normalizeCategoryGroups(data.categoryGroups)
     playlists.value = reset ? data.playlists : mergePlaylists(playlists.value, data.playlists)
     playlistsOffset.value = offset + data.playlists.length
     hasMore.value = Boolean(data.playlists.length && (data.more || playlistsOffset.value < data.total))
-    activeCategory.value = data.activeCategory || activeCategory.value
+    activeCategory.value = normalizeCategory({
+      id: data.activeCategoryId ?? activeCategory.value.id,
+      name: data.activeCategory || activeCategory.value.name
+    })
   } catch (loadError) {
     if (requestId !== playlistRequestId) {
       return
@@ -225,6 +207,74 @@ function mergePlaylists(currentPlaylists, nextPlaylists) {
       return true
     })
   ]
+}
+
+function normalizeCategory(category) {
+  if (category && typeof category === 'object') {
+    return {
+      id: category.id ?? category.categoryId ?? category.tagId ?? category.tag_id ?? '',
+      name: category.name ?? category.title ?? category.tagName ?? category.tag_name ?? '全部'
+    }
+  }
+
+  return {
+    id: category === '全部' ? 0 : '',
+    name: String(category || '全部')
+  }
+}
+
+function isActiveCategory(category) {
+  return categoryKey(activeCategory.value) === categoryKey(category)
+}
+
+function categoryKey(category) {
+  const normalized = normalizeCategory(category)
+
+  return normalized.id !== '' && normalized.id !== undefined && normalized.id !== null
+    ? `id:${normalized.id}`
+    : `name:${normalized.name}`
+}
+
+function normalizeCategoryGroups(groups = []) {
+  const normalizedGroups = (Array.isArray(groups) ? groups : [])
+    .map((group, index) => {
+      const groupCategory = normalizeCategory({
+        id: group.id,
+        name: '全部'
+      })
+      const groupTags = Array.isArray(group.tags) ? group.tags.map(normalizeCategory) : []
+      const tags = uniqueCategories([groupCategory, ...groupTags])
+
+      return {
+        id: group.id ?? `group-${index}`,
+        name: group.name || `分类 ${index + 1}`,
+        tags
+      }
+    })
+    .filter((group) => group.tags.length)
+
+  return normalizedGroups.length
+    ? normalizedGroups
+    : [{
+        id: 'default',
+        name: '分类',
+        tags: [defaultCategory]
+      }]
+}
+
+function uniqueCategories(categories = []) {
+  const seen = new Set()
+
+  return categories.filter((category) => {
+    const key = categoryKey(category)
+
+    if (seen.has(key)) {
+      return false
+    }
+
+    seen.add(key)
+    return true
+  })
 }
 
 </script>
