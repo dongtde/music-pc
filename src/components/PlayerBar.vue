@@ -40,8 +40,34 @@
       </button>
       <div class="track-summary__body">
         <div class="track-summary__text">
-          <strong>{{ currentTrack.name }}</strong>
-          <small>{{ currentTrack.artist }}</small>
+          <span
+            ref="trackMetaViewport"
+            class="track-summary__marquee"
+            :class="{ 'is-overflowing': trackMetaOverflowing }"
+            :title="`${currentTrack.name} - ${currentTrack.artist}`"
+          >
+            <span ref="trackMetaMeasure" class="track-summary__marquee-measure" aria-hidden="true">
+              <strong class="track-summary__marquee-title">{{ currentTrack.name }}</strong>
+              <span class="track-summary__separator">-</span>
+              <small class="track-summary__marquee-artist">{{ currentTrack.artist }}</small>
+            </span>
+            <span class="track-summary__marquee-frame">
+              <span class="track-summary__marquee-content">
+                <strong class="track-summary__marquee-title">{{ currentTrack.name }}</strong>
+                <span class="track-summary__separator" aria-hidden="true">-</span>
+                <small class="track-summary__marquee-artist">{{ currentTrack.artist }}</small>
+              </span>
+              <span
+                v-if="trackMetaOverflowing"
+                class="track-summary__marquee-content"
+                aria-hidden="true"
+              >
+                <strong class="track-summary__marquee-title">{{ currentTrack.name }}</strong>
+                <span class="track-summary__separator" aria-hidden="true">-</span>
+                <small class="track-summary__marquee-artist">{{ currentTrack.artist }}</small>
+              </span>
+            </span>
+          </span>
         </div>
         <div class="track-summary__actions">
           <button
@@ -290,7 +316,7 @@
 </template>
 
 <script setup>
-import { computed, defineAsyncComponent, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { AudioLines, Captions, Ellipsis, Gauge, Heart, ListMusic, Loader2, Maximize2, MessageCircleMore, Mic2, Minimize2, Orbit, Pause, Play, Plus, Radio, Repeat, Repeat1, Repeat2, Settings2, Shuffle, SkipBack, SkipForward, Sparkles, Volume2, VolumeX, Waves } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import SongListRow from './SongListRow.vue'
@@ -328,7 +354,10 @@ const fullPlayerCoverRect = ref(null)
 const albumArtButton = ref(null)
 const playerBar = ref(null)
 const progressBar = ref(null)
+const trackMetaViewport = ref(null)
+const trackMetaMeasure = ref(null)
 const albumArtHidden = ref(false)
+const trackMetaOverflowing = ref(false)
 const lastAlbumArtToggleAt = ref(0)
 const playerBarHeight = ref(92)
 const playMode = ref('list')
@@ -388,6 +417,8 @@ let removeTrackEndedListener = null
 let removeDesktopLyricsWindowStateListener = null
 let removeDesktopLyricsCommandListener = null
 let playerBarResizeObserver = null
+let trackMarqueeResizeObserver = null
+let trackMarqueeMeasureFrame = 0
 let lastQueueTrackKey = ''
 let lastQueueTrackRequestedAt = 0
 
@@ -507,6 +538,12 @@ watch(
       scheduleFullPlayerDanmakuLoad()
     }
   },
+  { immediate: true }
+)
+
+watch(
+  () => [currentTrack.value.name, currentTrack.value.artist],
+  scheduleTrackMarqueeMeasure,
   { immediate: true }
 )
 
@@ -1450,13 +1487,60 @@ function syncPlayerBarHeight() {
   }
 }
 
+function scheduleTrackMarqueeMeasure() {
+  if (typeof window === 'undefined' || trackMarqueeMeasureFrame) {
+    return
+  }
+
+  trackMarqueeMeasureFrame = window.requestAnimationFrame(async () => {
+    trackMarqueeMeasureFrame = 0
+    await nextTick()
+    measureTrackMarqueeOverflow()
+  })
+}
+
+function measureTrackMarqueeOverflow() {
+  trackMetaOverflowing.value = isTrackTextOverflowing(
+    trackMetaViewport.value,
+    trackMetaMeasure.value
+  )
+}
+
+function isTrackTextOverflowing(viewport, content) {
+  if (!viewport || !content) {
+    return false
+  }
+
+  const style = window.getComputedStyle(viewport)
+  const titleWidth = parseFloat(style.getPropertyValue('--track-title-width')) || 0
+  const artistWidth = parseFloat(style.getPropertyValue('--track-artist-width')) || 0
+  const title = content.querySelector('.track-summary__marquee-title')
+  const artist = content.querySelector('.track-summary__marquee-artist')
+
+  return (
+    content.scrollWidth > viewport.clientWidth + 1 ||
+    (title && title.scrollWidth > titleWidth + 1) ||
+    (artist && artist.scrollWidth > artistWidth + 1)
+  )
+}
+
 onMounted(() => {
   syncPlayerBarHeight()
   window.addEventListener('resize', syncPlayerBarHeight)
+  window.addEventListener('resize', scheduleTrackMarqueeMeasure)
   if (typeof ResizeObserver !== 'undefined' && playerBar.value) {
     playerBarResizeObserver = new ResizeObserver(syncPlayerBarHeight)
     playerBarResizeObserver.observe(playerBar.value)
   }
+  if (typeof ResizeObserver !== 'undefined') {
+    trackMarqueeResizeObserver = new ResizeObserver(scheduleTrackMarqueeMeasure)
+    ;[
+      trackMetaViewport.value
+    ]
+      .filter(Boolean)
+      .forEach((element) => trackMarqueeResizeObserver.observe(element))
+  }
+  scheduleTrackMarqueeMeasure()
 
   document.addEventListener('pointerdown', handleOutsideClick)
   removeTrackEndedListener = player.onTrackEnded(handleTrackEnded)
@@ -1479,9 +1563,16 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', syncPlayerBarHeight)
+  window.removeEventListener('resize', scheduleTrackMarqueeMeasure)
   document.removeEventListener('pointerdown', handleOutsideClick)
   playerBarResizeObserver?.disconnect()
   playerBarResizeObserver = null
+  trackMarqueeResizeObserver?.disconnect()
+  trackMarqueeResizeObserver = null
+  if (trackMarqueeMeasureFrame) {
+    window.cancelAnimationFrame(trackMarqueeMeasureFrame)
+    trackMarqueeMeasureFrame = 0
+  }
   clearFullPlayerDanmakuLoadTimer()
   if (desktopLyricsPublishFrame) {
     window.cancelAnimationFrame(desktopLyricsPublishFrame)

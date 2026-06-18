@@ -101,16 +101,22 @@ const maxVisibleItems = computed(() => {
 
   return Number.isFinite(value) && value > 0 ? value : 48
 })
-const launchBatchSize = computed(() => (danmakuItems.value.length ? 1 : 2))
+const launchBatchSize = computed(() => 1)
 const launchIntervalMs = computed(() => {
   const value = Math.floor(Number(props.maxItems))
 
-  return value > 36 ? 460 : 560
+  return value > 36 ? 1320 : 1180
+})
+const launchWarmupIntervalMs = computed(() => {
+  const value = Math.floor(Number(props.maxItems))
+
+  return value > 36 ? 1800 : 1540
 })
 const layerVisible = ref(false)
 const layerPaused = computed(() => props.paused || !layerVisible.value)
 const danmakuItems = shallowRef([])
 const pendingComments = shallowRef([])
+const activeLaunchSlots = ref(0)
 let seenCommentKeys = new Set()
 let sourceCommentsByKey = new Map()
 let sourceCommentKeys = []
@@ -118,6 +124,7 @@ let showingFallback = false
 const slotTimers = new Map()
 let sourceSyncTimer = 0
 let fillTimer = 0
+let launchWarmupTimer = 0
 let resumeFrame = 0
 let streamClockMs = 0
 let streamStartedAt = 0
@@ -146,10 +153,15 @@ watch(maxVisibleItems, () => {
     return
   }
 
+  activeLaunchSlots.value = Math.min(
+    maxVisibleItems.value,
+    Math.max(getInitialLaunchSlotCount(), activeLaunchSlots.value || 0)
+  )
   danmakuItems.value = danmakuItems.value.slice(0, maxVisibleItems.value)
   clearOverflowSlotTimers()
   clearFillTimer()
   fillDanmakuSlots()
+  scheduleLaunchWarmup()
   requestMoreIfNeeded()
 })
 
@@ -162,6 +174,7 @@ watch(
       if (layerVisible.value) {
         scheduleSourceCommentsSync()
         scheduleVisibleItems()
+        scheduleLaunchWarmup()
       } else {
         prepareStreamResume()
       }
@@ -169,6 +182,7 @@ watch(
       pauseStreamClock()
       layerVisible.value = false
       clearFillTimer()
+      clearLaunchWarmupTimer()
       clearSlotTimers()
     }
 
@@ -180,6 +194,7 @@ watch(
 onUnmounted(() => {
   clearSourceSyncTimer()
   clearFillTimer()
+  clearLaunchWarmupTimer()
   clearResumeFrame()
   clearSlotTimers()
 })
@@ -242,11 +257,13 @@ function createFallbackComments() {
 function resetDanmakuStream() {
   clearSourceSyncTimer()
   clearFillTimer()
+  clearLaunchWarmupTimer()
   clearResumeFrame()
   clearSlotTimers()
   resetStreamClock()
   danmakuItems.value = []
   pendingComments.value = []
+  activeLaunchSlots.value = getInitialLaunchSlotCount()
   seenCommentKeys = new Set()
   sourceCommentsByKey = new Map()
   sourceCommentKeys = []
@@ -276,6 +293,7 @@ function prepareStreamResume() {
     layerVisible.value = true
     startStreamClock()
     scheduleVisibleItems()
+    scheduleLaunchWarmup()
     requestMoreIfNeeded()
   })
 }
@@ -372,13 +390,14 @@ function syncSourceComments() {
   }
 
   enqueueComments(comments)
+  ensureLaunchWarmup()
   fillDanmakuSlots()
   requestMoreIfNeeded()
 }
 
 function showFallbackComments() {
   const comments = createFallbackComments()
-  const count = Math.min(comments.length, maxVisibleItems.value)
+  const count = Math.min(comments.length, getCurrentLaunchSlotLimit())
 
   showingFallback = true
   pendingComments.value = []
@@ -417,9 +436,10 @@ function fillDanmakuSlots() {
   }
 
   const items = [...danmakuItems.value].slice(0, maxVisibleItems.value)
+  const slotLimit = getCurrentLaunchSlotLimit()
   let filledCount = 0
 
-  for (let index = 0; index < maxVisibleItems.value && pendingComments.value.length; index += 1) {
+  for (let index = 0; index < slotLimit && pendingComments.value.length; index += 1) {
     if (items[index] && !items[index].empty) {
       continue
     }
@@ -435,8 +455,10 @@ function fillDanmakuSlots() {
 
   danmakuItems.value = items
 
-  if (pendingComments.value.length && hasAvailableSlot(items)) {
+  if (pendingComments.value.length && hasAvailableSlot(items, slotLimit)) {
     scheduleFillDanmakuSlots()
+  } else if (pendingComments.value.length) {
+    scheduleLaunchWarmup()
   }
 }
 
@@ -463,12 +485,65 @@ function clearFillTimer() {
   }
 }
 
-function hasAvailableSlot(items = danmakuItems.value) {
-  if (items.length < maxVisibleItems.value) {
+function hasAvailableSlot(items = danmakuItems.value, slotLimit = getCurrentLaunchSlotLimit()) {
+  const limit = Math.min(maxVisibleItems.value, slotLimit)
+
+  if (items.length < limit) {
     return true
   }
 
-  return items.some((item) => !item || item.empty)
+  return items.slice(0, limit).some((item) => !item || item.empty)
+}
+
+function ensureLaunchWarmup() {
+  if (!activeLaunchSlots.value) {
+    activeLaunchSlots.value = getInitialLaunchSlotCount()
+  }
+
+  scheduleLaunchWarmup()
+}
+
+function getInitialLaunchSlotCount() {
+  return Math.max(1, Math.min(maxVisibleItems.value, laneCount))
+}
+
+function getCurrentLaunchSlotLimit() {
+  const slotCount = Math.floor(Number(activeLaunchSlots.value))
+  const fallbackCount = getInitialLaunchSlotCount()
+  const nextCount = Number.isFinite(slotCount) && slotCount > 0 ? slotCount : fallbackCount
+
+  return Math.max(1, Math.min(maxVisibleItems.value, nextCount))
+}
+
+function scheduleLaunchWarmup() {
+  if (
+    launchWarmupTimer ||
+    showingFallback ||
+    !pendingComments.value.length ||
+    !props.enabled ||
+    props.paused ||
+    getCurrentLaunchSlotLimit() >= maxVisibleItems.value
+  ) {
+    return
+  }
+
+  launchWarmupTimer = window.setTimeout(() => {
+    launchWarmupTimer = 0
+
+    if (!props.enabled || props.paused || showingFallback) {
+      return
+    }
+
+    activeLaunchSlots.value = Math.min(maxVisibleItems.value, getCurrentLaunchSlotLimit() + 1)
+    fillDanmakuSlots()
+  }, launchWarmupIntervalMs.value)
+}
+
+function clearLaunchWarmupTimer() {
+  if (launchWarmupTimer) {
+    window.clearTimeout(launchWarmupTimer)
+    launchWarmupTimer = 0
+  }
 }
 
 function cycleDanmakuItem(index) {

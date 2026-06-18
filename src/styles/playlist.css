@@ -32,14 +32,14 @@
     linear-gradient(165deg, #cc4b49 0 40%, #eb7f38 42% 66%, #c8354b 68%);
 }
 
-.playlist-cover--sunset::after {
+/* .playlist-cover--sunset::after {
   position: absolute;
   inset: auto -10% 8% -10%;
   height: 42%;
   border-radius: 50% 50% 0 0;
   background: linear-gradient(180deg, rgba(199, 74, 75, 0.88), #c7354b);
   content: '';
-}
+} */
 
 .playlist-cover--neon {
   background:
