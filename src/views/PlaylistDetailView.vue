@@ -264,9 +264,12 @@ const visiblePlaylistTracks = computed(() =>
 const creatorInitial = computed(
   () => playlist.value.creator?.slice(0, 1) || '云',
 );
+const playlistRequestMeta = computed(() => getPlaylistRequestMeta(route.params.id));
+const commentResourceId = computed(() => playlistRequestMeta.value.remoteId);
 const commentState = usePaginatedComments({
-  resourceId: computed(() => route.params.id),
+  resourceId: commentResourceId,
   loader: getPlaylistCommentsData,
+  isValidId: isPlaylistCommentId,
   getFallbackTotal: () => playlist.value.commentCount,
   errorMessage: '评论加载失败',
   warnPrefix: 'Failed to load playlist comments:',
@@ -278,7 +281,6 @@ const commentTotal = commentState.displayTotal;
 const commentsHasMore = commentState.hasMore;
 const commentsLoading = commentState.loading;
 const commentsError = commentState.error;
-const playlistRequestMeta = computed(() => getPlaylistRequestMeta(route.params.id));
 const isRemotePlaylist = computed(() => playlistRequestMeta.value.remote);
 const showTrackLoadMore = computed(
   () => isRemotePlaylist.value && (trackHasMore.value || trackLoading.value || Boolean(trackError.value)),
@@ -652,7 +654,7 @@ function updateVirtualRange() {
 }
 
 function loadMoreComments() {
-  commentState.loadMore(route.params.id);
+  commentState.loadMore(commentResourceId.value);
 }
 
 function openCommentsModal() {
@@ -660,7 +662,11 @@ function openCommentsModal() {
     return null;
   }
 
-  return commentState.open(playlistRequestMeta.value.remoteId);
+  return commentState.open(commentResourceId.value);
+}
+
+function isPlaylistCommentId(id) {
+  return isRemotePlaylistId(id);
 }
 
 function getPlaylistRequestMeta(routeId) {

@@ -141,6 +141,14 @@ function normalizeParams(path, params) {
     delete normalized.pageSize
   }
 
+  if (isCommentPath(path)) {
+    if (normalized.pageSize !== undefined && normalized.pagesize === undefined) {
+      normalized.pagesize = normalized.pageSize
+    }
+
+    delete normalized.pageSize
+  }
+
   if (path === '/artist/audios' || path === '/artist/albums') {
     normalized.sort = normalized.order === 'time' ? 'new' : normalized.sort || 'hot'
     delete normalized.order
@@ -216,6 +224,10 @@ function normalizeSearchType(type) {
 
 function isSearchPath(path = '') {
   return path === '/search' || path.startsWith('/search/')
+}
+
+function isCommentPath(path = '') {
+  return path === '/comment/playlist' || path === '/comment/album' || path === '/comment/music'
 }
 
 function normalizeAlbumAreaType(type) {

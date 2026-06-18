@@ -325,7 +325,7 @@ import { useThemeStore } from '../stores/theme'
 import { usePlayerStore } from '../stores/player'
 import { useLibraryStore } from '../stores/library'
 import { useAuthStore } from '../stores/auth'
-import { getSongCommentsData, getTrackLyricData, updateSongLikeStateData } from '../services/netease'
+import { getSongCommentsData, getSongInteractionStatsData, getTrackLyricData, updateSongLikeStateData } from '../services/netease'
 import { useSongComments } from '../composables/useSongComments'
 import { readStorage, writeStorage } from '../utils/storage'
 import { formatTime } from '../utils/time'
@@ -411,6 +411,7 @@ let progressLyricLoadingTrackId = ''
 let desktopLyricRequestId = 0
 let desktopLyricsPublishFrame = 0
 let desktopLyricsClockFrame = 0
+let songCommentStatsRequestId = 0
 let fullPlayerDanmakuRequestId = 0
 let fullPlayerDanmakuLoadTimer = 0
 let removeTrackEndedListener = null
@@ -532,10 +533,15 @@ watch(
   () => {
     resetProgressLyrics()
     loadDesktopLyrics(currentTrack.value)
+    refreshCurrentTrackCommentTotal(currentTrack.value)
     resetFullPlayerDanmakuStream(currentTrack.value)
 
     if (fullPlayerOpen.value && danmakuEnabled.value) {
       scheduleFullPlayerDanmakuLoad()
+    }
+
+    if (songCommentsModalVisible.value) {
+      songCommentState.open(currentTrack.value)
     }
   },
   { immediate: true }
@@ -1077,6 +1083,32 @@ async function openSongCommentsModal() {
   await songCommentState.open(currentTrack.value)
 }
 
+async function refreshCurrentTrackCommentTotal(track = currentTrack.value) {
+  const id = String(track?.id ?? '')
+  const requestId = ++songCommentStatsRequestId
+
+  songCommentState.reset()
+
+  if (!isNeteaseNumericTrackId(id)) {
+    return
+  }
+
+  try {
+    const stats = await getSongInteractionStatsData(id)
+
+    if (requestId !== songCommentStatsRequestId || id !== String(currentTrack.value.id ?? '')) {
+      return
+    }
+
+    currentTrack.value.commentCount = Number(stats.commentCount) || 0
+    currentTrack.value.commentCountLabel = stats.commentCountLabel || ''
+  } catch (error) {
+    if (requestId === songCommentStatsRequestId) {
+      console.warn('Failed to load current track comment count:', error)
+    }
+  }
+}
+
 async function toggleCurrentTrackLike() {
   if (!currentTrack.value?.id) {
     return
@@ -1348,6 +1380,10 @@ function findLyricLineAt(time) {
 
 function isNeteaseTrackId(trackId) {
   return /^\d+$/.test(String(trackId ?? '')) || /^[a-f0-9]{32}$/i.test(String(trackId ?? ''))
+}
+
+function isNeteaseNumericTrackId(trackId) {
+  return /^\d+$/.test(String(trackId ?? ''))
 }
 
 async function playPreviousTrack() {
