@@ -222,6 +222,17 @@
         </div>
       </div>
       <button class="icon-button" type="button" aria-label="麦克风"><Mic2 :size="17" /></button>
+      <button
+        v-if="desktopLyricsAvailable"
+        class="icon-button"
+        type="button"
+        aria-label="Desktop lyrics"
+        title="Desktop lyrics"
+        :class="{ active: desktopLyricsWindowOpen }"
+        @click="toggleDesktopLyrics"
+      >
+        <Captions :size="18" />
+      </button>
       <div class="control-popover-wrap queue-popover-wrap">
         <button
           class="icon-button with-dot"
@@ -273,7 +284,7 @@
 
 <script setup>
 import { computed, defineAsyncComponent, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
-import { AudioLines, Ellipsis, Gauge, Heart, ListMusic, Loader2, Maximize2, MessageCircleMore, Mic2, Minimize2, Orbit, Pause, Play, Plus, Radio, Repeat, Repeat1, Repeat2, Settings2, Shuffle, SkipBack, SkipForward, Sparkles, Volume2, VolumeX, Waves } from 'lucide-vue-next'
+import { AudioLines, Captions, Ellipsis, Gauge, Heart, ListMusic, Loader2, Maximize2, MessageCircleMore, Mic2, Minimize2, Orbit, Pause, Play, Plus, Radio, Repeat, Repeat1, Repeat2, Settings2, Shuffle, SkipBack, SkipForward, Sparkles, Volume2, VolumeX, Waves } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import SongListRow from './SongListRow.vue'
 import { STORAGE_KEYS } from '../config/app'
@@ -285,6 +296,10 @@ import { getSongCommentsData, getTrackLyricData, updateSongLikeStateData } from 
 import { useSongComments } from '../composables/useSongComments'
 import { readStorage, writeStorage } from '../utils/storage'
 import { formatTime } from '../utils/time'
+import {
+  createLyricPlaceholder,
+  findCurrentLyricIndex
+} from '../utils/lyrics'
 import '../styles/player.css'
 
 const CommentModal = defineAsyncComponent(() => import('./CommentModal.vue'))
@@ -316,6 +331,16 @@ const progressPreviewPercent = ref(0)
 const progressPreviewTime = ref(0)
 const pendingProgressTime = ref(0)
 const progressLyricLines = ref([])
+const desktopLyricsAvailable = computed(() =>
+  Boolean(
+    typeof window !== 'undefined' &&
+      window.mappicDesktop?.desktopLyrics
+  )
+)
+const desktopLyricsWindowOpen = ref(false)
+const desktopLyricsLocked = ref(false)
+const desktopLyricLines = ref(createLyricPlaceholder('Play a song to show lyrics'))
+const desktopLyricsLoading = ref(false)
 const danmakuEnabled = ref(true)
 const fullPlayerVisualizerMode = ref(readFullPlayerVisualizerMode())
 const songCommentsModalVisible = ref(false)
@@ -338,9 +363,13 @@ const fullPlayerDanmakuLoadDelay = 560
 let progressLyricRequestId = 0
 let progressLyricLoadedTrackId = ''
 let progressLyricLoadingTrackId = ''
+let desktopLyricRequestId = 0
+let desktopLyricsPublishFrame = 0
 let fullPlayerDanmakuRequestId = 0
 let fullPlayerDanmakuLoadTimer = 0
 let removeTrackEndedListener = null
+let removeDesktopLyricsWindowStateListener = null
+let removeDesktopLyricsCommandListener = null
 
 const fallbackCoverPalette = {
   primary: '#213245',
@@ -446,6 +475,7 @@ watch(
   () => currentTrack.value.id,
   () => {
     resetProgressLyrics()
+    loadDesktopLyrics(currentTrack.value)
     resetFullPlayerDanmakuStream(currentTrack.value)
 
     if (fullPlayerOpen.value && danmakuEnabled.value) {
@@ -468,6 +498,22 @@ watch(fullPlayerOpen, (open) => {
 watch(fullPlayerVisualizerMode, (mode) => {
   persistFullPlayerVisualizerMode(mode)
 })
+
+watch(
+  () => [
+    currentTrack.value.id,
+    currentTrack.value.name,
+    currentTrack.value.artist,
+    currentTrack.value.coverUrl,
+    player.state.currentTime,
+    player.state.duration,
+    player.state.isPlaying,
+    desktopLyricLines.value,
+    desktopLyricsLoading.value,
+  ],
+  scheduleDesktopLyricsPublish,
+  { immediate: true }
+)
 
 function toggleModeMenu() {
   modeMenuOpen.value = !modeMenuOpen.value
@@ -532,6 +578,197 @@ function persistFullPlayerVisualizerMode(value) {
 
 function isValidVisualizerMode(value) {
   return validFullPlayerVisualizerModes.has(String(value ?? ''))
+}
+
+async function toggleDesktopLyrics() {
+  if (!desktopLyricsAvailable.value) {
+    return
+  }
+
+  try {
+    const state = await window.mappicDesktop.desktopLyrics.toggle()
+    updateDesktopLyricsWindowState(state)
+    publishDesktopLyricsState()
+  } catch (error) {
+    console.warn('Failed to toggle desktop lyrics:', error)
+    message.error('Desktop lyrics failed to open')
+  }
+}
+
+async function loadDesktopLyrics(track) {
+  const trackId = String(track?.id ?? track ?? '')
+  desktopLyricRequestId += 1
+  const requestId = desktopLyricRequestId
+  desktopLyricsLoading.value = Boolean(trackId)
+  desktopLyricLines.value = createLyricPlaceholder(
+    trackId ? 'Loading lyrics...' : 'Play a song to show lyrics'
+  )
+
+  if (!isNeteaseTrackId(trackId)) {
+    desktopLyricsLoading.value = false
+    desktopLyricLines.value = createLyricPlaceholder(
+      trackId ? 'No lyrics' : 'Play a song to show lyrics'
+    )
+    return
+  }
+
+  try {
+    const lines = await getTrackLyricData(track && typeof track === 'object' ? track : trackId)
+
+    if (requestId !== desktopLyricRequestId) {
+      return
+    }
+
+    desktopLyricLines.value = lines?.length
+      ? lines
+      : createLyricPlaceholder('No lyrics')
+  } catch (error) {
+    if (requestId !== desktopLyricRequestId) {
+      return
+    }
+
+    console.warn('Failed to load desktop lyrics:', error)
+    desktopLyricLines.value = createLyricPlaceholder('Lyrics failed to load')
+  } finally {
+    if (requestId === desktopLyricRequestId) {
+      desktopLyricsLoading.value = false
+    }
+  }
+}
+
+function scheduleDesktopLyricsPublish() {
+  if (!desktopLyricsAvailable.value) {
+    return
+  }
+
+  if (desktopLyricsPublishFrame) {
+    return
+  }
+
+  desktopLyricsPublishFrame = window.requestAnimationFrame(() => {
+    desktopLyricsPublishFrame = 0
+    publishDesktopLyricsState()
+  })
+}
+
+function publishDesktopLyricsState() {
+  if (!desktopLyricsAvailable.value) {
+    return
+  }
+
+  window.mappicDesktop.desktopLyrics.publishState(createDesktopLyricsPayload())
+}
+
+function createDesktopLyricsPayload() {
+  const lines = normalizeDesktopLyricLines(desktopLyricLines.value)
+  const activeIndex = findCurrentLyricIndex(lines, player.state.currentTime)
+  const activeLine = lines[activeIndex] ?? lines[0] ?? createLyricPlaceholder('No lyrics')[0]
+  const nextLine = lines[activeIndex + 1] ?? null
+  const lineDuration = getDesktopLyricLineDuration(activeLine, nextLine)
+  const progress = activeLine.placeholder
+    ? 0
+    : Math.min(
+        1,
+        Math.max(0, (player.state.currentTime - activeLine.seconds) / lineDuration)
+      )
+
+  return {
+    track: {
+      id: currentTrack.value.id,
+      name: currentTrack.value.name,
+      artist: currentTrack.value.artist,
+      coverUrl: currentTrack.value.coverUrl,
+      coverPalette: normalizeDesktopLyricsPalette(currentTrack.value.coverPalette),
+    },
+    playback: {
+      currentTime: player.state.currentTime,
+      duration: player.state.duration,
+      isPlaying: player.state.isPlaying,
+    },
+    lyrics: {
+      lines,
+      activeIndex,
+      activeLine,
+      nextLine,
+      progress,
+      loading: desktopLyricsLoading.value,
+    },
+  }
+}
+
+function normalizeDesktopLyricLines(lines = []) {
+  const normalizedLines = (Array.isArray(lines) && lines.length
+    ? lines
+    : createLyricPlaceholder('No lyrics')
+  ).map((line, index) => ({
+    index,
+    time: line.time || '--:--',
+    text: line.text || '...',
+    translation: line.translation || '',
+    seconds: Number(line.seconds) || 0,
+    duration: Number(line.duration) || 0,
+    placeholder: Boolean(line.placeholder),
+    words: Array.isArray(line.words)
+      ? line.words.map((word) => ({
+          text: word.text || '',
+          seconds: Number(word.seconds) || 0,
+          duration: Number(word.duration) || 0,
+        }))
+      : [],
+  }))
+
+  return normalizedLines.length
+    ? normalizedLines
+    : createLyricPlaceholder('No lyrics')
+}
+
+function normalizeDesktopLyricsPalette(palette = {}) {
+  return {
+    primary: palette.primary || fallbackCoverPalette.primary,
+    secondary: palette.secondary || fallbackCoverPalette.secondary,
+    tertiary: palette.tertiary || fallbackCoverPalette.tertiary,
+  }
+}
+
+function getDesktopLyricLineDuration(line, nextLine) {
+  if (line?.duration) {
+    return Math.max(0.8, Number(line.duration) || 0.8)
+  }
+
+  if (nextLine && Number(nextLine.seconds) > Number(line?.seconds)) {
+    return Math.max(0.8, Number(nextLine.seconds) - Number(line.seconds))
+  }
+
+  return 4.2
+}
+
+function updateDesktopLyricsWindowState(state = {}) {
+  desktopLyricsWindowOpen.value = Boolean(state.open)
+  desktopLyricsLocked.value = Boolean(state.locked)
+}
+
+async function handleDesktopLyricsCommand(command) {
+  const action = typeof command === 'string' ? command : command?.action
+
+  if (action === 'toggle-play') {
+    const toggled = await player.togglePlay()
+    showPlaybackError(toggled)
+    return
+  }
+
+  if (action === 'previous') {
+    await playPreviousTrack()
+    return
+  }
+
+  if (action === 'next') {
+    await playNextTrack()
+    return
+  }
+
+  if (action === 'hide') {
+    desktopLyricsWindowOpen.value = false
+  }
 }
 
 function toggleFullPlayer() {
@@ -1048,12 +1285,35 @@ function handleOutsideClick(event) {
 onMounted(() => {
   document.addEventListener('pointerdown', handleOutsideClick)
   removeTrackEndedListener = player.onTrackEnded(handleTrackEnded)
+
+  if (desktopLyricsAvailable.value) {
+    removeDesktopLyricsWindowStateListener =
+      window.mappicDesktop.desktopLyrics.onWindowState(updateDesktopLyricsWindowState)
+    removeDesktopLyricsCommandListener =
+      window.mappicDesktop.desktopLyrics.onCommand(handleDesktopLyricsCommand)
+
+    window.mappicDesktop.desktopLyrics
+      .getWindowState()
+      .then(updateDesktopLyricsWindowState)
+      .catch((error) => {
+        console.warn('Failed to read desktop lyrics window state:', error)
+      })
+    publishDesktopLyricsState()
+  }
 })
 
 onUnmounted(() => {
   document.removeEventListener('pointerdown', handleOutsideClick)
   clearFullPlayerDanmakuLoadTimer()
+  if (desktopLyricsPublishFrame) {
+    window.cancelAnimationFrame(desktopLyricsPublishFrame)
+    desktopLyricsPublishFrame = 0
+  }
   removeTrackEndedListener?.()
   removeTrackEndedListener = null
+  removeDesktopLyricsWindowStateListener?.()
+  removeDesktopLyricsWindowStateListener = null
+  removeDesktopLyricsCommandListener?.()
+  removeDesktopLyricsCommandListener = null
 })
 </script>

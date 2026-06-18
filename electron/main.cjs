@@ -1,4 +1,12 @@
-const { app, BrowserWindow, net, protocol, shell } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  net,
+  protocol,
+  screen,
+  shell,
+} = require('electron');
 const path = require('node:path');
 
 const APP_PROTOCOL = 'mappic';
@@ -11,6 +19,10 @@ const kugouApiTarget =
 const neteaseApiTarget =
   process.env.NETEASE_API_TARGET || 'https://music-api.xcj.pw';
 const proxyCookieJars = new Map();
+let mainWindow = null;
+let desktopLyricsWindow = null;
+let desktopLyricsLocked = false;
+let lastDesktopLyricsPayload = null;
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -26,7 +38,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 async function createMainWindow() {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 960,
@@ -83,6 +95,251 @@ async function createMainWindow() {
 
   if (isDebug) {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
+  }
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+
+    if (isDesktopLyricsWindowOpen()) {
+      closeDesktopLyricsWindow();
+    }
+  });
+}
+
+async function createDesktopLyricsWindow() {
+  if (isDesktopLyricsWindowOpen()) {
+    safelyCallWindowMethod(desktopLyricsWindow, 'showInactive');
+    sendDesktopLyricsWindowState();
+    sendDesktopLyricsPayload();
+    return desktopLyricsWindow;
+  }
+
+  const bounds = getDesktopLyricsInitialBounds();
+
+  try {
+    desktopLyricsWindow = new BrowserWindow({
+      ...bounds,
+      minWidth: 520,
+      minHeight: 78,
+      maxHeight: 220,
+      title: 'Desktop lyrics',
+      frame: false,
+      transparent: true,
+      backgroundColor: '#00000000',
+      hasShadow: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      resizable: true,
+      show: false,
+      autoHideMenuBar: true,
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.cjs'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    });
+  } catch (error) {
+    console.warn('[desktop-lyrics:create-window]', error);
+    desktopLyricsWindow = null;
+    desktopLyricsLocked = false;
+    broadcastDesktopLyricsWindowState();
+    return null;
+  }
+
+  safelyCallWindowMethod(desktopLyricsWindow, 'setAlwaysOnTop', true, 'floating');
+
+  try {
+    desktopLyricsWindow.setVisibleOnAllWorkspaces(true, {
+      visibleOnFullScreen: true,
+    });
+  } catch (error) {
+    console.warn('[desktop-lyrics:workspace-visibility]', error);
+  }
+
+  desktopLyricsWindow.webContents.setWindowOpenHandler(({ url }) => {
+    openExternalUrl(url);
+    return { action: 'deny' };
+  });
+
+  desktopLyricsWindow.once('ready-to-show', () => {
+    safelyCallWindowMethod(desktopLyricsWindow, 'showInactive');
+    sendDesktopLyricsWindowState();
+  });
+
+  desktopLyricsWindow.webContents.on('did-finish-load', () => {
+    sendDesktopLyricsWindowState();
+    sendDesktopLyricsPayload();
+  });
+
+  desktopLyricsWindow.on('closed', () => {
+    desktopLyricsWindow = null;
+    desktopLyricsLocked = false;
+    broadcastDesktopLyricsWindowState();
+  });
+
+  try {
+    await desktopLyricsWindow.loadURL(`${APP_PROTOCOL}://app/#/desktop-lyrics`);
+    broadcastDesktopLyricsWindowState();
+    return desktopLyricsWindow;
+  } catch (error) {
+    console.warn('[desktop-lyrics:load]', error);
+    closeDesktopLyricsWindow();
+    return null;
+  }
+}
+
+function getDesktopLyricsInitialBounds() {
+  const workArea = screen.getPrimaryDisplay().workArea;
+  const width = Math.min(980, Math.max(640, Math.round(workArea.width * 0.58)));
+  const height = 116;
+
+  return {
+    width,
+    height,
+    x: workArea.x + Math.round((workArea.width - width) / 2),
+    y: workArea.y + Math.max(24, workArea.height - height - 92),
+  };
+}
+
+function isDesktopLyricsWindowOpen() {
+  return Boolean(desktopLyricsWindow && !desktopLyricsWindow.isDestroyed());
+}
+
+function getDesktopLyricsWindowState() {
+  return {
+    open: isDesktopLyricsWindowOpen(),
+    locked: desktopLyricsLocked,
+  };
+}
+
+function sendDesktopLyricsWindowState(targetWindow = desktopLyricsWindow) {
+  if (!targetWindow || targetWindow.isDestroyed()) {
+    return;
+  }
+
+  sendToWindow(
+    targetWindow,
+    'desktop-lyrics:window-state',
+    getDesktopLyricsWindowState(),
+  );
+}
+
+function broadcastDesktopLyricsWindowState() {
+  const state = getDesktopLyricsWindowState();
+
+  BrowserWindow.getAllWindows().forEach((window) => {
+    sendToWindow(window, 'desktop-lyrics:window-state', state);
+  });
+}
+
+function sendDesktopLyricsPayload(targetWindow = desktopLyricsWindow) {
+  if (!lastDesktopLyricsPayload || !targetWindow || targetWindow.isDestroyed()) {
+    return;
+  }
+
+  sendToWindow(targetWindow, 'desktop-lyrics:state', lastDesktopLyricsPayload);
+}
+
+function registerDesktopLyricsIpc() {
+  ipcMain.handle('desktop-lyrics:toggle', async () => {
+    if (isDesktopLyricsWindowOpen()) {
+      closeDesktopLyricsWindow();
+      return getDesktopLyricsWindowState();
+    }
+
+    await createDesktopLyricsWindow();
+    return getDesktopLyricsWindowState();
+  });
+
+  ipcMain.handle('desktop-lyrics:show', async () => {
+    await createDesktopLyricsWindow();
+    return getDesktopLyricsWindowState();
+  });
+
+  ipcMain.handle('desktop-lyrics:hide', () => {
+    if (isDesktopLyricsWindowOpen()) {
+      closeDesktopLyricsWindow();
+    }
+
+    return getDesktopLyricsWindowState();
+  });
+
+  ipcMain.handle('desktop-lyrics:get-window-state', () =>
+    getDesktopLyricsWindowState(),
+  );
+
+  ipcMain.on('desktop-lyrics:ready', (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender);
+    sendDesktopLyricsWindowState(senderWindow);
+    sendDesktopLyricsPayload(senderWindow);
+  });
+
+  ipcMain.on('desktop-lyrics:state', (_event, payload) => {
+    lastDesktopLyricsPayload = payload;
+    sendDesktopLyricsPayload();
+  });
+
+  ipcMain.on('desktop-lyrics:set-locked', (_event, locked) => {
+    desktopLyricsLocked = Boolean(locked);
+
+    if (isDesktopLyricsWindowOpen()) {
+      safelyCallWindowMethod(
+        desktopLyricsWindow,
+        'setResizable',
+        !desktopLyricsLocked,
+      );
+      safelyCallWindowMethod(
+        desktopLyricsWindow,
+        'setMovable',
+        !desktopLyricsLocked,
+      );
+    }
+
+    broadcastDesktopLyricsWindowState();
+  });
+
+  ipcMain.on('desktop-lyrics:command', (_event, command) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      sendToWindow(mainWindow, 'desktop-lyrics:command', command);
+    }
+  });
+}
+
+function closeDesktopLyricsWindow() {
+  if (!isDesktopLyricsWindowOpen()) {
+    return;
+  }
+
+  safelyCallWindowMethod(desktopLyricsWindow, 'close');
+}
+
+function safelyCallWindowMethod(window, methodName, ...args) {
+  if (
+    !window ||
+    window.isDestroyed() ||
+    typeof window[methodName] !== 'function'
+  ) {
+    return undefined;
+  }
+
+  try {
+    return window[methodName](...args);
+  } catch (error) {
+    console.warn(`[desktop-lyrics:${methodName}]`, error);
+    return undefined;
+  }
+}
+
+function sendToWindow(window, channel, payload) {
+  if (!window || window.isDestroyed() || window.webContents?.isDestroyed()) {
+    return;
+  }
+
+  try {
+    window.webContents.send(channel, payload);
+  } catch (error) {
+    console.warn(`[desktop-lyrics:send:${channel}]`, error);
   }
 }
 
@@ -424,6 +681,7 @@ async function proxyMediaRequest(request, sourceUrl) {
 
 app.whenReady().then(() => {
   registerAppProtocol();
+  registerDesktopLyricsIpc();
   createMainWindow();
 
   app.on('activate', () => {

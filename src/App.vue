@@ -1,7 +1,9 @@
 <template>
   <n-config-provider :theme="naiveTheme" :theme-overrides="themeOverrides">
     <n-message-provider>
+      <router-view v-if="isDesktopLyricsRoute" />
       <main
+        v-else
         class="app-shell"
         :class="{
           'theme-is-switching': theme.state.animating,
@@ -57,6 +59,7 @@ auth.initAuth();
 const naiveTheme = computed(() =>
   theme.state.mode === 'dark' ? darkTheme : null,
 );
+const isDesktopLyricsRoute = computed(() => route.meta.desktopLyrics);
 const isImmersiveRoute = computed(() => route.name === 'home');
 const routeTransitionName = ref('route-soft');
 const isLayoutSwitching = ref(false);

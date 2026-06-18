@@ -93,6 +93,12 @@ const routes = [
     name: 'settings',
     component: () => import('../views/SettingsView.vue'),
     meta: { title: '设置', icon: 'Settings' }
+  },
+  {
+    path: '/desktop-lyrics',
+    name: 'desktop-lyrics',
+    component: () => import('../views/DesktopLyricsView.vue'),
+    meta: { title: '桌面歌词', desktopLyrics: true }
   }
 ]
 
