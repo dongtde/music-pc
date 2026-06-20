@@ -252,6 +252,86 @@
   text-align: left;
 }
 
+.vip-claim-panel {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.vip-status-line {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 9px;
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.vip-status-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--text-muted);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--text-muted) 14%, transparent);
+}
+
+.vip-status-dot.active {
+  background: #f5b300;
+  box-shadow: 0 0 0 4px rgba(245, 179, 0, 0.16);
+}
+
+.vip-claim-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 168px;
+  min-height: 42px;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, #f5b300 48%, var(--settings-border));
+  border-radius: 8px;
+  color: #5b3a00;
+  background:
+    linear-gradient(180deg, rgba(255, 224, 128, 0.92), rgba(245, 179, 0, 0.84)),
+    #f5b300;
+  box-shadow: 0 12px 24px rgba(245, 179, 0, 0.18);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 900;
+  transition:
+    transform 180ms ease,
+    box-shadow 220ms ease,
+    filter 220ms ease,
+    opacity 220ms ease;
+}
+
+.vip-claim-button:hover {
+  filter: brightness(1.03);
+  transform: translateY(-1px);
+}
+
+.vip-claim-button.is-active {
+  color: #ffffff;
+  background:
+    linear-gradient(135deg, var(--accent), var(--settings-fresh)),
+    var(--accent);
+}
+
+.vip-claim-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+  transform: none;
+}
+
+.vip-claim-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .theme-choice button:hover,
 .color-choice button:hover,
 .effect-list button:hover,
@@ -329,7 +409,8 @@
 .theme-choice button:focus-visible,
 .color-choice button:focus-visible,
 .custom-color input:focus-visible,
-.effect-list button:focus-visible {
+.effect-list button:focus-visible,
+.vip-claim-button:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--settings-fresh) 72%, #ffffff);
   outline-offset: 3px;
 }
@@ -373,6 +454,7 @@
   .theme-choice button,
   .color-choice button,
   .effect-list button,
+  .vip-claim-button,
   .custom-color {
     transition: none !important;
   }

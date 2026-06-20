@@ -32,7 +32,7 @@
             <button
               class="vip-button profile-vip-button"
               :class="{
-                'is-active': auth.state.vip.active,
+                'is-active': activeSvip,
                 'is-busy': auth.state.vip.loading || auth.state.vip.claiming
               }"
               type="button"
@@ -133,13 +133,18 @@ const vipButtonText = computed(() => {
     return '检测中'
   }
 
-  return auth.state.vip.active ? 'SVIP\u5df2\u5f00\u901a' : '\u5f00\u901aSVIP'
+  return activeSvip.value ? 'SVIP\u5df2\u5f00\u901a' : '\u5f00\u901aSVIP'
 })
 const vipButtonDisabled = computed(() => auth.state.vip.loading || auth.state.vip.claiming)
 const busiVipList = computed(() => {
   const busiVipList = auth.state.vip.raw?.data?.busi_vip
 
   return Array.isArray(busiVipList) ? busiVipList : []
+})
+const activeSvip = computed(() => {
+  const vip = busiVipList.value.find((item) => isSvipBusiVip(item))
+
+  return Boolean(vip && (Number(vip.is_vip) > 0 || isFutureTime(vip.vip_end_time)))
 })
 const activeBusiVip = computed(() => {
   return busiVipList.value.find((item) => {
@@ -285,15 +290,15 @@ async function handleVipButtonClick() {
     await auth.refreshVipStatus()
   }
 
-  if (auth.state.vip.active) {
-    message.success('VIP 已开通')
+  if (activeSvip.value) {
+    message.success('SVIP 已开通')
     return
   }
 
-  const result = await auth.claimDailyVip()
+  const result = await auth.claimDailyVip({ skipIfActive: false })
 
   if (result?.ok) {
-    message.success(auth.state.vip.active ? 'VIP 已开通' : '已提交 VIP 领取请求')
+    message.success(activeSvip.value ? 'SVIP 已开通' : '已提交 VIP 领取请求')
   } else if (result?.reason !== 'login-required') {
     message.error(result?.error?.message || 'VIP 领取失败，请稍后再试')
   }
@@ -305,6 +310,10 @@ function formatBadge(value) {
 
 function isValidBusiVip(item) {
   return Boolean(item && typeof item === 'object')
+}
+
+function isSvipBusiVip(item) {
+  return isValidBusiVip(item) && String(item.product_type || '').toLowerCase() === 'svip'
 }
 
 function isFutureTime(value) {

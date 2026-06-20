@@ -475,11 +475,8 @@ function setAccountState({ profile, account, loginType }) {
 
 function syncVipAfterLogin() {
   return refreshVipStatus()
-    .then((active) => {
-      if (!active) {
-        ensureDailyVipClaim()
-      }
-    })
+    .catch(() => false)
+    .then(() => ensureDailyVipClaim())
     .catch(() => {
       ensureDailyVipClaim()
     })
@@ -534,7 +531,7 @@ async function refreshVipStatus({ force = false } = {}) {
 }
 
 function ensureDailyVipClaim() {
-  if (!state.isLoggedIn || state.loginType === 'guest' || state.vip.active) {
+  if (!state.isLoggedIn || state.loginType === 'guest') {
     return null
   }
 
@@ -567,13 +564,13 @@ function ensureDailyVipClaim() {
   return dailyVipClaimRequest
 }
 
-async function claimDailyVip() {
+async function claimDailyVip({ skipIfActive = true } = {}) {
   if (!state.isLoggedIn || state.loginType === 'guest') {
     openLoginModalFromStore()
     return { ok: false, reason: 'login-required' }
   }
 
-  if (state.vip.active) {
+  if (skipIfActive && state.vip.active) {
     return { ok: true, active: true, skipped: true }
   }
 

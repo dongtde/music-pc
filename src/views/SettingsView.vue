@@ -124,15 +124,151 @@
             </button>
           </div>
         </div>
+
+        <div class="setting-block">
+          <div class="setting-block__head">
+            <Gift :size="22" />
+            <div>
+              <h2>概念版 VIP</h2>
+              <p>领取一天 VIP 后自动升级，并同步当前权益状态。</p>
+            </div>
+          </div>
+
+          <div class="vip-claim-panel">
+            <div class="vip-status-line">
+              <span
+                class="vip-status-dot"
+                :class="{ active: svipActive }"
+              />
+              <strong>{{ vipStatusText }}</strong>
+            </div>
+
+            <button
+              class="vip-claim-button"
+              type="button"
+              :class="{ 'is-active': svipActive }"
+              :disabled="vipActionDisabled"
+              @click="handleVipClaimClick"
+            >
+              <Gift :size="18" />
+              <span>{{ vipActionText }}</span>
+            </button>
+
+            <p v-if="vipExpireText" class="vip-claim-note">{{ vipExpireText }}</p>
+          </div>
+        </div>
       </div>
     </section>
   </div>
 </template>
 
 <script setup>
-import { ListMusic, Moon, Paintbrush, Palette, Sun, Wand2 } from 'lucide-vue-next'
+import { computed, onMounted } from 'vue'
+import { useMessage } from 'naive-ui'
+import { Gift, ListMusic, Moon, Paintbrush, Palette, Sun, Wand2 } from 'lucide-vue-next'
+import { useAuthStore } from '../stores/auth'
 import { useThemeStore } from '../stores/theme'
 import '../styles/settings.css'
 
+const auth = useAuthStore()
 const theme = useThemeStore()
+const message = useMessage()
+
+const vipActionDisabled = computed(() => auth.state.vip.loading || auth.state.vip.claiming || svipActive.value)
+const vipActionText = computed(() => {
+  if (auth.state.vip.claiming) {
+    return '领取中'
+  }
+
+  if (auth.state.vip.loading) {
+    return '检测中'
+  }
+
+  return svipActive.value ? 'SVIP已开通' : '领取并升级 VIP'
+})
+const busiVipList = computed(() => {
+  const list = auth.state.vip.raw?.data?.busi_vip
+
+  return Array.isArray(list) ? list : []
+})
+const svipBusiVip = computed(() => {
+  return busiVipList.value.find((item) => isSvipBusiVip(item)) ?? null
+})
+const svipActive = computed(() => {
+  const vip = svipBusiVip.value
+
+  return Boolean(vip && (Number(vip.is_vip) > 0 || isFutureTime(vip.vip_end_time)))
+})
+const vipExpireTime = computed(() => {
+  return svipBusiVip.value?.vip_end_time || ''
+})
+const vipStatusText = computed(() => {
+  if (!auth.state.isLoggedIn || auth.isGuest.value) {
+    return '未登录'
+  }
+
+  if (auth.state.vip.claiming) {
+    return '正在领取并升级'
+  }
+
+  if (auth.state.vip.loading) {
+    return '正在检测权益'
+  }
+
+  if (svipActive.value) {
+    return 'SVIP 已开通'
+  }
+
+  if (auth.state.vip.active) {
+    return '普通 VIP 已开通，可继续升级 SVIP'
+  }
+
+  return auth.state.vip.error || '未开通'
+})
+const vipExpireText = computed(() => {
+  if (!svipActive.value || !vipExpireTime.value) {
+    return ''
+  }
+
+  return `到期时间 ${vipExpireTime.value}`
+})
+
+onMounted(() => {
+  if (auth.state.isLoggedIn && !auth.isGuest.value && !auth.state.vip.loaded && !auth.state.vip.loading) {
+    auth.refreshVipStatus()
+  }
+})
+
+async function handleVipClaimClick() {
+  if (!auth.state.isLoggedIn || auth.isGuest.value) {
+    auth.openLoginModal()
+    message.info('请先登录酷狗账号')
+    return
+  }
+
+  const result = await auth.claimDailyVip({ skipIfActive: false })
+
+  if (result?.ok) {
+    message.success(svipActive.value ? 'SVIP 已开通' : '已提交 VIP 领取请求')
+  } else if (result?.reason !== 'login-required') {
+    message.error(result?.error?.message || 'VIP 领取失败，请稍后再试')
+  }
+}
+
+function isSvipBusiVip(item) {
+  return isValidBusiVip(item) && String(item.product_type || '').toLowerCase() === 'svip'
+}
+
+function isValidBusiVip(item) {
+  return Boolean(item && typeof item === 'object')
+}
+
+function isFutureTime(value) {
+  if (!value) {
+    return false
+  }
+
+  const time = new Date(String(value).replace(' ', 'T')).getTime()
+  return Number.isFinite(time) && time > Date.now()
+}
 </script>
