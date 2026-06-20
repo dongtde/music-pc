@@ -72,7 +72,6 @@ import {
   getPlaylistTracks,
   getSimilarPlaylists,
   getSongDownloadList,
-  getSearchDefault,
   getSearchHotDetail,
   getSearchMultiMatch,
   getSearchSuggestPc,
@@ -1169,14 +1168,12 @@ export async function getSongInteractionStatsData(id) {
 
 export async function getSearchBootData() {
   return getCachedData('search-boot', CACHE_TTL.searchBoot, async () => {
-  const [defaultResponse, hotResponse] = await Promise.all([
-    getSearchDefault().catch(() => ({})),
-    getSearchHotDetail().catch(() => ({}))
-  ])
+  const hotResponse = await getSearchHotDetail().catch(() => ({}))
+  const hotKeywords = (hotResponse.data ?? []).map(mapHotKeyword)
 
   return {
-    defaultKeyword: defaultResponse.data?.realkeyword || defaultResponse.data?.showKeyword || '',
-    hotKeywords: (hotResponse.data ?? []).map(mapHotKeyword)
+    defaultKeyword: hotKeywords[0]?.keyword || '',
+    hotKeywords
   }
   })
 }
