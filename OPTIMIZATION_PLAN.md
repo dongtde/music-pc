@@ -22,6 +22,7 @@
 | 已完成 | P0 | 路由验证 | 已拆出 `src/router/routes.js` 路由表，并新增 `npm run smoke:routes`，覆盖 20 个路径解析和 17 个核心路由命名检查，当前 37/37 通过 |
 | 已完成 | P0 | 首屏验证 | 已新增 `npm run smoke:first-screen`，通过 Electron smoke 模式打开 `mappic://app/#/home`，输出首屏截图和指标报告，当前 5/5 通过 |
 | 已完成 | P0 | 首页性能 | 已新增 `npm run smoke:fps`，采样首页音乐/视频 feed idle、scroll、recovery FPS；视频 feed 已改为当前/相邻小窗口 hydration，当前 9/9 通过 |
+| 部分完成 | P0 | 服务层 | 已新增 `src/services/netease/comments.js`、`src/services/netease/lyrics.js`、`src/services/netease/search.js`、`src/services/netease/home.js`、`src/services/netease/playlist.js`、`src/services/netease/album.js`、`src/services/netease/artist.js`，先抽出评论、歌词、搜索、首页、歌单、专辑、歌手 domain；`src/services/netease.js` 由约 121.9KB 降至约 61.2KB |
 | 部分完成 | P0 | 播放器 | 已从 `PlayerBar.vue` 抽出左侧歌曲摘要、播放模式、传输控制、音量、播放进度、弹幕开关、桌面歌词按钮、播放队列、音质、视觉效果弹层、歌曲动作按钮组件、桌面歌词桥接逻辑、进度条歌词预览、全屏弹幕评论流和当前歌曲评论弹窗/统计；已完成统一歌词服务、播放 URL LRU 缓存、队列来源与版本治理、音量单一来源和持久化、播放模式 store 化、当前歌曲评论数 stale 缓存、播放错误模型 |
 
 ## 1. 总体目标
@@ -52,7 +53,7 @@
 | 已完成 | P0 | 应用壳 | `App.vue` 对所有路由统一 `KeepAlive`，会让重页面、视频、弹幕、评论缓存常驻 | 已改为 `meta.keepAlive` 白名单保活，详情、MV、设置、搜索等页面默认卸载 |
 | 已完成 | P0 | 缓存 | `cacheStore`、首页歌词/封面取色、MV 播放/评论、排行榜曲目缓存原为无上限 Map，长时间使用会持续增长 | 已接入 `createLruCache`，服务层 160、统一歌词服务 96、封面取色 80、MV 播放 24、MV 评论 24、榜单曲目 20 |
 | 部分完成 | P0 | 播放器 | `PlayerBar.vue` 体量大且承担全屏播放器、弹幕、歌词、评论、桌面歌词通信、音质、队列等多职责 | 已先抽出 `PlayerTrackSummary.vue`、`PlayerModePopover.vue`、`PlayerTransportControls.vue`、`PlayerVolumePopover.vue`、`PlayerProgressBar.vue`、`PlayerDanmakuToggle.vue`、`PlayerDesktopLyricsButton.vue`、`PlayerQueuePopover.vue`、`PlayerQualityPopover.vue`、`PlayerVisualizerPopover.vue`、`PlayerTrackActions.vue`、`useDesktopLyricsBridge.js`、`useProgressLyrics.js`、`useFullPlayerDanmakuComments.js` 和 `useCurrentTrackComments.js`；已新增 `src/services/lyrics.js` 统一歌词缓存/请求去重；已在 `src/stores/player.js` 增加播放 URL LRU 缓存、`queueSource`、`queueVersion`、音量持久化、播放模式持久化和按模式选曲 helper，并为首页、发现、搜索、FM、专辑、歌单、歌手、电台、资料库等入口补齐队列来源；`useCurrentTrackComments.js` 已增加评论数 stale 缓存 |
-| 待处理 | P0 | 服务层 | `src/services/netease.js` 超过 120KB，`src/api/modules/netease.js` 超过 76KB，业务聚合和协议适配混在一起 | 按 domain 拆分：home、search、playlist、album、artist、mv、podcast、auth、lyrics、comments |
+| 部分完成 | P0 | 服务层 | `src/services/netease.js` 超过 120KB，`src/api/modules/netease.js` 超过 76KB，业务聚合和协议适配混在一起 | 已抽出 comments domain 到 `src/services/netease/comments.js`、lyrics domain 到 `src/services/netease/lyrics.js`、search domain 到 `src/services/netease/search.js`、home domain 到 `src/services/netease/home.js`、playlist domain 到 `src/services/netease/playlist.js`、album domain 到 `src/services/netease/album.js`、artist domain 到 `src/services/netease/artist.js`，并保持原 `src/services/netease.js` re-export 兼容；后续继续拆 mv、podcast、auth |
 | 已完成 | P0 | 构建基线 | 当前没有性能预算、包体分析、Lighthouse/Playwright 回归基线 | 已补充包体基线命令 `npm run baseline:bundle`，并补齐路由 smoke、播放器 smoke、首屏 smoke、首屏截图和首页 FPS smoke；MV 独立页 FPS 后续继续补齐 |
 | 待处理 | P0 | Electron 安全/稳定 | `electron/main.cjs` 媒体/API 代理、桌面歌词、协议服务集中在单文件 | 保持行为不变的前提下分模块，并为 URL 白名单、Range 请求、错误码加测试 |
 
@@ -91,7 +92,7 @@
 
 | 优先级 | 项 | 方案 |
 | --- | --- | --- |
-| P0 | 拆分大文件 | `services/netease.js` 按页面 domain 拆分；`api/modules/netease.js` 按原子接口分模块，再由聚合层组合 |
+| P0（部分完成） | 拆分大文件 | `services/netease.js` 已先抽出 comments、lyrics、search、home、playlist、album、artist domain：评论数据函数、`mapMvCommentResult`、评论 mapper、歌曲互动统计迁入 `src/services/netease/comments.js`；`getTrackLyricData`、歌词解析器和 KRC/LRC parser 迁入 `src/services/netease/lyrics.js`；搜索启动、建议、结果聚合和搜索 mapper 迁入 `src/services/netease/search.js`；首页发现、首页音乐 feed 聚合和首页 mapper 迁入 `src/services/netease/home.js`；歌单详情/概览/分页曲目、用户歌单、创建歌单、发现页歌单分类聚合迁入 `src/services/netease/playlist.js`；专辑发现和专辑详情聚合迁入 `src/services/netease/album.js`；歌手发现、歌手详情、歌曲/专辑/视频 tab 和简介聚合迁入 `src/services/netease/artist.js`；原入口用 named re-export 保持兼容。后续继续按 mv、podcast、auth 拆分；`api/modules/netease.js` 再按原子接口分模块 |
 | P1 | 并发池 | `getMusicFeedData`、`getVideoCenterData`、`getMvPlaybackData`、`getAlbumDetailData` 等多接口 `Promise.all` 加并发限制和超时分级 |
 | P1 | 缓存 key 标准 | 所有分页接口 key 包含 `limit/offset/filter/authIdentity`，评论与歌词区分游客/登录态 |
 | P1 | 重试策略 | 对可重试网络错误做指数退避，业务错误不重试；评论/弹幕可静默降级 |
@@ -478,7 +479,7 @@
 
 | 优先级 | 文件 | 原因 | 拆分方向 |
 | --- | --- | --- | --- |
-| P0 | `src/services/netease.js` | 约 122KB，聚合所有业务 | domain service + normalizers |
+| P0 | `src/services/netease.js` | 已从约 122KB 降至约 61.2KB；comments、lyrics、search、home、playlist、album、artist domain 已抽出，仍聚合多数业务 | 继续 domain service + normalizers |
 | P0 | `src/api/modules/netease.js` | 约 77KB，接口适配巨大 | atomic API modules |
 | P0 | `src/components/PlayerBar.vue` | 约 51KB，核心复杂度最高 | 控制区、队列、音质、评论、桌面歌词 |
 | P1 | `src/views/VideoView.vue` | 约 39KB，浏览/播放双模式 | browse/watch/control/comment |
@@ -519,7 +520,7 @@
 2. 已完成：补齐搜索和 FM 的路由可达性。
 3. 已完成：调整 `KeepAlive` 策略，防止视频/详情页常驻。
 4. 部分完成：已抽左侧歌曲摘要、播放模式、传输控制、音量、播放进度、弹幕开关、桌面歌词按钮、播放队列、音质、视觉效果弹层、歌曲动作按钮、桌面歌词桥接逻辑、进度条歌词预览、全屏弹幕评论流和当前歌曲评论弹窗/统计；已新增统一歌词服务；已完成播放 URL 缓存、队列来源/版本治理、音量单一来源持久化、播放模式 store 化、评论数 stale 缓存和播放器错误模型。
-5. 为服务层拆分制定目录结构和迁移清单。
+5. 已开始服务层拆分：先抽出 comments、lyrics、search、home、playlist、album、artist domain；继续按 mv、podcast、auth 迁移。
 
 ### 阶段二：高收益性能优化
 
@@ -568,7 +569,7 @@
 | 设置 | - | reduced motion、VIP 复用 | 分组重构 | 导入导出 |
 | 桌面歌词 | IPC 频率审计 | 窗口置顶优化、歌词缓存 | 位置持久化 | - |
 | 播放器 | 部分完成：左侧歌曲摘要、模式、传输控制、音量、进度、弹幕按钮、桌面歌词按钮、队列、音质、视觉效果、歌曲动作组件化，桌面歌词桥接、进度条歌词预览、全屏弹幕评论流、当前歌曲评论弹窗/统计已抽 composable，统一歌词服务、URL 缓存、队列来源/版本治理、音量统一、播放模式 store 化、评论数 stale 缓存、错误模型、播放 smoke 已完成 | 真实浏览器播放 smoke | 可恢复错误提示 | - |
-| 服务层 | 已完成：服务缓存上限；待处理：拆分计划 | 并发池、取消、重试 | normalizers 单测 | 监控看板 |
+| 服务层 | 已完成：服务缓存上限、comments/lyrics/search/home/playlist/album/artist domain 拆分；待处理：继续拆 mv/podcast/auth | 并发池、取消、重试 | normalizers 单测 | 监控看板 |
 | Electron | 主进程模块化 | 代理安全、Range、preload 校验 | 窗口状态 | - |
 | 构建基线 | 已完成：包体 raw/gzip/brotli 报告、路由 smoke、播放器 smoke、首屏 smoke、首屏截图和首页 FPS smoke | MV 独立页 FPS | 性能预算门禁 | - |
 | PWA | - | 版本化缓存、限额 | 更新提示 | - |
