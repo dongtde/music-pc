@@ -26,6 +26,23 @@ export function findCurrentLyricIndex(lines, currentTime) {
   return currentIndex
 }
 
+export function getLyricFrame(lines = [], currentTime = 0) {
+  const sourceLines = Array.isArray(lines) && lines.length
+    ? lines
+    : createLyricPlaceholder('暂无歌词')
+  const activeIndex = findCurrentLyricIndex(sourceLines, currentTime)
+  const activeLine = sourceLines[activeIndex] ?? sourceLines[0] ?? createLyricPlaceholder('暂无歌词')[0]
+  const nextLine = sourceLines[activeIndex + 1] ?? null
+
+  return {
+    currentTime: Math.max(0, Number(currentTime) || 0),
+    activeIndex,
+    activeLine,
+    nextLine,
+    progress: getLyricLineProgress(activeLine, nextLine, currentTime),
+  }
+}
+
 export function isNeteaseTrackId(trackId) {
   return /^\d+$/.test(String(trackId ?? '')) || /^[a-f0-9]{32}$/i.test(String(trackId ?? ''))
 }
@@ -46,6 +63,41 @@ export function getLyricLineProgress(line, nextLine, currentTime) {
   return clampLyricProgress((currentTime - line.seconds) / lineDuration)
 }
 
+export function getLyricWordState(line, word, currentTime, activeIndex = line?.index ?? 0) {
+  if (!line || !word || line.placeholder) {
+    return { active: false, sung: false }
+  }
+
+  const lineIndex = Number(line.index) || 0
+
+  if (lineIndex < activeIndex) {
+    return { active: false, sung: true }
+  }
+
+  if (lineIndex !== activeIndex) {
+    return { active: false, sung: false }
+  }
+
+  const { start, end } = getLyricWordBounds(word)
+
+  return {
+    active: currentTime >= start && currentTime < end,
+    sung: currentTime >= end,
+  }
+}
+
+export function getLyricWordBounds(word) {
+  const rawStart = Number(word?.seconds)
+  const start = Number.isFinite(rawStart) ? rawStart : 0
+  const duration = Math.max(0.08, Number(word?.duration) || 0)
+
+  return {
+    start,
+    duration,
+    end: start + duration,
+  }
+}
+
 function getLyricWordProgress(line, currentTime) {
   const words = Array.isArray(line?.words)
     ? line.words.filter((word) => word.text && Number.isFinite(Number(word.seconds)))
@@ -60,9 +112,7 @@ function getLyricWordProgress(line, currentTime) {
 
   for (const word of words) {
     const wordLength = getLyricTextWeight(word.text)
-    const start = Number(word.seconds) || 0
-    const duration = Math.max(0.08, Number(word.duration) || 0)
-    const end = start + duration
+    const { start, duration, end } = getLyricWordBounds(word)
 
     if (currentTime >= end) {
       consumedLength += wordLength

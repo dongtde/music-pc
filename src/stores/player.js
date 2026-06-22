@@ -44,37 +44,48 @@ const state = reactive({
 })
 
 let lastPersistedSecond = Math.floor(state.currentTime)
+let playbackClockFrame = 0
 
 audio.volume = state.volume
 
 audio.addEventListener('timeupdate', () => {
-  state.currentTime = audio.currentTime
-  state.currentTrack.elapsed = formatTime(audio.currentTime)
-  persistPlaybackSnapshotThrottled()
+  syncAudioPlaybackTime({ persist: true })
 })
 
 audio.addEventListener('loadedmetadata', () => {
   state.duration = Number.isFinite(audio.duration) ? audio.duration : state.duration
   state.currentTrack.duration = formatTime(state.duration)
+  syncAudioPlaybackTime()
   persistPlaybackSnapshot()
 })
 
 audio.addEventListener('play', () => {
   state.isPlaying = true
+  syncAudioPlaybackTime()
+  startPlaybackClock()
 })
 
 audio.addEventListener('pause', () => {
+  syncAudioPlaybackTime({ persist: true })
   state.isPlaying = false
+  stopPlaybackClock()
   persistPlaybackSnapshot()
 })
 
 audio.addEventListener('ended', () => {
+  syncAudioPlaybackTime({ persist: true })
   state.isPlaying = false
+  stopPlaybackClock()
   persistPlaybackSnapshot()
   notifyTrackEnded()
 })
 
+audio.addEventListener('seeked', () => {
+  syncAudioPlaybackTime({ persist: true })
+})
+
 audio.addEventListener('error', () => {
+  stopPlaybackClock()
   const mediaError = audio.error
   state.error = new Error(mediaError?.message || `Audio playback failed${mediaError?.code ? ` (${mediaError.code})` : ''}`)
   state.isPlaying = false
@@ -187,11 +198,13 @@ export function usePlayerStore() {
   }
 
   function seekTo(value) {
-    const nextTime = Math.max(0, Number(value))
+    const rawTime = Number(value)
 
-    if (!Number.isFinite(nextTime)) {
+    if (!Number.isFinite(rawTime)) {
       return
     }
+
+    const nextTime = clampTime(rawTime, state.duration)
 
     if (audio.src) {
       audio.currentTime = nextTime
@@ -211,9 +224,11 @@ export function usePlayerStore() {
   }
 
   function getCurrentTime() {
-    return Number.isFinite(audio.currentTime)
+    const currentTime = Number.isFinite(audio.currentTime)
       ? audio.currentTime
       : state.currentTime
+
+    return clampTime(currentTime, state.duration)
   }
 
   async function setPlaybackQuality(value) {
@@ -303,6 +318,49 @@ export function usePlayerStore() {
     getCurrentTime,
     onTrackEnded
   }
+}
+
+function syncAudioPlaybackTime(options = {}) {
+  const currentTime = Number.isFinite(audio.currentTime)
+    ? audio.currentTime
+    : state.currentTime
+
+  state.currentTime = clampTime(currentTime, state.duration)
+  state.currentTrack.elapsed = formatTime(state.currentTime)
+
+  if (options.persist) {
+    persistPlaybackSnapshotThrottled()
+  }
+
+  return state.currentTime
+}
+
+function startPlaybackClock() {
+  if (playbackClockFrame || typeof window === 'undefined') {
+    return
+  }
+
+  const tick = () => {
+    playbackClockFrame = 0
+
+    if (audio.paused || audio.ended) {
+      return
+    }
+
+    syncAudioPlaybackTime({ persist: true })
+    playbackClockFrame = window.requestAnimationFrame(tick)
+  }
+
+  playbackClockFrame = window.requestAnimationFrame(tick)
+}
+
+function stopPlaybackClock() {
+  if (!playbackClockFrame || typeof window === 'undefined') {
+    return
+  }
+
+  window.cancelAnimationFrame(playbackClockFrame)
+  playbackClockFrame = 0
 }
 
 async function resolveBestPlaybackSource(track, preferredQuality) {

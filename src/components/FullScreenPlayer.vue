@@ -190,7 +190,7 @@ import { getTrackLyricData } from '../services/netease';
 import { usePlayerStore } from '../stores/player';
 import {
   createLyricPlaceholder,
-  findCurrentLyricIndex,
+  getLyricFrame,
   isNeteaseTrackId,
 } from '../utils/lyrics';
 import LyricsScroller from './LyricsScroller.vue';
@@ -543,7 +543,7 @@ function syncPlaybackLyric(currentTime) {
     return;
   }
 
-  const nextIndex = findCurrentLyricIndex(lines, currentTime);
+  const nextIndex = getLyricFrame(lines, currentTime).activeIndex;
 
   if (nextIndex !== playbackLyricIndex.value) {
     playbackLyricIndex.value = nextIndex;

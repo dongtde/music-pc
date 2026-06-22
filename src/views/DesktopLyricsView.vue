@@ -43,18 +43,35 @@
     >
       <p
         class="desktop-lyrics__line"
-        :class="{ 'desktop-lyrics__line--placeholder': activeLine.placeholder }"
+        :class="{
+          'desktop-lyrics__line--placeholder': activeLine.placeholder,
+          'desktop-lyrics__line--worded': activeLine.words?.length,
+        }"
       >
-        <span class="desktop-lyrics__line-base">
-          {{ activeLine.text }}
-        </span>
-        <span
-          class="desktop-lyrics__line-fill"
-          :style="{ '--lyric-progress': lyricProgressWidth }"
-          aria-hidden="true"
-        >
-          {{ activeLine.text }}
-        </span>
+        <template v-if="activeLine.words?.length">
+          <span class="desktop-lyrics__line-base desktop-lyrics__line-base--words">
+            <span
+              v-for="(word, wordIndex) in activeLine.words"
+              :key="`${activeLine.index}-${wordIndex}-${word.text}`"
+              class="desktop-lyrics__word"
+              :class="getDesktopWordClass(activeLine, word)"
+            >
+              {{ word.text }}
+            </span>
+          </span>
+        </template>
+        <template v-else>
+          <span class="desktop-lyrics__line-base">
+            {{ activeLine.text }}
+          </span>
+          <span
+            class="desktop-lyrics__line-fill"
+            :style="{ '--lyric-progress': lyricProgressWidth }"
+            aria-hidden="true"
+          >
+            {{ activeLine.text }}
+          </span>
+        </template>
       </p>
     </section>
 
@@ -179,7 +196,8 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ChevronLeft, Lock, Minus, Pause, Play, Plus, Settings2, SkipBack, SkipForward, Unlock, X } from 'lucide-vue-next'
-import { findCurrentLyricIndex, getLyricLineProgress } from '../utils/lyrics'
+import { getLyricFrame, getLyricWordState } from '../utils/lyrics'
+import { getMonotonicTimestamp } from '../utils/time'
 import '../styles/desktop-lyrics.css'
 
 const settingsStorageKey = 'mappic:desktop-lyrics:settings'
@@ -330,15 +348,13 @@ function syncProjectedLyrics() {
     ? lyrics.lines
     : [createPlaceholderLine('暂无歌词')]
   const currentTime = getProjectedPlaybackTime()
-  const activeIndex = findCurrentLyricIndex(lines, currentTime)
-  const activeLyricLine = lines[activeIndex] ?? lines[0] ?? createPlaceholderLine('暂无歌词')
-  const nextLyricLine = lines[activeIndex + 1] ?? null
+  const frame = getLyricFrame(lines, currentTime)
 
   playback.currentTime = currentTime
-  lyrics.activeIndex = activeIndex
-  lyrics.activeLine = activeLyricLine
-  lyrics.nextLine = nextLyricLine
-  lyrics.progress = getLyricLineProgress(activeLyricLine, nextLyricLine, currentTime)
+  lyrics.activeIndex = frame.activeIndex
+  lyrics.activeLine = frame.activeLine
+  lyrics.nextLine = frame.nextLine
+  lyrics.progress = frame.progress
 }
 
 function getProjectedPlaybackTime() {
@@ -348,7 +364,7 @@ function getProjectedPlaybackTime() {
     return clampPlaybackTime(baseTime)
   }
 
-  const elapsedSeconds = Math.max(0, (Date.now() - playbackSync.updatedAt) / 1000)
+  const elapsedSeconds = Math.max(0, (getMonotonicTimestamp() - playbackSync.updatedAt) / 1000)
 
   return clampPlaybackTime(baseTime + elapsedSeconds)
 }
@@ -395,6 +411,15 @@ function stopLyricPlaybackClock() {
 
   window.cancelAnimationFrame(lyricPlaybackFrame)
   lyricPlaybackFrame = 0
+}
+
+function getDesktopWordClass(line, word) {
+  const state = getLyricWordState(line, word, playback.currentTime, lyrics.activeIndex)
+
+  return {
+    'desktop-lyrics__word--active': state.active,
+    'desktop-lyrics__word--sung': state.sung,
+  }
 }
 
 function applyWindowState(state = {}) {
@@ -616,7 +641,7 @@ function normalizeLyricLines(lines = [], fallbackText = '暂无歌词') {
 function normalizeTimestamp(value) {
   const timestamp = Number(value)
 
-  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : Date.now()
+  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : getMonotonicTimestamp()
 }
 
 function readLyricSettings() {

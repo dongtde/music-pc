@@ -363,12 +363,11 @@ import { useAuthStore } from '../stores/auth'
 import { getSongCommentsData, getSongInteractionStatsData, getTrackLyricData, updateSongLikeStateData } from '../services/netease'
 import { useSongComments } from '../composables/useSongComments'
 import { readStorage, writeStorage } from '../utils/storage'
-import { formatTime } from '../utils/time'
+import { formatTime, getMonotonicTimestamp } from '../utils/time'
 import { getAudioQualityDefinition, getAudioQualityOptions } from '../utils/audioQuality'
 import {
   createLyricPlaceholder,
-  findCurrentLyricIndex,
-  getLyricLineProgress
+  getLyricFrame
 } from '../utils/lyrics'
 import '../styles/player.css'
 
@@ -444,7 +443,8 @@ const fullPlayerDanmakuPrefetchThreshold = 12
 const fullPlayerDanmakuMaxItems = 36
 const fullPlayerDanmakuActivationDelay = 520
 const fullPlayerDanmakuLoadDelay = 560
-const desktopLyricsClockIntervalMs = 250
+const desktopLyricsClockIntervalMs = 200
+const desktopLyricsSeekPublishThreshold = 0.45
 let progressLyricRequestId = 0
 let progressLyricLoadedTrackId = ''
 let progressLyricLoadingTrackId = ''
@@ -624,14 +624,18 @@ watch(
     currentTrack.value.name,
     currentTrack.value.artist,
     currentTrack.value.coverUrl,
-    player.state.currentTime,
     player.state.duration,
     player.state.isPlaying,
     desktopLyricLines.value,
     desktopLyricsLoading.value,
   ],
-  scheduleDesktopLyricsPublish,
+  () => scheduleDesktopLyricsPublish({ immediate: true }),
   { immediate: true }
+)
+
+watch(
+  () => player.state.currentTime,
+  handleDesktopLyricsPlaybackTimeChange
 )
 
 watch(
@@ -795,8 +799,14 @@ async function loadDesktopLyrics(track) {
   }
 }
 
-function scheduleDesktopLyricsPublish() {
+function scheduleDesktopLyricsPublish(options = {}) {
   if (!desktopLyricsAvailable.value) {
+    return
+  }
+
+  if (options.immediate) {
+    clearDesktopLyricsPublishTimer()
+    publishDesktopLyricsState()
     return
   }
 
@@ -810,6 +820,15 @@ function scheduleDesktopLyricsPublish() {
   }, 0)
 }
 
+function clearDesktopLyricsPublishTimer() {
+  if (!desktopLyricsPublishTimer) {
+    return
+  }
+
+  window.clearTimeout(desktopLyricsPublishTimer)
+  desktopLyricsPublishTimer = 0
+}
+
 function publishDesktopLyricsState() {
   if (!desktopLyricsAvailable.value) {
     return
@@ -821,10 +840,7 @@ function publishDesktopLyricsState() {
 function createDesktopLyricsPayload() {
   const lines = normalizeDesktopLyricLines(desktopLyricLines.value)
   const currentTime = getDesktopLyricsCurrentTime()
-  const activeIndex = findCurrentLyricIndex(lines, currentTime)
-  const activeLine = lines[activeIndex] ?? lines[0] ?? createLyricPlaceholder('暂无歌词')[0]
-  const nextLine = lines[activeIndex + 1] ?? null
-  const progress = getLyricLineProgress(activeLine, nextLine, currentTime)
+  const frame = getLyricFrame(lines, currentTime)
 
   return {
     track: {
@@ -838,14 +854,14 @@ function createDesktopLyricsPayload() {
       currentTime,
       duration: player.state.duration,
       isPlaying: player.state.isPlaying,
-      updatedAt: Date.now(),
+      updatedAt: getMonotonicTimestamp(),
     },
     lyrics: {
       lines,
-      activeIndex,
-      activeLine,
-      nextLine,
-      progress,
+      activeIndex: frame.activeIndex,
+      activeLine: frame.activeLine,
+      nextLine: frame.nextLine,
+      progress: frame.progress,
       loading: desktopLyricsLoading.value,
     },
   }
@@ -882,6 +898,20 @@ function normalizeDesktopLyricsPalette(palette = {}) {
     primary: palette.primary || fallbackCoverPalette.primary,
     secondary: palette.secondary || fallbackCoverPalette.secondary,
     tertiary: palette.tertiary || fallbackCoverPalette.tertiary,
+  }
+}
+
+function handleDesktopLyricsPlaybackTimeChange(currentTime, previousTime) {
+  if (!desktopLyricsAvailable.value || !desktopLyricsWindowOpen.value) {
+    return
+  }
+
+  const current = Math.max(0, Number(currentTime) || 0)
+  const previous = Math.max(0, Number(previousTime) || 0)
+  const jumped = Math.abs(current - previous) >= desktopLyricsSeekPublishThreshold
+
+  if (!player.state.isPlaying || jumped) {
+    scheduleDesktopLyricsPublish({ immediate: true })
   }
 }
 
@@ -1617,10 +1647,7 @@ onUnmounted(() => {
     trackMarqueeMeasureFrame = 0
   }
   clearFullPlayerDanmakuLoadTimer()
-  if (desktopLyricsPublishTimer) {
-    window.clearTimeout(desktopLyricsPublishTimer)
-    desktopLyricsPublishTimer = 0
-  }
+  clearDesktopLyricsPublishTimer()
   stopDesktopLyricsClock()
   removeTrackEndedListener?.()
   removeTrackEndedListener = null

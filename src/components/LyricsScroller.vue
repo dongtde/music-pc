@@ -55,7 +55,7 @@
               v-for="(word, wordIndex) in line.words"
               :key="`${line.index}-${wordIndex}-${word.text}`"
               class="lyric-word"
-              :class="{ active: isWordActive(line, word), sung: isWordSung(line, word) }"
+              :class="getWordClass(line, word)"
             >
               {{ word.text }}
             </span>
@@ -77,6 +77,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Play } from 'lucide-vue-next'
+import { getLyricWordState } from '../utils/lyrics'
 
 const props = defineProps({
   lines: {
@@ -227,38 +228,12 @@ function getLineClass(line) {
       }
 }
 
-function isWordActive(line, word) {
-  if (line.index !== props.activeIndex) {
-    return false
-  }
-
-  const { start, end } = getWordBounds(word)
-
-  return props.currentTime >= start && props.currentTime < end
-}
-
-function isWordSung(line, word) {
-  if (line.index < props.activeIndex) {
-    return true
-  }
-
-  if (line.index !== props.activeIndex) {
-    return false
-  }
-
-  const { end } = getWordBounds(word)
-
-  return props.currentTime >= end
-}
-
-function getWordBounds(word) {
-  const start = Number(word.seconds)
-  const duration = Math.max(0.08, Number(word.duration) || 0)
+function getWordClass(line, word) {
+  const state = getLyricWordState(line, word, props.currentTime, props.activeIndex)
 
   return {
-    start,
-    duration,
-    end: start + duration
+    active: state.active,
+    sung: state.sung
   }
 }
 

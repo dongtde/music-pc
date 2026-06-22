@@ -23,12 +23,16 @@ const DESKTOP_LYRICS_WINDOW_BASE_HEIGHT = 80;
 const DESKTOP_LYRICS_WINDOW_MAX_HEIGHT = 108;
 const DESKTOP_LYRICS_BASE_FONT_SIZE = 15;
 const DESKTOP_LYRICS_ALWAYS_ON_TOP_LEVEL = 'screen-saver';
+const DESKTOP_LYRICS_TOP_GUARD_INTERVAL_MS = 1200;
+const DESKTOP_LYRICS_ELEVATE_RETRY_DELAYS = [0, 80, 240];
 const proxyCookieJars = new Map();
 let mainWindow = null;
 let desktopLyricsWindow = null;
 let desktopLyricsLocked = false;
 let lastDesktopLyricsPayload = null;
 let desktopLyricsDragState = null;
+let desktopLyricsTopGuardTimer = null;
+const desktopLyricsElevateTimers = new Set();
 
 process.on('uncaughtException', (error) => {
   console.error('[main:uncaught-exception]', error);
@@ -175,6 +179,7 @@ async function createDesktopLyricsWindow() {
   }
 
   elevateDesktopLyricsWindow();
+  startDesktopLyricsTopGuard();
 
   try {
     desktopLyricsWindow.setVisibleOnAllWorkspaces(true, {
@@ -191,17 +196,34 @@ async function createDesktopLyricsWindow() {
 
   desktopLyricsWindow.once('ready-to-show', () => {
     safelyCallWindowMethod(desktopLyricsWindow, 'showInactive');
-    elevateDesktopLyricsWindow();
+    scheduleDesktopLyricsElevation();
     sendDesktopLyricsWindowState();
   });
 
   desktopLyricsWindow.webContents.on('did-finish-load', () => {
-    elevateDesktopLyricsWindow();
+    scheduleDesktopLyricsElevation();
     sendDesktopLyricsWindowState();
     sendDesktopLyricsPayload();
   });
 
+  desktopLyricsWindow.on('show', () => {
+    scheduleDesktopLyricsElevation();
+  });
+
+  desktopLyricsWindow.on('blur', () => {
+    scheduleDesktopLyricsElevation();
+  });
+
+  desktopLyricsWindow.on('move', () => {
+    scheduleDesktopLyricsElevation([0]);
+  });
+
+  desktopLyricsWindow.on('resize', () => {
+    scheduleDesktopLyricsElevation([0]);
+  });
+
   desktopLyricsWindow.on('closed', () => {
+    stopDesktopLyricsTopGuard();
     desktopLyricsWindow = null;
     desktopLyricsLocked = false;
     broadcastDesktopLyricsWindowState();
@@ -253,6 +275,7 @@ function elevateDesktopLyricsWindow() {
     return;
   }
 
+  safelyCallWindowMethod(desktopLyricsWindow, 'setSkipTaskbar', true);
   safelyCallWindowMethod(
     desktopLyricsWindow,
     'setAlwaysOnTop',
@@ -260,6 +283,53 @@ function elevateDesktopLyricsWindow() {
     DESKTOP_LYRICS_ALWAYS_ON_TOP_LEVEL,
   );
   safelyCallWindowMethod(desktopLyricsWindow, 'moveTop');
+}
+
+function scheduleDesktopLyricsElevation(
+  delays = DESKTOP_LYRICS_ELEVATE_RETRY_DELAYS,
+) {
+  if (!isDesktopLyricsWindowOpen()) {
+    return;
+  }
+
+  clearDesktopLyricsElevateTimers();
+
+  delays.forEach((delay) => {
+    const timer = setTimeout(() => {
+      desktopLyricsElevateTimers.delete(timer);
+      elevateDesktopLyricsWindow();
+    }, Math.max(0, Number(delay) || 0));
+
+    desktopLyricsElevateTimers.add(timer);
+  });
+}
+
+function clearDesktopLyricsElevateTimers() {
+  desktopLyricsElevateTimers.forEach((timer) => {
+    clearTimeout(timer);
+  });
+  desktopLyricsElevateTimers.clear();
+}
+
+function startDesktopLyricsTopGuard() {
+  if (desktopLyricsTopGuardTimer) {
+    return;
+  }
+
+  desktopLyricsTopGuardTimer = setInterval(() => {
+    elevateDesktopLyricsWindow();
+  }, DESKTOP_LYRICS_TOP_GUARD_INTERVAL_MS);
+}
+
+function stopDesktopLyricsTopGuard() {
+  clearDesktopLyricsElevateTimers();
+
+  if (!desktopLyricsTopGuardTimer) {
+    return;
+  }
+
+  clearInterval(desktopLyricsTopGuardTimer);
+  desktopLyricsTopGuardTimer = null;
 }
 
 function getDesktopLyricsWindowState() {

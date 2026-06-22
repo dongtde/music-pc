@@ -38,6 +38,18 @@ export function formatTime(value = 0) {
   return `${minutes}:${seconds}`
 }
 
+export function getMonotonicTimestamp() {
+  if (
+    typeof performance !== 'undefined' &&
+    Number.isFinite(performance.timeOrigin) &&
+    typeof performance.now === 'function'
+  ) {
+    return performance.timeOrigin + performance.now()
+  }
+
+  return Date.now()
+}
+
 export function waitForMinimumDelay(startedAt, minimumMs = 0) {
   const remaining = minimumMs - (Date.now() - startedAt)
 
