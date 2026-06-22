@@ -163,6 +163,7 @@ import {
   getPodcastProgramsData
 } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
+import { getPlaybackErrorDisplay } from '../utils/playbackError'
 import '../styles/podcast.css'
 
 const PROGRAM_LIMIT = 40
@@ -262,11 +263,11 @@ async function playAll() {
 }
 
 async function playProgram(track) {
-  player.setQueue(rankedPrograms.value)
+  player.setQueue(rankedPrograms.value, { type: 'podcast-detail', id: route.params.id })
   const played = await player.playTrack(track)
 
   if (!played) {
-    message.error(player.state.error?.message || '当前歌曲暂无可播放链接')
+    message.error(getPlaybackErrorDisplay(player.state.error, '当前歌曲暂无可播放链接'))
   }
 }
 

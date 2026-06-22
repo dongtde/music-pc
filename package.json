@@ -8,6 +8,11 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
+    "baseline:bundle": "node scripts/analyze-bundle.cjs",
+    "smoke:routes": "node scripts/route-smoke.js",
+    "smoke:first-screen": "node scripts/first-screen-smoke.js",
+    "smoke:fps": "node scripts/fps-smoke.js",
+    "smoke:player": "node scripts/player-smoke.js",
     "preview": "vite preview --host 127.0.0.1",
     "desktop:dev": "vite --host 127.0.0.1",
     "desktop:debug": "node scripts/desktop-debug.cjs",

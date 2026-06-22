@@ -1,5 +1,6 @@
 import { reactive, ref, shallowRef } from 'vue'
 import { getMvCommentsData } from '../../services/netease'
+import { createLruCache } from '../../utils/lruCache'
 import {
   HOME_DANMAKU_COMMENT_LIMIT as homeDanmakuCommentLimit
 } from './homeConstants'
@@ -15,7 +16,7 @@ export function useHomeMvEngagement({ activeMv, activeMvId }) {
   const homeMvCommentsModalMounted = ref(false)
   const homeMvCommentState = reactive(createCommentState())
   const homeMvDanmakuState = reactive(createCommentState())
-  const mvCommentCache = new Map()
+  const mvCommentCache = createLruCache(24)
   let homeMvDanmakuRequestId = 0
 
   function cacheHomeMvComments(trackId, data) {

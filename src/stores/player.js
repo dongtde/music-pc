@@ -4,8 +4,10 @@ import { STORAGE_KEYS } from '../config/app'
 import { currentTrack as fallbackTrack, newSongs } from '../data/music'
 import { useAuthStore } from './auth'
 import { useLibraryStore } from './library'
+import { createLruCache } from '../utils/lruCache'
 import { readJsonStorage, readStorage, writeJsonStorage, writeStorage } from '../utils/storage'
 import { parseCookieString } from '../utils/kugouAuth'
+import { createPlaybackError, normalizePlaybackError, PLAYBACK_ERROR_CODES } from '../utils/playbackError'
 import { clampTime, formatTime, parseDuration, toFiniteNumber } from '../utils/time'
 import {
   DEFAULT_AUDIO_QUALITY,
@@ -17,8 +19,20 @@ import {
 
 const audio = new Audio()
 const endedListeners = new Set()
+const playbackUrlCache = createLruCache(80)
+const PLAYBACK_URL_CACHE_TTL_MS = 8 * 60 * 1000
+const DEFAULT_PLAY_MODE = 'list'
+const PLAY_MODE_VALUES = new Set(['shuffle', 'order', 'single', 'list'])
+const DEFAULT_QUEUE_SOURCE = {
+  type: 'seed',
+  id: 'new-songs',
+  label: 'new-songs'
+}
+let queueVersionSeed = 0
 const restoredSnapshot = readPlaybackSnapshot()
+const initialPlayMode = readPlayMode()
 const initialPlaybackQuality = readPlaybackQuality()
+const initialVolume = readPlaybackVolume()
 const initialTrack = restoredSnapshot?.track
   ? normalizeRestoredTrack(restoredSnapshot.track)
   : createEmptyTrack()
@@ -34,13 +48,16 @@ const state = reactive({
     id: song.id ?? `queue-${song.rank}`,
     rank: String(index + 1).padStart(2, '0')
   })),
+  queueSource: DEFAULT_QUEUE_SOURCE,
+  queueVersion: queueVersionSeed,
   isPlaying: false,
   isLoading: false,
   currentTime: initialCurrentTime,
   duration: initialDuration,
   error: null,
+  playMode: initialPlayMode,
   playbackQuality: initialPlaybackQuality,
-  volume: 1
+  volume: initialVolume
 })
 
 let lastPersistedSecond = Math.floor(state.currentTime)
@@ -87,7 +104,11 @@ audio.addEventListener('seeked', () => {
 audio.addEventListener('error', () => {
   stopPlaybackClock()
   const mediaError = audio.error
-  state.error = new Error(mediaError?.message || `Audio playback failed${mediaError?.code ? ` (${mediaError.code})` : ''}`)
+  state.error = createPlaybackError(PLAYBACK_ERROR_CODES.MEDIA_ERROR, {
+    mediaErrorCode: mediaError?.code,
+    message: mediaError?.message || `音频播放失败${mediaError?.code ? ` (${mediaError.code})` : ''}`,
+    track: state.currentTrack
+  })
   state.isPlaying = false
   console.warn('Audio element error:', {
     code: mediaError?.code,
@@ -118,7 +139,10 @@ export function usePlayerStore() {
       const playbackSource = await resolveBestPlaybackSource(track, preferredQuality)
 
       if (!playbackSource.url) {
-        throw new Error('当前歌曲暂无可播放链接')
+        throw createPlaybackError(PLAYBACK_ERROR_CODES.NO_PLAYBACK_URL, {
+          track,
+          quality: playbackSource.quality
+        })
       }
 
       state.playbackQuality = playbackSource.quality
@@ -134,7 +158,10 @@ export function usePlayerStore() {
       useLibraryStore().addRecentTrack(state.currentTrack)
       return true
     } catch (error) {
-      state.error = error
+      state.error = normalizePlaybackError(error, {
+        operation: 'play',
+        track
+      })
       state.isPlaying = false
       console.warn('Failed to play track:', error)
       return false
@@ -153,7 +180,10 @@ export function usePlayerStore() {
         await audio.play()
         return true
       } catch (error) {
-        state.error = error
+        state.error = normalizePlaybackError(error, {
+          operation: 'resume',
+          track: state.currentTrack
+        })
         state.isPlaying = false
         console.warn('Failed to resume track:', error)
         return false
@@ -180,21 +210,61 @@ export function usePlayerStore() {
       persistPlaybackSnapshot()
       return true
     } catch (error) {
-      state.error = error
+      state.error = normalizePlaybackError(error, {
+        operation: 'restart',
+        track: state.currentTrack
+      })
       state.isPlaying = false
       console.warn('Failed to restart track:', error)
       return false
     }
   }
 
-  function setQueue(tracks) {
-    state.queue = tracks
+  function setQueue(tracks, source) {
+    state.queue = Array.isArray(tracks) ? tracks.filter(Boolean) : []
+    state.queueSource = normalizeQueueSource(source, state.queueSource)
+    state.queueVersion = ++queueVersionSeed
+
+    return state.queueVersion
+  }
+
+  function setPlayMode(value) {
+    const nextMode = normalizePlayMode(value, state.playMode)
+
+    if (nextMode === state.playMode) {
+      return state.playMode
+    }
+
+    state.playMode = nextMode
+    persistPlayMode(nextMode)
+
+    return state.playMode
+  }
+
+  function getRelativeQueueTrack(direction = 1) {
+    return getRelativeQueueTrackByMode(state.queue, getCurrentQueueIndex(), direction, state.playMode)
+  }
+
+  function shouldRestartCurrentTrackOnEnded() {
+    return state.playMode === 'single'
   }
 
   function setVolume(value) {
-    const nextVolume = Math.min(1, Math.max(0, Number(value)))
+    const rawVolume = Number(value)
+
+    if (!Number.isFinite(rawVolume)) {
+      return
+    }
+
+    const nextVolume = Math.min(1, Math.max(0, rawVolume))
+
+    if (state.volume === nextVolume) {
+      return
+    }
+
     state.volume = nextVolume
     audio.volume = nextVolume
+    persistPlaybackVolume(nextVolume)
   }
 
   function seekTo(value) {
@@ -264,7 +334,11 @@ export function usePlayerStore() {
 
       if (!songUrl) {
         const quality = getAudioQualityDefinition(nextQuality)
-        throw new Error(`${quality.shortLabel} 暂无可播放链接`)
+        throw createPlaybackError(PLAYBACK_ERROR_CODES.QUALITY_UNAVAILABLE, {
+          track: state.currentTrack,
+          quality: nextQuality,
+          message: `${quality.shortLabel} 暂无可播放链接`
+        })
       }
 
       state.currentTrack = normalizeTrack(state.currentTrack, songUrl, nextQuality)
@@ -297,7 +371,11 @@ export function usePlayerStore() {
         }
       }
 
-      state.error = error
+      state.error = normalizePlaybackError(error, {
+        operation: 'switch-quality',
+        track: state.currentTrack,
+        quality: nextQuality
+      })
       state.isPlaying = !audio.paused
       console.warn('Failed to switch playback quality:', error)
       return false
@@ -312,6 +390,9 @@ export function usePlayerStore() {
     togglePlay,
     restartCurrentTrack,
     setQueue,
+    setPlayMode,
+    getRelativeQueueTrack,
+    shouldRestartCurrentTrackOnEnded,
     setVolume,
     setPlaybackQuality,
     seekTo,
@@ -402,12 +483,18 @@ async function resolvePlaybackUrl(track, quality = state.playbackQuality) {
   }
 
   if (String(track.id).startsWith('local-')) {
-    throw new Error('本地文件需要重新导入后播放')
+    throw createPlaybackError(PLAYBACK_ERROR_CODES.LOCAL_FILE_MISSING, { track })
   }
 
   const auth = useAuthStore()
   const playbackCookie = await ensurePlaybackCookie(auth)
   const playbackQuality = normalizeAudioQualityValue(quality) || DEFAULT_AUDIO_QUALITY
+  const playbackCacheKey = getPlaybackUrlCacheKey(track, playbackQuality, playbackCookie, auth)
+  const cachedUrl = getCachedPlaybackUrl(playbackCacheKey)
+
+  if (cachedUrl) {
+    return cachedUrl
+  }
 
   const response = await getSongUrl({
     id: track.id,
@@ -418,7 +505,51 @@ async function resolvePlaybackUrl(track, quality = state.playbackQuality) {
     quality: playbackQuality,
     cookie: playbackCookie
   })
-  return normalizeDesktopPlaybackUrl(response.data?.[0]?.url || '')
+  const resolvedUrl = normalizeDesktopPlaybackUrl(response.data?.[0]?.url || '')
+
+  if (resolvedUrl) {
+    playbackUrlCache.set(playbackCacheKey, {
+      url: resolvedUrl,
+      cachedAt: Date.now()
+    })
+  }
+
+  return resolvedUrl
+}
+
+function getCachedPlaybackUrl(cacheKey) {
+  const cachedSource = playbackUrlCache.get(cacheKey)
+
+  if (!cachedSource?.url) {
+    return ''
+  }
+
+  if (Date.now() - Number(cachedSource.cachedAt || 0) > PLAYBACK_URL_CACHE_TTL_MS) {
+    playbackUrlCache.delete(cacheKey)
+    return ''
+  }
+
+  return cachedSource.url
+}
+
+function getPlaybackUrlCacheKey(track, quality, playbackCookie, auth) {
+  const cookieValues = parseCookie(playbackCookie)
+  const authIdentity = [
+    auth.state.loginType || 'anonymous',
+    auth.state.profile?.userId || auth.state.account?.id || cookieValues.userid || '',
+    cookieValues.dfid || '',
+    cookieValues.token || ''
+  ].join(':')
+
+  return [
+    'playback-url',
+    track.id ?? '',
+    track.hash ?? '',
+    track.album_audio_id ?? track.mixsongid ?? track.audio_id ?? '',
+    track.album_id ?? track.albumId ?? '',
+    quality,
+    authIdentity
+  ].join(':')
 }
 
 function normalizeDesktopPlaybackUrl(url = '') {
@@ -471,6 +602,82 @@ function normalizeTrack(track, url, quality = state.playbackQuality) {
     duration: track.time ?? track.duration ?? '0:00',
     coverPalette: track.coverPalette ?? fallbackTrack.coverPalette
   }
+}
+
+function getCurrentQueueIndex() {
+  return state.queue.findIndex((track) => String(track.id) === String(state.currentTrack.id))
+}
+
+function getRelativeQueueTrackByMode(queue, currentIndex, direction, playMode) {
+  if (!Array.isArray(queue) || !queue.length) {
+    return null
+  }
+
+  const normalizedDirection = Number(direction) >= 0 ? 1 : -1
+  const mode = normalizePlayMode(playMode)
+
+  if (mode === 'shuffle') {
+    return getRandomQueueTrack(queue, currentIndex)
+  }
+
+  if (mode === 'single' && currentIndex >= 0) {
+    return queue[currentIndex]
+  }
+
+  const fallbackIndex = normalizedDirection > 0 ? 0 : queue.length - 1
+  const baseIndex = currentIndex >= 0 ? currentIndex : fallbackIndex - normalizedDirection
+  const nextIndex = baseIndex + normalizedDirection
+
+  if (mode === 'order' && (nextIndex < 0 || nextIndex >= queue.length)) {
+    return null
+  }
+
+  return queue[(nextIndex + queue.length) % queue.length]
+}
+
+function getRandomQueueTrack(queue, currentIndex) {
+  if (queue.length <= 1) {
+    return queue[0]
+  }
+
+  let nextIndex = currentIndex
+
+  while (nextIndex === currentIndex) {
+    nextIndex = Math.floor(Math.random() * queue.length)
+  }
+
+  return queue[nextIndex]
+}
+
+function normalizePlayMode(value, fallback = DEFAULT_PLAY_MODE) {
+  const mode = String(value ?? '')
+
+  return PLAY_MODE_VALUES.has(mode) ? mode : fallback
+}
+
+function normalizeQueueSource(source, fallback = DEFAULT_QUEUE_SOURCE) {
+  if (typeof source === 'string') {
+    return {
+      type: source,
+      id: '',
+      label: source
+    }
+  }
+
+  const rawSource = source || {}
+  const type = cleanQueueSourceValue(rawSource.type || rawSource.name || fallback.type || 'unknown') || 'unknown'
+  const id = cleanQueueSourceValue(rawSource.id ?? rawSource.key ?? fallback.id ?? '')
+  const label = cleanQueueSourceValue(rawSource.label || rawSource.title || fallback.label || type) || type
+
+  return {
+    type,
+    id,
+    label
+  }
+}
+
+function cleanQueueSourceValue(value) {
+  return String(value ?? '').trim()
 }
 
 function normalizeRestoredTrack(track) {
@@ -601,6 +808,18 @@ function shouldReloadCurrentTrackForQuality(track) {
   )
 }
 
+function readPlayMode() {
+  return normalizePlayMode(readStorage(STORAGE_KEYS.playerPlayMode, DEFAULT_PLAY_MODE))
+}
+
+function persistPlayMode(value) {
+  const playMode = normalizePlayMode(value)
+
+  if (!writeStorage(STORAGE_KEYS.playerPlayMode, playMode)) {
+    console.warn('Failed to persist play mode')
+  }
+}
+
 function readPlaybackQuality() {
   const storedQuality = readStorage(STORAGE_KEYS.playbackQuality, DEFAULT_AUDIO_QUALITY)
 
@@ -612,5 +831,25 @@ function persistPlaybackQuality(value) {
 
   if (!writeStorage(STORAGE_KEYS.playbackQuality, quality)) {
     console.warn('Failed to persist playback quality')
+  }
+}
+
+function readPlaybackVolume() {
+  const storedVolume = Number(readStorage(STORAGE_KEYS.playerVolume, 1))
+
+  if (!Number.isFinite(storedVolume)) {
+    return 1
+  }
+
+  if (storedVolume > 1) {
+    return Math.min(1, Math.max(0, storedVolume / 100))
+  }
+
+  return Math.min(1, Math.max(0, storedVolume))
+}
+
+function persistPlaybackVolume(value) {
+  if (!writeStorage(STORAGE_KEYS.playerVolume, String(value))) {
+    console.warn('Failed to persist playback volume')
   }
 }

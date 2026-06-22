@@ -292,6 +292,7 @@ const {
   playTrack: playPlaylistTrack,
 } = useQueuePlayback({
   queue: playlistTracks,
+  queueSource: () => ({ type: 'playlist', id: route.params.id }),
   message,
   emptyMessage: '当前歌单暂无可播放歌曲',
   errorMessage: '当前歌曲暂无可播放链接',

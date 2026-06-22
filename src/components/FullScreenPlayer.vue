@@ -186,7 +186,7 @@ import {
   watch,
 } from 'vue';
 import { ChevronDown } from 'lucide-vue-next';
-import { getTrackLyricData } from '../services/netease';
+import { getCachedTrackLyrics } from '../services/lyrics';
 import { usePlayerStore } from '../stores/player';
 import {
   createLyricPlaceholder,
@@ -514,7 +514,7 @@ async function loadTrackLyrics(track) {
   lyricLines.value = createLyricPlaceholder('歌词加载中...');
 
   try {
-    const lines = await getTrackLyricData(track && typeof track === 'object' ? track : trackId);
+    const lines = await getCachedTrackLyrics(track && typeof track === 'object' ? track : trackId);
 
     if (requestId !== lyricRequestId) {
       return;

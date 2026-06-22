@@ -162,6 +162,7 @@ const showDownloadSync = computed(() => isLocalView.value && auth.state.isLogged
 
 const { playAll: playAllTracks, playTrack } = useQueuePlayback({
   queue: rankedTracks,
+  queueSource: () => ({ type: 'library', id: viewType.value }),
   message,
   emptyMessage: '当前列表暂无可播放歌曲',
   errorMessage: '当前歌曲暂无可播放链接'

@@ -16,11 +16,13 @@ import {
   getVideoCenterData
 } from '../../services/netease'
 import { usePlayerStore } from '../../stores/player'
+import { createLruCache } from '../../utils/lruCache'
 import {
   FEED_DRAG_THRESHOLD as feedDragThreshold,
   HOME_DANMAKU_MAX_ITEMS as homeDanmakuMaxItems,
   HOME_DANMAKU_PREFETCH_THRESHOLD as homeDanmakuPrefetchThreshold,
-  MV_RECOMMENDATION_LIMIT as mvRecommendationLimit
+  MV_RECOMMENDATION_LIMIT as mvRecommendationLimit,
+  SLIDE_HYDRATE_RADIUS as slideHydrateRadius
 } from './homeConstants'
 import {
   formatTime,
@@ -58,7 +60,7 @@ export function useHomeVideoFeed({ active }) {
     startScrollTop: 0,
     moved: false
   }
-  const mvPlaybackCache = new Map()
+  const mvPlaybackCache = createLruCache(24)
   const mvPlaybackRequests = new Map()
   let mvScrollFrame = 0
   let mvAutoPlayTimer = 0
@@ -68,6 +70,10 @@ export function useHomeVideoFeed({ active }) {
 
   const activeMv = computed(() => mvQueue.value[activeMvIndex.value])
   const activeMvId = computed(() => String(activeMv.value?.id ?? ''))
+  const hydratedMvRange = computed(() => ({
+    start: Math.max(0, activeMvIndex.value - slideHydrateRadius),
+    end: Math.min(mvQueue.value.length - 1, activeMvIndex.value + slideHydrateRadius)
+  }))
   const engagement = useHomeMvEngagement({ activeMv, activeMvId })
   const homeMvCommentSubtitle = computed(() => {
     const mv = activeMv.value
@@ -631,6 +637,10 @@ export function useHomeVideoFeed({ active }) {
     return normalizeVideoUrl(mv?.url)
   }
 
+  function isMvSlideHydrated(index) {
+    return index >= hydratedMvRange.value.start && index <= hydratedMvRange.value.end
+  }
+
   function isActiveMvLoading(mv) {
     return Boolean(
       activeMvLoading.value &&
@@ -710,6 +720,7 @@ export function useHomeVideoFeed({ active }) {
     startMvDrag,
     handleMvPointerMove,
     stopMvDrag,
+    isMvSlideHydrated,
     getHomeMvVideoUrl,
     setHomeVideoElement,
     handleHomeMvMetadata,

@@ -505,6 +505,7 @@ import {
   getPodcastRankData
 } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
+import { getPlaybackErrorDisplay } from '../utils/playbackError'
 import '../styles/podcast.css'
 
 const RANK_LABELS = {
@@ -825,11 +826,22 @@ async function loadRank() {
 }
 
 async function playProgram(track, queue) {
-  player.setQueue(queue)
+  player.setQueue(queue, getPodcastProgramQueueSource())
   const played = await player.playTrack(track)
 
   if (!played) {
-    message.error(player.state.error?.message || '当前歌曲暂无可播放链接')
+    message.error(getPlaybackErrorDisplay(player.state.error, '当前歌曲暂无可播放链接'))
+  }
+}
+
+function getPodcastProgramQueueSource() {
+  const sourceId = activePageKey.value === 'rank'
+    ? rankType.value
+    : activeCategoryId.value || activePageKey.value
+
+  return {
+    type: 'podcast-programs',
+    id: sourceId
   }
 }
 

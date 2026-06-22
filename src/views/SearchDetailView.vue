@@ -124,6 +124,7 @@ import SongListRow from '../components/SongListRow.vue'
 import { getSearchResultData } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
 import { formatCompactCount } from '../utils/number'
+import { getPlaybackErrorDisplay } from '../utils/playbackError'
 import '../styles/search.css'
 
 const SEARCH_PAGE_SIZE = 30
@@ -309,7 +310,10 @@ function handleResultSelect(item) {
 }
 
 async function playSearchSong(song) {
-  player.setQueue(displayItems.value.filter((item) => item.type === 'song'))
+  player.setQueue(
+    displayItems.value.filter((item) => item.type === 'song'),
+    { type: 'search-detail', id: keyword.value }
+  )
 
   if (String(player.state.currentTrack.id) === String(song.id)) {
     await player.togglePlay()
@@ -319,7 +323,7 @@ async function playSearchSong(song) {
   const played = await player.playTrack(song)
 
   if (!played) {
-    message.error(player.state.error?.message || '当前歌曲暂无可播放链接')
+    message.error(getPlaybackErrorDisplay(player.state.error, '当前歌曲暂无可播放链接'))
   }
 }
 

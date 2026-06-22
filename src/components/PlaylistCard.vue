@@ -52,6 +52,7 @@ import { Headphones, Play } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import { getPlaylistDetailData } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
+import { getPlaybackErrorDisplay } from '../utils/playbackError'
 
 const props = defineProps({
   playlist: {
@@ -83,12 +84,12 @@ async function playPlaylist() {
       return
     }
 
-    player.setQueue(tracks)
+    player.setQueue(tracks, { type: 'playlist-card', id: playlistId })
 
     const played = await player.playTrack(tracks[0])
 
     if (!played) {
-      message.error(player.state.error?.message || '当前歌单暂无可播放链接')
+      message.error(getPlaybackErrorDisplay(player.state.error, '当前歌单暂无可播放链接'))
     }
   } catch (error) {
     console.warn('Failed to play playlist:', error)

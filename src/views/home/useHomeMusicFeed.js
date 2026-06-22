@@ -13,6 +13,8 @@ import { useMessage } from 'naive-ui'
 import { recommendedSingles } from '../../data/music'
 import { getMusicFeedData } from '../../services/netease'
 import { usePlayerStore } from '../../stores/player'
+import { createLruCache } from '../../utils/lruCache'
+import { getPlaybackErrorDisplay } from '../../utils/playbackError'
 import {
   EMPTY_SLIDE_STYLE as emptySlideStyle,
   FEED_DRAG_THRESHOLD as feedDragThreshold,
@@ -56,7 +58,7 @@ export function useHomeMusicFeed({ active }) {
     startScrollTop: 0,
     moved: false
   }
-  const coverTintCache = new Map()
+  const coverTintCache = createLruCache(80)
   const coverTintRequests = new Set()
   let scrollFrame = 0
   let autoPlayTimer = 0
@@ -393,13 +395,28 @@ export function useHomeMusicFeed({ active }) {
     scrollToIndex(activeIndex.value + (event.key === 'ArrowDown' ? 1 : -1), 'smooth')
   }
 
-  function syncPlayerQueue() {
-    if (syncedQueue === recommendationQueue.value) {
+  function syncPlayerQueue(options = {}) {
+    const queueChanged = syncedQueue !== recommendationQueue.value
+    const ownsHomeQueue = player.state.queueSource?.type === 'home-music'
+
+    if (!queueChanged && ownsHomeQueue) {
+      return
+    }
+
+    if (!options.force && !active.value && !ownsHomeQueue) {
+      syncedQueue = recommendationQueue.value
       return
     }
 
     syncedQueue = recommendationQueue.value
-    player.setQueue(syncedQueue)
+    player.setQueue(syncedQueue, getHomeMusicQueueSource())
+  }
+
+  function getHomeMusicQueueSource() {
+    return {
+      type: 'home-music',
+      id: activeMood.value
+    }
   }
 
   function restoreActiveTrackPosition() {
@@ -527,7 +544,7 @@ export function useHomeMusicFeed({ active }) {
       return
     }
 
-    syncPlayerQueue()
+    syncPlayerQueue({ force: true })
 
     if (String(player.state.currentTrack.id) === String(song.id)) {
       await resumeOrToggleActiveSong(song, options)
@@ -707,7 +724,7 @@ export function useHomeMusicFeed({ active }) {
       return
     }
 
-    message.error(player.state.error?.message || '当前歌曲暂无可播放链接')
+    message.error(getPlaybackErrorDisplay(player.state.error, '当前歌曲暂无可播放链接'))
   }
 
   return {

@@ -168,6 +168,7 @@ import {
 } from '../services/netease'
 import { useAuthStore } from '../stores/auth'
 import { usePlayerStore } from '../stores/player'
+import { getPlaybackErrorDisplay } from '../utils/playbackError'
 import '../styles/fm.css'
 
 const LOW_QUEUE_WATERMARK = 2
@@ -297,7 +298,7 @@ async function fetchFmTracks({ reset = false, autoplay = false } = {}) {
     }
 
     tracks.value = reset ? nextTracks : uniqueTracks([...tracks.value, ...nextTracks])
-    player.setQueue(tracks.value)
+    player.setQueue(tracks.value, getFmQueueSource())
     await loadLikeStates(nextTracks)
 
     if (autoplay && activeTrack.value) {
@@ -322,7 +323,7 @@ async function loadLikeStates(nextTracks) {
 }
 
 async function playTrack(track) {
-  player.setQueue(tracks.value)
+  player.setQueue(tracks.value, getFmQueueSource())
 
   if (String(player.state.currentTrack.id) === String(track.id)) {
     await player.togglePlay()
@@ -332,7 +333,7 @@ async function playTrack(track) {
   activeIndex.value = Math.max(0, tracks.value.findIndex((item) => String(item.id) === String(track.id)))
   const played = await player.playTrack(track)
   if (!played) {
-    message.error(player.state.error?.message || '当前歌曲暂无可播放链接')
+    message.error(getPlaybackErrorDisplay(player.state.error, '当前歌曲暂无可播放链接'))
   }
 }
 
@@ -419,7 +420,7 @@ async function trashCurrentTrack() {
     if (activeIndex.value >= tracks.value.length) {
       activeIndex.value = Math.max(0, tracks.value.length - 1)
     }
-    player.setQueue(tracks.value)
+    player.setQueue(tracks.value, getFmQueueSource())
     message.success('已从私人 FM 移除')
     if (tracks.value.length) {
       await playTrack(activeTrack.value)
@@ -447,5 +448,12 @@ function uniqueTracks(items = []) {
     seenIds.add(id)
     return true
   })
+}
+
+function getFmQueueSource() {
+  return {
+    type: 'fm',
+    id: [mode.value, submode.value].filter(Boolean).join(':')
+  }
 }
 </script>

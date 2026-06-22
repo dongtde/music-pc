@@ -403,6 +403,7 @@ import {
   getArtistVideosData
 } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
+import { getPlaybackErrorDisplay } from '../utils/playbackError'
 import '../styles/artist.css'
 
 const ARTIST_DETAIL_TRACK_SKELETON_COUNT = 10
@@ -864,15 +865,15 @@ function loadMoreForActiveTab() {
 }
 
 function playFeaturedTrack(track) {
-  playArtistTrack(track, artistTracks.value)
+  playArtistTrack(track, artistTracks.value, { type: 'artist-featured', id: route.params.id })
 }
 
 function playSongTrack(track) {
-  playArtistTrack(track, artistSongs.value)
+  playArtistTrack(track, artistSongs.value, { type: 'artist-songs', id: route.params.id })
 }
 
-async function playArtistTrack(track, queue) {
-  player.setQueue(queue)
+async function playArtistTrack(track, queue, source) {
+  player.setQueue(queue, source)
 
   if (String(player.state.currentTrack.id) === String(track.id)) {
     await player.togglePlay()
@@ -881,7 +882,7 @@ async function playArtistTrack(track, queue) {
 
   const played = await player.playTrack(track)
   if (!played) {
-    message.error(player.state.error?.message || '当前歌曲暂无可播放链接')
+    message.error(getPlaybackErrorDisplay(player.state.error, '当前歌曲暂无可播放链接'))
   }
 }
 

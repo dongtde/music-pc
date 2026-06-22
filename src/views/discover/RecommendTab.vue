@@ -378,6 +378,7 @@ import {
 } from '../../data/music';
 import { getHomeDiscoverData } from '../../services/netease';
 import { usePlayerStore } from '../../stores/player';
+import { getPlaybackErrorDisplay } from '../../utils/playbackError';
 
 const HOME_SKELETON_MIN_MS = 360;
 const RECOMMENDED_SINGLE_DISPLAY_LIMIT = 12;
@@ -584,7 +585,7 @@ async function playHeroSong(slide) {
     ),
   ];
 
-  player.setQueue(queue);
+  player.setQueue(queue, { type: 'discover-hero', id: slide.id });
 
   if (String(player.state.currentTrack.id) === String(track.id)) {
     await player.togglePlay();
@@ -597,7 +598,7 @@ async function playHeroSong(slide) {
     const played = await player.playTrack(track);
 
     if (!played) {
-      message.error(player.state.error?.message || '当前歌曲暂时无法播放');
+      message.error(getPlaybackErrorDisplay(player.state.error, '当前歌曲暂时无法播放'));
     }
   } finally {
     heroActionLoadingId.value = '';
@@ -769,7 +770,6 @@ async function loadHomeData() {
   } catch (error) {
     console.warn('Failed to load home data from Netease API:', error);
   } finally {
-    player.setQueue(homeRecommendedSingles.value);
     await waitForSkeleton(startedAt);
     isHomeLoading.value = false;
     syncPlaylistCarouselScrollPositions();
@@ -789,7 +789,7 @@ function waitForSkeleton(startedAt) {
 }
 
 function playRecommendedSong(song) {
-  player.setQueue(homeRecommendedSingles.value);
+  player.setQueue(homeRecommendedSingles.value, { type: 'discover-recommend', id: 'singles' });
 
   if (player.state.currentTrack.id === song.id) {
     player.togglePlay();

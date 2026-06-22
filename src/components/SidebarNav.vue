@@ -99,6 +99,7 @@ import {
   Music2,
   Radio,
   RadioTower,
+  Search,
   Users,
   Video
 } from 'lucide-vue-next'
@@ -120,7 +121,7 @@ const message = useMessage()
 const creatingPlaylist = ref(false)
 const displayName = auth.displayName
 const avatarUrl = auth.avatarUrl
-const icons = { CloudDownload, Compass, Heart, History, House, Music2, Radio, RadioTower, Users, Video }
+const icons = { CloudDownload, Compass, Heart, History, House, Music2, Radio, RadioTower, Search, Users, Video }
 const endTimeLabel = '\u5230\u671f'
 const showVipButton = computed(() => auth.state.isLoggedIn && !auth.isGuest.value)
 const showUserPlaylistGroups = computed(() => auth.state.isLoggedIn && !auth.isGuest.value)
@@ -180,6 +181,8 @@ const sidebarGroups = computed(() => [
         icon: 'Compass',
         activeMatch: '/discover'
       },
+      { label: '搜索音乐', to: '/search', icon: 'Search', activeMatch: '/search' },
+      { label: '私人 FM', to: '/fm', icon: 'Radio' },
       { label: '电台', to: '/podcast', icon: 'RadioTower', activeMatch: '/podcast' },
       { label: '视频', to: '/mv', icon: 'Video' },
       { label: '朋友', to: '/friends', icon: 'Users' }

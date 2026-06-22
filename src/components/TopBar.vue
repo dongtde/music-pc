@@ -235,6 +235,7 @@ import { STORAGE_KEYS } from '../config/app'
 import { getSearchBootData, getSearchResultData, getSearchSuggestData } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
 import { useThemeStore } from '../stores/theme'
+import { getPlaybackErrorDisplay } from '../utils/playbackError'
 import { readJsonStorage, writeJsonStorage } from '../utils/storage'
 
 const SearchGroup = defineComponent({
@@ -625,13 +626,13 @@ async function playSong(song, queue = []) {
   const playableQueue = queue.filter((item) => item.type === 'song')
 
   if (playableQueue.length) {
-    player.setQueue(playableQueue)
+    player.setQueue(playableQueue, { type: 'topbar-search', id: searchKeyword.value })
   }
 
   const played = await player.playTrack(song)
 
   if (!played) {
-    message.error(player.state.error?.message || '当前歌曲暂无可播放链接')
+    message.error(getPlaybackErrorDisplay(player.state.error, '当前歌曲暂无可播放链接'))
   }
 }
 

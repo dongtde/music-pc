@@ -2173,19 +2173,32 @@ export const getSongRedCount = (params = {}) => {
     hash: params.hash ?? knownSong?.hash
   }).then(toCommentCountResponse)
 }
-export const getSongUrl = (params = {}) =>
-  getKugou('/song/url', params)
-    .then(toSongUrlResponse)
-    .catch(() => ({ data: [] }))
-    .then((response) => {
-      if (response.data?.[0]?.url) {
-        return response
-      }
+export const getSongUrl = async (params = {}) => {
+  let primaryError = null
+  let primaryResponse = { data: [] }
 
-      return getKugou('/song/url/new', params)
-        .then(toSongUrlResponse)
-        .catch(() => response)
-    })
+  try {
+    primaryResponse = toSongUrlResponse(await getKugou('/song/url', params))
+  } catch (error) {
+    primaryError = error
+  }
+
+  if (primaryResponse.data?.[0]?.url) {
+    return primaryResponse
+  }
+
+  try {
+    const fallbackResponse = toSongUrlResponse(await getKugou('/song/url/new', params))
+
+    return fallbackResponse.data?.[0]?.url ? fallbackResponse : primaryResponse
+  } catch (error) {
+    if (primaryError) {
+      throw error
+    }
+
+    return primaryResponse
+  }
+}
 export const getLyric = (params = {}) => toLyricResponse(params)
 export const getSearchDefault = (params = {}) => getKugou('/search/default', params, { noCookie: true })
 export const getSearchHotDetail = (params = {}) => getKugou('/search/hot', params).then(toHotSearchResponse)

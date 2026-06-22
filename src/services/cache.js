@@ -1,4 +1,6 @@
-const cacheStore = new Map()
+import { createLruCache } from '../utils/lruCache'
+
+const cacheStore = createLruCache(160)
 
 export function getCachedData(key, ttlMs, loader) {
   const now = Date.now()

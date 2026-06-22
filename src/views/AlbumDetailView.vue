@@ -179,6 +179,7 @@ const {
   playTrack: playAlbumTrack
 } = useQueuePlayback({
   queue: albumTracks,
+  queueSource: () => ({ type: 'album', id: route.params.id }),
   message,
   emptyMessage: '当前专辑暂无可播放歌曲',
   errorMessage: '当前歌曲暂无可播放链接'

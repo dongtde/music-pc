@@ -17,12 +17,17 @@
           <div class="route-stage">
             <router-view v-slot="{ Component, route: viewRoute }">
               <Transition :name="routeTransitionName" appear>
-                <KeepAlive>
+                <KeepAlive v-if="shouldKeepRouteAlive(viewRoute)">
                   <component
                     :is="Component"
                     :key="getRouteViewKey(viewRoute)"
                   />
                 </KeepAlive>
+                <component
+                  v-else
+                  :is="Component"
+                  :key="getRouteViewKey(viewRoute)"
+                />
               </Transition>
             </router-view>
           </div>
@@ -83,6 +88,10 @@ function getRouteViewKey(viewRoute) {
   }
 
   return String(viewRoute.name || viewRoute.path);
+}
+
+function shouldKeepRouteAlive(viewRoute) {
+  return Boolean(viewRoute.meta.keepAlive);
 }
 
 function markLayoutSwitching() {

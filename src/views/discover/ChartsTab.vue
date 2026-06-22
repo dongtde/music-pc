@@ -134,6 +134,8 @@ import { useMessage } from 'naive-ui'
 import SectionTitle from '../../components/SectionTitle.vue'
 import { getChartsDiscoveryData, getPlaylistDetailData } from '../../services/netease'
 import { usePlayerStore } from '../../stores/player'
+import { createLruCache } from '../../utils/lruCache'
+import { getPlaybackErrorDisplay } from '../../utils/playbackError'
 
 const CHART_SKELETON_MIN_MS = 360
 
@@ -144,7 +146,7 @@ const chartSections = ref([])
 const playingChartId = ref('')
 const message = useMessage()
 const player = usePlayerStore()
-const chartTrackCache = new Map()
+const chartTrackCache = createLruCache(20)
 
 onMounted(() => {
   loadData()
@@ -198,12 +200,12 @@ async function playChart(chart) {
       return
     }
 
-    player.setQueue(tracks)
+    player.setQueue(tracks, { type: 'chart', id: chartId })
 
     const played = await player.playTrack(tracks[0])
 
     if (!played) {
-      message.error(player.state.error?.message || '当前排行榜暂无可播放链接')
+      message.error(getPlaybackErrorDisplay(player.state.error, '当前排行榜暂无可播放链接'))
     }
   } catch (playError) {
     console.warn('Failed to play chart:', playError)
