@@ -1,36 +1,40 @@
 import { computed, reactive } from 'vue'
 import {
-  claimYouthDayVip,
-  getLoginQrCheck,
-  getLoginQrCreate,
-  getLoginQrKey,
-  getLoginStatus,
-  getUserAccount,
-  getYouthVipStatus,
-  loginByCellphone,
-  loginByEmail,
-  logout as requestLogout,
-  refreshLogin,
-  sendCaptcha,
-  upgradeYouthDayVip
-} from '../api/modules/netease'
-import { DEFAULT_COUNTRY_CODE, STORAGE_KEYS } from '../config/app'
-import { readJsonStorage, writeJsonStorage } from '../utils/storage'
+  checkQrLoginData,
+  createQrLoginData,
+  getLoginStatusData,
+  getUserAccountData,
+  loginWithCellphoneData,
+  loginWithEmailData,
+  logoutData,
+  refreshLoginData,
+  sendLoginCaptchaData
+} from '../services/auth/login'
+import { DEFAULT_COUNTRY_CODE } from '../config/app'
 import {
-  mergeKugouAuth,
-  parseCookieString,
-  readStoredKugouAuth,
-  toKugouAuthCookie,
-  writeStoredKugouAuth
-} from '../utils/kugouAuth'
+  buildAuthRequestParams,
+  clearStoredSession,
+  getAuthIdentity,
+  mergeAuthCookieString,
+  parseAuthCookie,
+  readDailyVipClaim,
+  readInitialAuthSession,
+  saveStoredSession,
+  writeAuthCookie,
+  writeDailyVipClaim
+} from '../services/auth/session'
+import {
+  claimAndUpgradeYouthVipData,
+  getLocalDateString,
+  getYouthVipStatusData,
+  isYouthVipActive
+} from '../services/auth/vip'
 
-const storedAuth = readStoredKugouAuth()
-const storedCookie = toKugouAuthCookie(storedAuth)
-const storedSession = readStoredSession(storedCookie)
-const initialSession = storedSession.profile || storedSession.account
-  ? storedSession
-  : createSessionFromCookie(storedCookie)
-const hasInitialSession = Boolean(initialSession.profile || initialSession.account)
+const initialAuth = readInitialAuthSession()
+const storedAuth = initialAuth.auth
+const storedCookie = initialAuth.cookie
+const initialSession = initialAuth.session
+const hasInitialSession = initialAuth.hasSession
 
 const state = reactive({
   initialized: false,
@@ -107,7 +111,7 @@ export function useAuthStore() {
     }
 
     try {
-      const response = await getLoginStatus(createAuthRequestParams({ timestamp: Date.now() }))
+      const response = await getLoginStatusData(createAuthRequestParams({ timestamp: Date.now() }))
       const data = response.data ?? response
       const profile = response.profile ?? data.profile ?? null
       const account = response.account ?? data.account ?? null
@@ -131,7 +135,7 @@ export function useAuthStore() {
     }
 
     try {
-      const response = await getUserAccount(createAuthRequestParams({ timestamp: Date.now() }))
+      const response = await getUserAccountData(createAuthRequestParams({ timestamp: Date.now() }))
 
       if (response.profile || response.account) {
         setAccountState({
@@ -158,24 +162,12 @@ export function useAuthStore() {
     state.notice = ''
 
     try {
-      const keyResponse = await getLoginQrKey({ timestamp: Date.now(), noCookie: true })
-      const key = keyResponse.data?.unikey
+      const qr = await createQrLoginData()
 
-      if (!key) {
-        throw new Error('二维码 key 获取失败')
-      }
-
-      const qrResponse = await getLoginQrCreate({
-        key,
-        qrimg: true,
-        timestamp: Date.now(),
-        noCookie: true
-      })
-
-      state.qr.key = key
-      state.qr.image = normalizeQrImage(qrResponse.data?.qrimg || '')
-      state.qr.status = 801
-      state.qr.message = '等待扫码'
+      state.qr.key = qr.key
+      state.qr.image = qr.image
+      state.qr.status = qr.status
+      state.qr.message = qr.message
     } catch (error) {
       console.warn('Failed to create QR login:', error)
       state.error = error?.message || '二维码生成失败'
@@ -191,13 +183,9 @@ export function useAuthStore() {
     }
 
     try {
-      const response = await getLoginQrCheck({
-        key: state.qr.key,
-        timestamp: Date.now(),
-        noCookie: true
-      })
-      state.qr.status = response.code
-      state.qr.message = response.message || getQrStatusText(response.code)
+      const response = await checkQrLoginData(state.qr.key)
+      state.qr.status = response.status
+      state.qr.message = response.statusText
 
       if (response.code === 803) {
         const loggedIn = await completeLogin(response, 'account')
@@ -243,14 +231,12 @@ export function useAuthStore() {
     state.notice = ''
 
     try {
-      const response = await loginByCellphone({
+      const response = await loginWithCellphoneData({
         phone: normalizedPhone,
         countrycode: normalizeCountryCode(countrycode),
         password: normalizedCaptcha ? undefined : normalizedPassword,
         captcha: normalizedCaptcha || undefined,
-        userid: normalizedUserId || undefined,
-        timestamp: Date.now(),
-        noCookie: true
+        userid: normalizedUserId || undefined
       })
       const loggedIn = await completeLogin(response, 'account')
       if (!loggedIn) {
@@ -281,11 +267,9 @@ export function useAuthStore() {
     state.notice = ''
 
     try {
-      const response = await loginByEmail({
+      const response = await loginWithEmailData({
         email: normalizedEmail,
-        password: normalizedPassword,
-        timestamp: Date.now(),
-        noCookie: true
+        password: normalizedPassword
       })
       const loggedIn = await completeLogin(response, 'account')
       if (!loggedIn) {
@@ -315,11 +299,9 @@ export function useAuthStore() {
     state.notice = ''
 
     try {
-      await sendCaptcha({
+      await sendLoginCaptchaData({
         phone: normalizedPhone,
-        countrycode: normalizeCountryCode(countrycode),
-        timestamp: Date.now(),
-        noCookie: true
+        countrycode: normalizeCountryCode(countrycode)
       })
       state.notice = '验证码已发送'
       return true
@@ -385,10 +367,10 @@ export function useAuthStore() {
     state.notice = ''
 
     try {
-      const response = await refreshLogin(createAuthRequestParams({ timestamp: Date.now() }))
+      const response = await refreshLoginData(createAuthRequestParams({ timestamp: Date.now() }))
 
       if (response.cookie) {
-        saveCookie(mergeCookie(state.cookie, response.cookie))
+        saveCookie(mergeAuthCookieString(state.cookie, response.cookie))
         saveSession()
       }
 
@@ -411,7 +393,7 @@ export function useAuthStore() {
     state.loading = true
 
     try {
-      await requestLogout(createAuthRequestParams({ timestamp: Date.now() }))
+      await logoutData(createAuthRequestParams({ timestamp: Date.now() }))
     } catch (error) {
       console.warn('Failed to logout:', error)
     } finally {
@@ -496,7 +478,7 @@ async function refreshVipStatus({ force = false } = {}) {
   state.vip.loading = true
   state.vip.error = ''
 
-  const request = getYouthVipStatus(createAuthRequestParams({ timestamp: Date.now() }))
+  const request = getYouthVipStatusData(createAuthRequestParams({ timestamp: Date.now() }))
     .then((response) => {
       if (!state.isLoggedIn || state.loginType === 'guest' || getVipClaimIdentity() !== identity) {
         return false
@@ -537,7 +519,7 @@ function ensureDailyVipClaim() {
 
   const receiveDay = getLocalDateString()
   const identity = getVipClaimIdentity()
-  const claimRecord = readJsonStorage(STORAGE_KEYS.dailyVipClaim, {})
+  const claimRecord = readDailyVipClaim()
 
   if (claimRecord?.date === receiveDay && claimRecord?.identity === identity) {
     return null
@@ -547,7 +529,10 @@ function ensureDailyVipClaim() {
     return dailyVipClaimRequest
   }
 
-  dailyVipClaimRequest = claimAndUpgradeYouthVip(receiveDay)
+  dailyVipClaimRequest = claimAndUpgradeYouthVipData({
+    receiveDay,
+    params: createAuthRequestParams({ timestamp: Date.now() })
+  })
     .then((response) => {
       markDailyVipClaim(receiveDay, identity)
       refreshVipStatus({ force: true })
@@ -592,7 +577,10 @@ async function claimDailyVip({ skipIfActive = true } = {}) {
   state.vip.error = ''
 
   try {
-    const response = await claimAndUpgradeYouthVip(receiveDay)
+    const response = await claimAndUpgradeYouthVipData({
+      receiveDay,
+      params: createAuthRequestParams({ timestamp: Date.now() })
+    })
 
     markDailyVipClaim(receiveDay, identity)
     await refreshVipStatus({ force: true })
@@ -605,42 +593,6 @@ async function claimDailyVip({ skipIfActive = true } = {}) {
   } finally {
     state.vip.claiming = false
   }
-}
-
-async function claimAndUpgradeYouthVip(receiveDay = getLocalDateString()) {
-  const dayResponse = await claimYouthDayVip({
-    receive_day: receiveDay,
-    ...createAuthRequestParams({ timestamp: Date.now() })
-  })
-  assertVipStepSucceeded(dayResponse, '领取一天 VIP 失败')
-
-  const upgradeResponse = await upgradeYouthDayVip({
-    ...createAuthRequestParams({ timestamp: Date.now() })
-  })
-  assertVipStepSucceeded(upgradeResponse, '升级 VIP 失败')
-
-  return {
-    day: dayResponse,
-    upgrade: upgradeResponse
-  }
-}
-
-function assertVipStepSucceeded(response, fallbackMessage) {
-  const code = firstDefined(response?.code, response?.errcode, response?.err_code, response?.error_code)
-  const numericCode = Number(code)
-
-  if (code !== undefined && Number.isFinite(numericCode) && ![0, 1, 200].includes(numericCode)) {
-    throw new Error(getApiErrorMessage(response) || fallbackMessage)
-  }
-
-  const success = firstDefined(response?.success, response?.succeed)
-  if (success === false || String(success).toLowerCase() === 'false') {
-    throw new Error(getApiErrorMessage(response) || fallbackMessage)
-  }
-}
-
-function getApiErrorMessage(response = {}) {
-  return firstDefined(response.message, response.msg, response.errmsg, response.error_msg)
 }
 
 function clearAccountState(clearCookie) {
@@ -668,14 +620,10 @@ function resetQr() {
 }
 
 function saveCookie(cookie) {
-  if (!cookie) {
-    state.auth = writeStoredKugouAuth({})
-    state.cookie = ''
-    return
-  }
+  const nextAuth = writeAuthCookie(state.auth, cookie)
 
-  state.auth = writeStoredKugouAuth(mergeKugouAuth(state.auth, cookie))
-  state.cookie = toKugouAuthCookie(state.auth)
+  state.auth = nextAuth.auth
+  state.cookie = nextAuth.cookie
 }
 
 function mergeAuthCookie(cookie) {
@@ -683,7 +631,7 @@ function mergeAuthCookie(cookie) {
     return state.cookie
   }
 
-  saveCookie(mergeCookie(state.cookie, cookie))
+  saveCookie(mergeAuthCookieString(state.cookie, cookie))
   saveSession()
   return state.cookie
 }
@@ -725,106 +673,37 @@ function normalizeCountryCode(value) {
   return String(value || DEFAULT_COUNTRY_CODE).replace(/^\+/, '').trim() || DEFAULT_COUNTRY_CODE
 }
 
-function readStoredSession(cookie) {
-  const session = readJsonStorage(STORAGE_KEYS.neteaseSession, {})
-
-  if (!session || typeof session !== 'object' || session.cookie !== cookie) {
-    return {}
-  }
-
-  if (session.loginType === 'guest') {
-    clearSession()
-    return {}
-  }
-
-  return {
-    account: session.account ?? null,
-    profile: session.profile ?? null,
-    loginType: session.loginType || 'account'
-  }
-}
-
-function createSessionFromCookie(cookie) {
-  if (!cookie) {
-    return {}
-  }
-
-  const cookieValues = parseCookie(cookie)
-
-  if (cookieValues.userid) {
-    return {
-      account: {
-        id: cookieValues.userid,
-        userName: '酷狗账号'
-      },
-      profile: {
-        userId: cookieValues.userid,
-        nickname: '酷狗账号',
-        avatarUrl: ''
-      },
-      loginType: 'account'
-    }
-  }
-
-  return {}
-}
-
 function saveSession() {
   if (!state.cookie || state.loginType === 'guest' || (!state.profile && !state.account)) {
     clearSession()
     return
   }
 
-  writeJsonStorage(STORAGE_KEYS.neteaseSession, {
+  saveStoredSession({
     cookie: state.cookie,
     auth: state.auth,
     account: state.account,
     profile: state.profile,
-    loginType: state.loginType || 'account',
-    savedAt: Date.now()
+    loginType: state.loginType || 'account'
   })
 }
 
 function clearSession() {
-  writeJsonStorage(STORAGE_KEYS.neteaseSession, null)
+  clearStoredSession()
 }
 
 function createAuthRequestParams(params = {}) {
-  const cookieValues = mergeKugouAuth(state.auth, state.cookie)
-  const fallbackUserId = state.profile?.userId || state.account?.id || ''
-
-  const requestParams = {
-    ...params,
-    token: params.token ?? cookieValues.token,
-    userid: params.userid ?? cookieValues.userid ?? fallbackUserId,
-    dfid: params.dfid ?? cookieValues.dfid
-  }
-
-  Object.keys(requestParams).forEach((key) => {
-    if (requestParams[key] === undefined || requestParams[key] === null || requestParams[key] === '') {
-      delete requestParams[key]
-    }
-  })
-
-  return requestParams
+  return buildAuthRequestParams(state, params)
 }
 
 function getVipClaimIdentity() {
-  const cookieValues = mergeKugouAuth(state.auth, state.cookie)
-  return String(
-    state.profile?.userId ||
-      state.account?.id ||
-      cookieValues.userid ||
-      cookieValues.token ||
-      ''
-  )
+  return getAuthIdentity(state)
 }
 
 function markDailyVipClaim(receiveDay = getLocalDateString(), identity = getVipClaimIdentity()) {
-  writeJsonStorage(STORAGE_KEYS.dailyVipClaim, {
+  writeDailyVipClaim({
     date: receiveDay,
-    identity,
-    claimedAt: Date.now()
+    identity
   })
 }
 
@@ -837,150 +716,6 @@ function resetVipState() {
   state.vip.error = ''
 }
 
-function isYouthVipActive(response = {}) {
-  return collectVipStatusObjects(response).some(({ object, nested }) => {
-    const explicitValue = firstDefined(
-      object.is_vip,
-      object.isVip,
-      object.is_union_vip,
-      object.isUnionVip,
-      object.is_youth_vip,
-      object.isYouthVip,
-      object.vip_status,
-      object.vipStatus,
-      object.union_vip_status,
-      object.unionVipStatus,
-      object.youth_vip_status,
-      object.youthVipStatus,
-      object.vip,
-      object.union_vip,
-      object.unionVip,
-      object.youth_vip,
-      object.youthVip
-    )
-
-    if (isPositiveVipValue(explicitValue)) {
-      return true
-    }
-
-    if (nested && isPositiveVipValue(object.status)) {
-      return true
-    }
-
-    return isFutureVipTime(
-      firstDefined(
-        object.expire_time,
-        object.expireTime,
-        object.end_time,
-        object.endTime,
-        object.vip_end_time,
-        object.vipEndTime,
-        object.deadline
-      )
-    )
-  })
-}
-
-function collectVipStatusObjects(value, nested = false, depth = 0, results = []) {
-  if (!value || typeof value !== 'object' || depth > 4) {
-    return results
-  }
-
-  if (Array.isArray(value)) {
-    value.forEach((item) => collectVipStatusObjects(item, true, depth + 1, results))
-    return results
-  }
-
-  results.push({ object: value, nested })
-
-  Object.entries(value).forEach(([key, child]) => {
-    if (!child || typeof child !== 'object') {
-      return
-    }
-
-    if (depth < 2 || /vip|data|info|result|status/i.test(key)) {
-      collectVipStatusObjects(child, true, depth + 1, results)
-    }
-  })
-
-  return results
-}
-
-function firstDefined(...values) {
-  return values.find((value) => value !== undefined && value !== null && value !== '')
-}
-
-function isPositiveVipValue(value) {
-  if (typeof value === 'boolean') {
-    return value
-  }
-
-  if (typeof value === 'number') {
-    return value > 0
-  }
-
-  if (typeof value === 'string') {
-    return /^(1|true|yes|y|active|valid|open|opened|vip|已开通|已领取)$/i.test(value.trim())
-  }
-
-  return false
-}
-
-function isFutureVipTime(value) {
-  const time = normalizeVipTime(value)
-  return Boolean(time && time > Date.now())
-}
-
-function normalizeVipTime(value) {
-  if (value === undefined || value === null || value === '') {
-    return 0
-  }
-
-  if (typeof value === 'string' && /[-/]/.test(value)) {
-    const parsed = Date.parse(value)
-    return Number.isFinite(parsed) ? parsed : 0
-  }
-
-  const number = Number(value)
-
-  if (!Number.isFinite(number) || number <= 0) {
-    return 0
-  }
-
-  return number < 10000000000 ? number * 1000 : number
-}
-
-function getLocalDateString(date = new Date()) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-
-  return `${year}-${month}-${day}`
-}
-
 function parseCookie(cookie = '') {
-  return parseCookieString(cookie)
-}
-
-function mergeCookie(currentCookie = '', nextCookie = '') {
-  return toKugouAuthCookie(mergeKugouAuth(currentCookie, nextCookie))
-}
-
-function normalizeQrImage(value) {
-  if (!value || value.startsWith('data:image')) {
-    return value
-  }
-
-  return `data:image/png;base64,${value}`
-}
-
-function getQrStatusText(code) {
-  const statusText = {
-    800: '二维码已过期',
-    801: '等待扫码',
-    802: '请在手机上确认登录',
-    803: '登录成功'
-  }
-
-  return statusText[code] || '等待登录'
+  return parseAuthCookie(cookie)
 }
