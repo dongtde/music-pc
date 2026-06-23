@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
 export default defineConfig(({ mode }) => {
+  const appBuildVersion = `${Date.now().toString(36)}`;
   const desktopDevPort = Number(process.env.VITE_DEV_SERVER_PORT) || 5174;
   const kugouApiTarget =
     process.env.KUGOU_API_TARGET || 'https://kugou.cyouhong.cn/';
@@ -11,6 +12,9 @@ export default defineConfig(({ mode }) => {
   return {
     base: mode === 'desktop' ? './' : '/',
     plugins: [vue()],
+    define: {
+      __APP_BUILD_VERSION__: JSON.stringify(appBuildVersion),
+    },
     server: {
       host: '127.0.0.1',
       port: 5173,

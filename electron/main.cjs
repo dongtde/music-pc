@@ -26,6 +26,10 @@ const neteaseApiTarget =
 const preloadPath = path.join(__dirname, 'preload.cjs');
 const distRoot = path.join(__dirname, '..', 'dist');
 const cookieJarPath = path.join(app.getPath('userData'), 'kugou-proxy-cookies.json');
+const desktopLyricsStatePath = path.join(
+  app.getPath('userData'),
+  'desktop-lyrics-state.json',
+);
 
 let mainWindow = null;
 let mainWindowIpcRegistered = false;
@@ -74,6 +78,7 @@ const desktopLyrics = createDesktopLyricsManager({
   preloadPath,
   getMainWindow: () => mainWindow,
   openExternalUrl,
+  statePath: desktopLyricsStatePath,
 });
 
 async function createMainWindow() {
@@ -273,12 +278,15 @@ app.whenReady()
     registerMainWindowIpc();
     desktopLyrics.registerIpc();
     await createMainWindow();
+    await restoreDesktopLyricsOnStartup();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        createMainWindow().catch((error) => {
-          console.error('[main:create-window:activate]', error);
-        });
+        createMainWindow()
+          .then(restoreDesktopLyricsOnStartup)
+          .catch((error) => {
+            console.error('[main:create-window:activate]', error);
+          });
       }
     });
   })
@@ -295,6 +303,18 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+
+async function restoreDesktopLyricsOnStartup() {
+  if (isAutomationSmoke || !desktopLyrics.shouldRestoreLastSession()) {
+    return;
+  }
+
+  try {
+    await desktopLyrics.restoreLastSession();
+  } catch (error) {
+    console.warn('[desktop-lyrics:restore-startup]', error);
+  }
+}
 
 module.exports = {
   attachNavigationGuards,

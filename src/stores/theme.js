@@ -104,6 +104,7 @@ const state = reactive({
   transition: saved.transition || 'fade',
   queueTransition: saved.queueTransition || 'slide-left',
   primaryColor: normalizeHex(saved.primaryColor || defaultThemeColor),
+  reducedMotion: Boolean(saved.reducedMotion),
   animating: false,
   usingViewTransition: false,
   animationKey: 0
@@ -116,7 +117,8 @@ function persistPreferences() {
     mode: state.mode,
     transition: state.transition,
     queueTransition: state.queueTransition,
-    primaryColor: state.primaryColor
+    primaryColor: state.primaryColor,
+    reducedMotion: state.reducedMotion
   })
 }
 
@@ -139,8 +141,24 @@ function applyThemeColor(color) {
   document.documentElement.style.setProperty('--accent-pressed', mixColor(nextColor, '#000000', 0.18))
 }
 
+function applyReducedMotion(enabled) {
+  if (typeof document === 'undefined') {
+    return
+  }
+
+  if (enabled) {
+    document.documentElement.dataset.reducedMotion = 'true'
+    return
+  }
+
+  delete document.documentElement.dataset.reducedMotion
+}
+
 function prefersReducedMotion() {
-  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  return (
+    state.reducedMotion ||
+    (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+  )
 }
 
 function canUseViewTransition() {
@@ -159,6 +177,11 @@ function playFallbackTransition() {
   window.clearTimeout(timer)
   state.animating = false
   state.usingViewTransition = false
+
+  if (prefersReducedMotion()) {
+    return
+  }
+
   state.animationKey += 1
 
   window.requestAnimationFrame(() => {
@@ -204,6 +227,7 @@ export function useThemeStore() {
   function initTheme() {
     applyTheme(state.mode)
     applyThemeColor(state.primaryColor)
+    applyReducedMotion(state.reducedMotion)
   }
 
   function setTheme(mode) {
@@ -248,6 +272,27 @@ export function useThemeStore() {
     persistPreferences()
   }
 
+  function setReducedMotion(enabled) {
+    const nextValue = Boolean(enabled)
+
+    if (state.reducedMotion === nextValue) {
+      return
+    }
+
+    state.reducedMotion = nextValue
+    applyReducedMotion(nextValue)
+
+    if (nextValue) {
+      if (typeof window !== 'undefined') {
+        window.clearTimeout(timer)
+      }
+
+      finishViewTransition()
+    }
+
+    persistPreferences()
+  }
+
   function previewTransition() {
     playFallbackTransition()
   }
@@ -263,6 +308,7 @@ export function useThemeStore() {
     setThemeColor,
     setTransition,
     setQueueTransition,
+    setReducedMotion,
     previewTransition
   }
 }

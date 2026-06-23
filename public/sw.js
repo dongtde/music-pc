@@ -1,6 +1,8 @@
-const APP_CACHE = 'lanyin-music-app-v1'
-const RUNTIME_CACHE = 'lanyin-music-runtime-v1'
+const SW_VERSION = new URL(self.location.href).searchParams.get('v') || 'dev'
+const APP_CACHE = `lanyin-music-app-${SW_VERSION}`
+const RUNTIME_CACHE = `lanyin-music-runtime-${SW_VERSION}`
 const CACHE_NAMES = [APP_CACHE, RUNTIME_CACHE]
+const MAX_RUNTIME_CACHE_ENTRIES = 120
 
 const CORE_ASSETS = [
   '/',
@@ -91,8 +93,23 @@ async function cacheFirst(request) {
 
   if (response.ok && response.type === 'basic') {
     const cache = await caches.open(RUNTIME_CACHE)
-    cache.put(request, response.clone())
+    await cache.put(request, response.clone())
+    await trimRuntimeCache(cache)
   }
 
   return response
+}
+
+async function trimRuntimeCache(cache) {
+  const keys = await cache.keys()
+
+  if (keys.length <= MAX_RUNTIME_CACHE_ENTRIES) {
+    return
+  }
+
+  await Promise.all(
+    keys
+      .slice(0, keys.length - MAX_RUNTIME_CACHE_ENTRIES)
+      .map((request) => cache.delete(request))
+  )
 }

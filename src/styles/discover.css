@@ -1789,7 +1789,7 @@
   position: absolute;
   left: 18px;
   bottom: 16px;
-  z-index: 3;
+  z-index: 2;
   display: flex;
   gap: 8px;
   padding: 5px 7px;
@@ -1889,7 +1889,10 @@
 .recommend-carousel__track,
 .recommend-carousel__skeleton-track {
   display: grid;
-  grid-auto-columns: var(--recommend-carousel-column-width, calc(16.6667% - 18.333px));
+  grid-auto-columns: var(
+    --recommend-carousel-column-width,
+    calc(16.6667% - 18.333px)
+  );
   grid-auto-flow: column;
   grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 22px var(--recommend-carousel-column-gap, 22px);
@@ -2989,7 +2992,10 @@
 
   .recommend-carousel__track,
   .recommend-carousel__skeleton-track {
-    grid-auto-columns: var(--recommend-carousel-column-width, calc(20% - 12.8px));
+    grid-auto-columns: var(
+      --recommend-carousel-column-width,
+      calc(20% - 12.8px)
+    );
     column-gap: var(--recommend-carousel-column-gap, 16px);
   }
 

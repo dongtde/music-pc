@@ -45,6 +45,16 @@
         </section>
         <PlayerBar />
         <ThemeTransitionOverlay />
+        <div
+          v-if="appUpdateAvailable"
+          class="app-update-banner"
+          role="status"
+          aria-live="polite"
+        >
+          <span>新版本已准备好</span>
+          <button type="button" @click="reloadForAppUpdate">刷新</button>
+          <button type="button" aria-label="稍后提醒" @click="dismissAppUpdate">稍后</button>
+        </div>
         <LoginModal
           v-if="auth.state.loginModalVisible"
           v-model:show="auth.state.loginModalVisible"
@@ -55,17 +65,26 @@
 </template>
 
 <script setup>
-import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { darkTheme } from 'naive-ui';
 import SidebarNav from './components/SidebarNav.vue';
 import TopBar from './components/TopBar.vue';
-import PlayerBar from './components/PlayerBar.vue';
 import ThemeTransitionOverlay from './components/ThemeTransitionOverlay.vue';
 import WindowControls from './components/WindowControls.vue';
 import { useAuthStore } from './stores/auth';
 import { useThemeStore } from './stores/theme';
 
+const PlayerBar = defineAsyncComponent({
+  loader: () => import('./components/PlayerBar.vue'),
+  loadingComponent: {
+    name: 'PlayerBarLoading',
+    setup() {
+      return () => h('footer', { class: 'player player--loading', 'aria-hidden': 'true' });
+    },
+  },
+  delay: 0,
+});
 const LoginModal = defineAsyncComponent(() => import('./components/LoginModal.vue'));
 const auth = useAuthStore();
 const theme = useThemeStore();
@@ -83,6 +102,7 @@ const isDesktopApp = computed(() =>
 );
 const routeTransitionName = ref('route-soft');
 const isLayoutSwitching = ref(false);
+const appUpdateAvailable = ref(false);
 const PODCAST_TAB_ROUTE_NAMES = new Set([
   'podcast',
   'podcast-rank',
@@ -90,6 +110,7 @@ const PODCAST_TAB_ROUTE_NAMES = new Set([
   'podcast-radio',
 ]);
 let layoutSwitchTimer = 0;
+let appUpdateRegistration = null;
 
 function isHomeRoute(routeName) {
   return routeName === 'home';
@@ -124,7 +145,12 @@ function markLayoutSwitching() {
 onBeforeUnmount(() => {
   if (typeof window !== 'undefined') {
     window.clearTimeout(layoutSwitchTimer);
+    window.removeEventListener('lanyin:app-update-available', handleAppUpdateAvailable);
   }
+});
+
+onMounted(() => {
+  window.addEventListener('lanyin:app-update-available', handleAppUpdateAvailable);
 });
 
 watch(
@@ -170,6 +196,26 @@ function mixColor(color, target, amount) {
     (channel, index) => channel + (targetRgb[index] - channel) * amount,
   );
   return `#${nextRgb.map(toHex).join('')}`;
+}
+
+function handleAppUpdateAvailable(event) {
+  appUpdateRegistration = event.detail?.registration ?? null;
+  appUpdateAvailable.value = true;
+}
+
+function reloadForAppUpdate() {
+  const waitingWorker = appUpdateRegistration?.waiting;
+
+  if (!waitingWorker) {
+    window.location.reload();
+    return;
+  }
+
+  waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+}
+
+function dismissAppUpdate() {
+  appUpdateAvailable.value = false;
 }
 
 const themeOverrides = computed(() => {

@@ -19,7 +19,9 @@
 | 已完成 | P0 | 应用壳 | 已将全局 `KeepAlive` 改为路由 `meta.keepAlive` 白名单，只保活 `home`、`discover`、`podcast` 系入口页 |
 | 已完成 | P0 | 缓存 | 已新增通用 LRU 缓存工具，并为服务层、统一歌词服务、封面取色、MV 播放、MV 评论、排行榜曲目缓存设置容量上限 |
 | 已完成 | P0 | 构建基线 | 已新增 `npm run baseline:bundle`，可输出 raw/gzip/brotli 和最大 JS/CSS chunk 报告 |
-| 已完成 | P0 | 路由验证 | 已拆出 `src/router/routes.js` 路由表，并新增 `npm run smoke:routes`，覆盖 20 个路径解析和 17 个核心路由命名检查，当前 37/37 通过 |
+| 已完成 | P1 | 首屏包体 | `PlayerBar.vue` 已改为 App 异步组件并提供同高度占位；入口 JS 由约 182.6KB 降到 139.2KB，入口 CSS 由约 53.1KB 降到 33.3KB |
+| 已完成 | P1 | 设置动效 | 设置页已新增“减少动效”开关，偏好持久化到主题配置，并通过 `data-reduced-motion` 停止全局 transition/animation |
+| 已完成 | P0 | 路由验证 | 已拆出 `src/router/routes.js` 路由表，并新增 `npm run smoke:routes`，覆盖 20 个路径解析和 17 个核心路由命名检查，当前 36/36 通过 |
 | 已完成 | P0 | 首屏验证 | 已新增 `npm run smoke:first-screen`，通过 Electron smoke 模式打开 `mappic://app/#/home`，输出首屏截图和指标报告，当前 5/5 通过 |
 | 已完成 | P0 | 首页性能 | 已新增 `npm run smoke:fps`，采样首页音乐/视频 feed idle、scroll、recovery FPS；视频 feed 已改为当前/相邻小窗口 hydration，当前 9/9 通过 |
 | 已完成 | P0 | 服务层 | 已完成服务层与 API 大文件拆分：`src/services/netease.js` 由约 121.9KB 降至约 2.0KB 兼容出口；comments、lyrics、search、album、home、playlist、artist、mv、podcast、FM、喜欢状态、下载、榜单均已拆成 domain/子模块；`src/services/auth/` 已承接登录、session、VIP；`src/api/modules/netease.js` 由约 76.8KB 降至约 3.2KB 兼容出口，API 已拆到 auth/home/mv/podcast/user/playlist/charts/artist/album/comments/song/search 与 shared 子模块 |
@@ -106,10 +108,10 @@
 | 状态 | 优先级 | 项 | 方案 |
 | --- | --- | --- | --- |
 | 已完成 | P0 | 包体分析 | 已增加 `scripts/analyze-bundle.cjs` 和 `npm run baseline:bundle`，输出 `reports/performance/bundle-baseline.json` 与 `.md`，覆盖 raw/gzip/brotli 和 chunk 排名 |
-| 待处理 | P1 | vendor chunk | 现有 `manualChunks` 已拆 Naive UI、icons、axios；继续将 `PlayerBar/FullScreenPlayer/DanmakuLayer` 相关重功能懒加载 |
-| 待处理 | P1 | CSS 拆分 | `discover.css`、`podcast.css`、`main.css`、`player.css` 体量较大，改为页面局部 CSS 或按功能拆分 |
+| 已完成 | P1 | vendor chunk | 现有 `manualChunks` 已拆 Naive UI、icons、axios；`PlayerBar.vue` 已从入口拆为异步 chunk，`FullScreenPlayer` 和 `DanmakuLayer` 保持按需加载 |
+| 部分完成 | P1 | CSS 拆分 | `player.css` 已随异步 `PlayerBar` 拆成独立 CSS chunk；`discover.css`、`podcast.css`、`main.css` 继续治理 |
 | 待处理 | P2 | 图标按需 | lucide 已按组件 import，但检查是否存在重复大批量图标导入，播放器和发现页可拆组件降低首屏 |
-| 待处理 | P2 | PWA 缓存版本 | `public/sw.js` 当前固定 `v1`，建议构建时注入版本，避免用户长期拿旧资源 |
+| 已完成 | P2 | PWA 缓存版本 | `public/sw.js` 已从注册 URL 读取 Vite 构建版本命名 APP/RUNTIME cache，避免用户长期拿旧资源；runtime cache 已限制最多 120 条 |
 
 ## 4. 每个页面优化方案
 
@@ -360,7 +362,7 @@
 
 | 优先级 | 功能 | 具体优化 |
 | --- | --- | --- |
-| P1 | 动画偏好 | 尊重 `prefers-reduced-motion`，主题切换、队列动画、全屏播放器动画可关闭 |
+| P1（已完成） | 动画偏好 | 尊重 `prefers-reduced-motion`，并在设置页提供“减少动效”开关；开启后主题切换、页面切换、队列动画和全屏播放器动画会即时关闭 |
 | P1 | VIP 状态 | 设置页和侧边栏重复解析 SVIP，抽 `useVipStatus` |
 | P2 | 配置分组 | 主题、播放器、歌词、账号/VIP 分区；未来加入低性能模式 |
 | P2 | 颜色校验 | 自定义色写入前已 normalize，建议加入对比度检查 |
@@ -473,10 +475,10 @@
 
 | 优先级 | 功能 | 具体优化 |
 | --- | --- | --- |
-| P1 | 缓存版本 | APP_CACHE/RUNTIME_CACHE 不应手写 v1；构建时注入 hash |
-| P1 | runtime 限额 | 图片/脚本/style 缓存无数量限制，加入 LRU 清理 |
+| P1（已完成） | 缓存版本 | `registerServiceWorker` 已注册 `/sw.js?v=__APP_BUILD_VERSION__`，SW 用 query 版本生成 APP/RUNTIME cache 名 |
+| P1（已完成） | runtime 限额 | 图片/脚本/style runtime cache 写入后会裁剪最旧条目，最多保留 120 条 |
 | P1 | API 策略 | 当前跳过 `/api`，合理；可对搜索热词/发现页做应用层缓存，不放 SW |
-| P2 | 更新提示 | 新 SW 安装后通知用户刷新 |
+| P2（已完成） | 更新提示 | 新 SW 进入 waiting 后会派发应用更新事件，`App.vue` 显示刷新提示；用户确认后发送 `SKIP_WAITING` 并在 controllerchange 后自动刷新 |
 
 ## 6. 代码质量和维护性
 
@@ -509,7 +511,7 @@
 
 | 优先级 | 测试 | 内容 |
 | --- | --- | --- |
-| P0 | 路由 smoke | 已完成：新增 `npm run smoke:routes` 和 `scripts/route-smoke.js`，覆盖 `/home`、`/discover/*`、`/podcast/*`、`/mv`、`/library/*`、`/playlist/:id`、`/album/:id`、`/artist/:id`、`/settings`、`/search`、`/fm` 等路径，报告输出到 `reports/performance/route-smoke.md`，当前 37/37 通过 |
+| P0 | 路由 smoke | 已完成：新增 `npm run smoke:routes` 和 `scripts/route-smoke.js`，覆盖 `/home`、`/discover/*`、`/podcast/*`、`/mv`、`/library/*`、`/playlist/:id`、`/album/:id`、`/artist/:id`、`/settings`、`/search`、`/fm` 等路径，报告输出到 `reports/performance/route-smoke.md`，当前 36/36 通过 |
 | P0 | 首屏 smoke | 已完成：新增 `npm run smoke:first-screen`，使用 Vite preview + Electron smoke 模式打开 `mappic://app/#/home`，校验路由、Vue 挂载、可见文本、截图非空和渲染进程存活，报告输出到 `reports/performance/first-screen-smoke.md`，截图输出到 `reports/performance/first-screen-home.png`，当前 5/5 通过 |
 | P0 | 播放 smoke | 已完成：新增 `npm run smoke:player`，覆盖本地播放、队列上一首/下一首、列表/顺序/单曲/随机模式、音量同步、ended 监听和本地文件错误模型；报告输出到 `reports/performance/player-smoke.md` |
 | P1 | 性能 smoke | 部分完成：新增 `npm run smoke:fps`，覆盖首页音乐/视频 feed idle、scroll、recovery FPS 和视频 hydration 小窗口，报告输出到 `reports/performance/home-fps-smoke.md`；待处理：MV 独立页、全屏播放器、桌面歌词打开/关闭 |
@@ -571,13 +573,13 @@
 | 歌手详情 | - | 已完成：歌曲虚拟化、主请求与 tab 分页请求取消、精选预加载降优先级；待处理：tab 拆分 | 已完成：tab 缓存 | - |
 | 资料库 | - | 已完成：本地/最近/喜欢歌曲虚拟化；待处理：object URL 策略 | IndexedDB | ID3 元数据 |
 | 搜索 | 已完成：路由补齐 | 部分完成：已抽 `useSearch` 复用启动数据/历史/建议，搜索建议和结果请求已接 `AbortController`，搜索详情歌曲结果已接 `useVirtualRows` | 统一空状态、非歌曲网格虚拟化 | - |
-| 设置 | - | reduced motion、VIP 复用 | 分组重构 | 导入导出 |
+| 设置 | - | 已完成：reduced motion；待处理：VIP 复用 | 分组重构 | 导入导出 |
 | 桌面歌词 | IPC 频率审计 | 窗口置顶优化、歌词缓存 | 位置持久化 | - |
 | 播放器 | 部分完成：左侧歌曲摘要、模式、传输控制、音量、进度、弹幕按钮、桌面歌词按钮、队列、音质、视觉效果、歌曲动作组件化，桌面歌词桥接、进度条歌词预览、全屏弹幕评论流、当前歌曲评论弹窗/统计已抽 composable，统一歌词服务、URL 缓存、队列来源/版本治理、音量统一、播放模式 store 化、评论数 stale 缓存、错误模型、播放 smoke 已完成 | 真实浏览器播放 smoke | 可恢复错误提示 | - |
 | 服务层 | 已完成：服务缓存上限、comments/lyrics/search/home/playlist/album/artist/mv/podcast/FM/喜欢/下载/榜单拆分、auth 登录/QR/session/VIP 服务拆分、API domain 原子化与 shared 子模块拆分 | 并发池、取消、重试 | normalizers 单测 | 监控看板 |
 | Electron | 已部分完成：主进程薄入口化，拆出协议代理、桌面歌词窗口、smoke 和窗口工具；media 代理已补 GET/HEAD、内网拦截、可选 host 白名单、Range 头 smoke | 真实代理 206/4xx/5xx smoke、API 代理安全、preload 校验 | 窗口状态 | - |
 | 构建基线 | 已完成：包体 raw/gzip/brotli 报告、路由 smoke、播放器 smoke、首屏 smoke、首屏截图和首页 FPS smoke | MV 独立页 FPS | 性能预算门禁 | - |
-| PWA | - | 版本化缓存、限额 | 更新提示 | - |
+| PWA | - | 已完成：版本化缓存、限额 | 已完成：更新提示 | - |
 
 ## 9. 验收口径
 

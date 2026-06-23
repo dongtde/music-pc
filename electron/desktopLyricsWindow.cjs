@@ -1,4 +1,6 @@
 const { BrowserWindow, ipcMain, screen } = require('electron');
+const fs = require('node:fs');
+const path = require('node:path');
 const {
   clampNumber,
   safelyCallWindowMethod,
@@ -12,18 +14,23 @@ const DESKTOP_LYRICS_BASE_FONT_SIZE = 15;
 const DESKTOP_LYRICS_ALWAYS_ON_TOP_LEVEL = 'screen-saver';
 const DESKTOP_LYRICS_TOP_GUARD_INTERVAL_MS = 1200;
 const DESKTOP_LYRICS_ELEVATE_RETRY_DELAYS = [0, 80, 240];
+const DESKTOP_LYRICS_PERSIST_DEBOUNCE_MS = 160;
+const DESKTOP_LYRICS_STATE_VERSION = 1;
 
 function createDesktopLyricsManager({
   appProtocol,
   preloadPath,
   getMainWindow,
   openExternalUrl,
+  statePath,
 } = {}) {
   let desktopLyricsWindow = null;
   let desktopLyricsLocked = false;
   let lastDesktopLyricsPayload = null;
   let desktopLyricsDragState = null;
   let desktopLyricsTopGuardTimer = null;
+  let desktopLyricsState = readPersistedState();
+  let persistStateTimer = null;
   let ipcRegistered = false;
   const desktopLyricsElevateTimers = new Set();
 
@@ -43,8 +50,8 @@ function createDesktopLyricsManager({
         ...bounds,
         minWidth: DESKTOP_LYRICS_WINDOW_WIDTH,
         maxWidth: DESKTOP_LYRICS_WINDOW_WIDTH,
-        minHeight: DESKTOP_LYRICS_WINDOW_BASE_HEIGHT,
-        maxHeight: DESKTOP_LYRICS_WINDOW_BASE_HEIGHT,
+        minHeight: bounds.height,
+        maxHeight: bounds.height,
         title: 'Desktop lyrics',
         frame: false,
         transparent: true,
@@ -109,10 +116,17 @@ function createDesktopLyricsManager({
 
     desktopLyricsWindow.on('move', () => {
       scheduleElevation([0]);
+      scheduleBoundsPersist();
     });
 
     desktopLyricsWindow.on('resize', () => {
       scheduleElevation([0]);
+      scheduleBoundsPersist();
+    });
+
+    desktopLyricsWindow.on('close', () => {
+      persistCurrentBounds();
+      persistStateNow();
     });
 
     desktopLyricsWindow.on('closed', () => {
@@ -134,6 +148,14 @@ function createDesktopLyricsManager({
   }
 
   function getInitialBounds() {
+    const restoredBounds = fitBoundsToVisibleDisplay(
+      normalizeBounds(desktopLyricsState.bounds),
+    );
+
+    if (restoredBounds) {
+      return restoredBounds;
+    }
+
     let workArea;
 
     try {
@@ -228,8 +250,10 @@ function createDesktopLyricsManager({
 
     return {
       open: isOpen(),
+      enabled: Boolean(desktopLyricsState.enabled),
       locked: desktopLyricsLocked,
       height: bounds?.height || DESKTOP_LYRICS_WINDOW_BASE_HEIGHT,
+      bounds: normalizeBounds(bounds),
     };
   }
 
@@ -275,6 +299,7 @@ function createDesktopLyricsManager({
       },
       false,
     );
+    persistCurrentBounds();
     broadcastWindowState();
   }
 
@@ -338,24 +363,23 @@ function createDesktopLyricsManager({
 
     ipcMain.handle('desktop-lyrics:toggle', async () => {
       if (isOpen()) {
-        close();
+        close({ rememberEnabled: false });
         return getWindowState();
       }
 
+      setEnabledState(true);
       await createWindow();
       return getWindowState();
     });
 
     ipcMain.handle('desktop-lyrics:show', async () => {
+      setEnabledState(true);
       await createWindow();
       return getWindowState();
     });
 
     ipcMain.handle('desktop-lyrics:hide', () => {
-      if (isOpen()) {
-        close();
-      }
-
+      close({ rememberEnabled: false });
       return getWindowState();
     });
 
@@ -453,6 +477,8 @@ function createDesktopLyricsManager({
 
     ipcMain.on('desktop-lyrics:end-drag', () => {
       desktopLyricsDragState = null;
+      persistCurrentBounds();
+      persistStateNow();
     });
 
     ipcMain.on('desktop-lyrics:command', (_event, command) => {
@@ -464,12 +490,209 @@ function createDesktopLyricsManager({
     });
   }
 
-  function close() {
+  function close(options = {}) {
+    const { rememberEnabled } = options;
+
+    if (typeof rememberEnabled === 'boolean') {
+      setEnabledState(rememberEnabled);
+    }
+
+    persistCurrentBounds();
+    persistStateNow();
+
     if (!isOpen()) {
       return;
     }
 
     safelyCallWindowMethod(desktopLyricsWindow, 'close');
+  }
+
+  function shouldRestoreLastSession() {
+    return Boolean(desktopLyricsState.enabled);
+  }
+
+  async function restoreLastSession() {
+    if (!shouldRestoreLastSession()) {
+      return getWindowState();
+    }
+
+    await createWindow();
+    return getWindowState();
+  }
+
+  function setEnabledState(enabled) {
+    const nextEnabled = Boolean(enabled);
+
+    if (desktopLyricsState.enabled === nextEnabled) {
+      return;
+    }
+
+    desktopLyricsState = {
+      ...desktopLyricsState,
+      enabled: nextEnabled,
+    };
+    persistStateNow();
+    broadcastWindowState();
+  }
+
+  function scheduleBoundsPersist() {
+    if (!isOpen()) {
+      return;
+    }
+
+    persistCurrentBounds();
+    scheduleStatePersist();
+  }
+
+  function persistCurrentBounds() {
+    if (!isOpen()) {
+      return;
+    }
+
+    const bounds = normalizeBounds(desktopLyricsWindow.getBounds());
+
+    if (!bounds) {
+      return;
+    }
+
+    desktopLyricsState = {
+      ...desktopLyricsState,
+      bounds,
+    };
+  }
+
+  function scheduleStatePersist() {
+    if (!statePath) {
+      return;
+    }
+
+    if (persistStateTimer) {
+      clearTimeout(persistStateTimer);
+    }
+
+    persistStateTimer = setTimeout(() => {
+      persistStateTimer = null;
+      persistStateNow();
+    }, DESKTOP_LYRICS_PERSIST_DEBOUNCE_MS);
+    persistStateTimer.unref?.();
+  }
+
+  function persistStateNow() {
+    if (!statePath) {
+      return;
+    }
+
+    if (persistStateTimer) {
+      clearTimeout(persistStateTimer);
+      persistStateTimer = null;
+    }
+
+    try {
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(
+        statePath,
+        `${JSON.stringify(normalizePersistedState(desktopLyricsState), null, 2)}\n`,
+        'utf8',
+      );
+    } catch (error) {
+      console.warn('[desktop-lyrics:persist-state]', error);
+    }
+  }
+
+  function readPersistedState() {
+    if (!statePath) {
+      return getDefaultPersistedState();
+    }
+
+    try {
+      const rawState = fs.readFileSync(statePath, 'utf8');
+      return normalizePersistedState(JSON.parse(rawState));
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        console.warn('[desktop-lyrics:read-state]', error);
+      }
+
+      return getDefaultPersistedState();
+    }
+  }
+
+  function normalizePersistedState(state = {}) {
+    return {
+      version: DESKTOP_LYRICS_STATE_VERSION,
+      enabled: state.enabled === undefined ? true : Boolean(state.enabled),
+      bounds: normalizeBounds(state.bounds),
+    };
+  }
+
+  function getDefaultPersistedState() {
+    return {
+      version: DESKTOP_LYRICS_STATE_VERSION,
+      enabled: true,
+      bounds: null,
+    };
+  }
+
+  function normalizeBounds(bounds = {}) {
+    if (!bounds || typeof bounds !== 'object') {
+      return null;
+    }
+
+    const x = normalizeCoordinate(bounds.x);
+    const y = normalizeCoordinate(bounds.y);
+
+    if (x === null || y === null) {
+      return null;
+    }
+
+    return {
+      x,
+      y,
+      width: DESKTOP_LYRICS_WINDOW_WIDTH,
+      height: clampNumber(
+        Number(bounds.height),
+        DESKTOP_LYRICS_WINDOW_BASE_HEIGHT,
+        DESKTOP_LYRICS_WINDOW_MAX_HEIGHT,
+        DESKTOP_LYRICS_WINDOW_BASE_HEIGHT,
+      ),
+    };
+  }
+
+  function normalizeCoordinate(value) {
+    const coordinate = Number(value);
+
+    if (!Number.isFinite(coordinate) || Math.abs(coordinate) > 100000) {
+      return null;
+    }
+
+    return Math.round(coordinate);
+  }
+
+  function fitBoundsToVisibleDisplay(bounds) {
+    if (!bounds) {
+      return null;
+    }
+
+    let workArea;
+
+    try {
+      const centerPoint = {
+        x: bounds.x + Math.round(bounds.width / 2),
+        y: bounds.y + Math.round(bounds.height / 2),
+      };
+      workArea = screen.getDisplayNearestPoint(centerPoint).workArea;
+    } catch (error) {
+      console.warn('[desktop-lyrics:restore-display]', error);
+      return bounds;
+    }
+
+    const maxX = workArea.x + Math.max(0, workArea.width - bounds.width);
+    const maxY = workArea.y + Math.max(0, workArea.height - bounds.height);
+
+    return {
+      ...bounds,
+      x: clampNumber(bounds.x, workArea.x, maxX, workArea.x),
+      y: clampNumber(bounds.y, workArea.y, maxY, workArea.y),
+    };
   }
 
   return {
@@ -478,6 +701,8 @@ function createDesktopLyricsManager({
     getWindowState,
     isOpen,
     registerIpc,
+    restoreLastSession,
+    shouldRestoreLastSession,
   };
 }
 

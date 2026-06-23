@@ -127,6 +127,32 @@
 
         <div class="setting-block">
           <div class="setting-block__head">
+            <Gauge :size="22" />
+            <div>
+              <h2>减少动效</h2>
+              <p>关闭主题切换、页面切换和播放器弹层动画，降低低端设备的渲染压力。</p>
+            </div>
+          </div>
+
+          <label
+            class="motion-toggle"
+            :class="{ active: theme.state.reducedMotion }"
+          >
+            <input
+              type="checkbox"
+              :checked="theme.state.reducedMotion"
+              @change="theme.setReducedMotion($event.target.checked)"
+            />
+            <span class="motion-toggle__switch" aria-hidden="true" />
+            <span class="motion-toggle__text">
+              <strong>低动效模式</strong>
+              <small>仍保留布局变化和功能状态，只移除非必要动画。</small>
+            </span>
+          </label>
+        </div>
+
+        <div class="setting-block">
+          <div class="setting-block__head">
             <Gift :size="22" />
             <div>
               <h2>概念版 VIP</h2>
@@ -165,7 +191,7 @@
 <script setup>
 import { computed, onMounted } from 'vue'
 import { useMessage } from 'naive-ui'
-import { Gift, ListMusic, Moon, Paintbrush, Palette, Sun, Wand2 } from 'lucide-vue-next'
+import { Gauge, Gift, ListMusic, Moon, Paintbrush, Palette, Sun, Wand2 } from 'lucide-vue-next'
 import { useAuthStore } from '../stores/auth'
 import { useThemeStore } from '../stores/theme'
 import '../styles/settings.css'
