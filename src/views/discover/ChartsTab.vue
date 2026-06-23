@@ -57,6 +57,7 @@
                 :alt="board.title"
                 loading="lazy"
                 decoding="async"
+                sizes="(max-width: 1400px) 168px, 184px"
               />
               <span v-else class="song-thumb" :class="`cover--${board.type}`" />
               <em><Headphones :size="14" /> {{ board.listeners }}</em>
@@ -77,8 +78,10 @@
           <button
             class="chart-card__play chart-summary-card__play"
             type="button"
-            :disabled="playingChartId === board.id"
+            :disabled="playingChartId === String(board.id)"
             :aria-label="`播放 ${board.title}`"
+            @mouseenter="prefetchChartTracks(board)"
+            @focus="prefetchChartTracks(board)"
             @click.stop.prevent="playChart(board)"
           >
             <Play :size="20" fill="currentColor" />
@@ -106,6 +109,7 @@
                 :alt="chart.title"
                 loading="lazy"
                 decoding="async"
+                sizes="(max-width: 720px) 33vw, (max-width: 1400px) 20vw, 14vw"
               />
               <span v-else class="song-thumb" :class="`cover--${chart.type}`" />
               <em><Headphones :size="14" /> {{ chart.listeners }}</em>
@@ -114,8 +118,10 @@
             <button
               class="chart-card__play region-chart-card__play"
               type="button"
-              :disabled="playingChartId === chart.id"
+              :disabled="playingChartId === String(chart.id)"
               :aria-label="`播放 ${chart.title}`"
+              @mouseenter="prefetchChartTracks(chart)"
+              @focus="prefetchChartTracks(chart)"
               @click.stop.prevent="playChart(chart)"
             >
               <Play :size="22" fill="currentColor" />
@@ -128,7 +134,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { Headphones, Play } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import SectionTitle from '../../components/SectionTitle.vue'
@@ -138,6 +144,9 @@ import { createLruCache } from '../../utils/lruCache'
 import { getPlaybackErrorDisplay } from '../../utils/playbackError'
 
 const CHART_SKELETON_MIN_MS = 360
+const CHART_IDLE_PREFETCH_COUNT = 3
+const CHART_PREFETCH_IDLE_TIMEOUT = 1800
+const CHART_PREFETCH_FALLBACK_DELAY = 700
 
 const loading = ref(false)
 const error = ref(null)
@@ -147,14 +156,21 @@ const playingChartId = ref('')
 const message = useMessage()
 const player = usePlayerStore()
 const chartTrackCache = createLruCache(20)
+const chartTrackRequests = new Map()
+let chartPrefetchSchedule = null
 
 onMounted(() => {
   loadData()
 })
 
+onBeforeUnmount(() => {
+  cancelChartPrefetch()
+})
+
 async function loadData() {
   const startedAt = Date.now()
 
+  cancelChartPrefetch()
   loading.value = true
   error.value = null
 
@@ -162,6 +178,7 @@ async function loadData() {
     const data = await getChartsDiscoveryData()
     boards.value = data.boards
     chartSections.value = data.chartSections
+    scheduleInitialChartPrefetch(data.boards)
   } catch (loadError) {
     console.warn('Failed to load charts:', loadError)
     error.value = loadError
@@ -215,6 +232,16 @@ async function playChart(chart) {
   }
 }
 
+function prefetchChartTracks(chart) {
+  const chartId = String(chart?.id ?? '')
+
+  if (!chartId || chartTrackCache.has(chartId) || chartTrackRequests.has(chartId)) {
+    return
+  }
+
+  loadChartTracks(chart).catch(() => {})
+}
+
 async function resolveChartTracks(chart) {
   const chartId = String(chart?.id ?? '')
 
@@ -235,21 +262,98 @@ async function resolveChartTracks(chart) {
     return chartTrackCache.get(chartId)
   }
 
-  let tracks = []
+  return loadChartTracks(chart, { fallbackTracks: previewTracks })
+}
 
-  try {
-    const detail = await getPlaylistDetailData(chartId)
-    tracks = (detail.tracks ?? []).filter((track) => track?.id)
-  } catch (loadError) {
-    if (previewTracks.length) {
-      return previewTracks
-    }
+function loadChartTracks(chart, { fallbackTracks = [] } = {}) {
+  const chartId = String(chart?.id ?? '')
 
-    throw loadError
+  if (!chartId) {
+    return Promise.resolve([])
   }
 
-  chartTrackCache.set(chartId, tracks)
-  return tracks
+  if (chartTrackCache.has(chartId)) {
+    return Promise.resolve(chartTrackCache.get(chartId))
+  }
+
+  if (!chartTrackRequests.has(chartId)) {
+    const request = getPlaylistDetailData(chartId)
+      .then((detail) => {
+        const tracks = (detail.tracks ?? []).filter((track) => track?.id)
+
+        if (tracks.length) {
+          chartTrackCache.set(chartId, tracks)
+        }
+
+        return tracks
+      })
+      .finally(() => {
+        chartTrackRequests.delete(chartId)
+      })
+
+    chartTrackRequests.set(chartId, request)
+  }
+
+  return chartTrackRequests.get(chartId)
+    .then((tracks) => {
+      if (tracks.length || !fallbackTracks.length) {
+        return tracks
+      }
+
+      return fallbackTracks
+    })
+    .catch((loadError) => {
+      if (fallbackTracks.length) {
+        return fallbackTracks
+      }
+
+      throw loadError
+    })
+}
+
+function scheduleInitialChartPrefetch(charts = []) {
+  const prefetchCharts = charts
+    .filter((chart) => chart?.id)
+    .slice(0, CHART_IDLE_PREFETCH_COUNT)
+
+  if (!prefetchCharts.length) {
+    return
+  }
+
+  chartPrefetchSchedule = scheduleIdleTask(() => {
+    chartPrefetchSchedule = null
+    prefetchCharts.forEach(prefetchChartTracks)
+  })
+}
+
+function scheduleIdleTask(callback) {
+  if (typeof window.requestIdleCallback === 'function') {
+    return {
+      type: 'idle',
+      id: window.requestIdleCallback(callback, {
+        timeout: CHART_PREFETCH_IDLE_TIMEOUT
+      })
+    }
+  }
+
+  return {
+    type: 'timer',
+    id: window.setTimeout(callback, CHART_PREFETCH_FALLBACK_DELAY)
+  }
+}
+
+function cancelChartPrefetch() {
+  if (!chartPrefetchSchedule) {
+    return
+  }
+
+  if (chartPrefetchSchedule.type === 'idle' && typeof window.cancelIdleCallback === 'function') {
+    window.cancelIdleCallback(chartPrefetchSchedule.id)
+  } else {
+    window.clearTimeout(chartPrefetchSchedule.id)
+  }
+
+  chartPrefetchSchedule = null
 }
 
 function getChartDetailTarget(chart) {

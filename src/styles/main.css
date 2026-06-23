@@ -249,10 +249,13 @@ button {
 .sidebar--compact .profile__text,
 .sidebar--compact .profile > svg {
   position: absolute;
+  width: 0;
   max-width: 0;
+  overflow: hidden;
   opacity: 0;
   pointer-events: none;
   transform: translateX(-8px);
+  visibility: hidden;
 }
 
 .profile-avatar {
@@ -315,6 +318,7 @@ button {
   align-self: end;
   min-width: 0;
   max-width: 132px;
+  overflow: hidden;
   flex-direction: column;
   gap: 3px;
   transition:
@@ -325,6 +329,12 @@ button {
 .profile__text strong {
   overflow: hidden;
   font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile__text small {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -507,7 +517,7 @@ button {
   border-radius: 8px;
   color: var(--text-main);
   font-size: 14px;
-  font-weight: 700;
+  /* font-weight: 700; */
   width: 100%;
   transition:
     color 220ms ease,

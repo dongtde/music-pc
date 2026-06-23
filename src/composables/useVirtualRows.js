@@ -11,9 +11,8 @@ export function useVirtualRows(items, {
   const endIndex = ref(0)
   let frame = 0
 
-  const normalizedRowHeight = Math.max(1, Number(rowHeight) || 1)
-  const totalHeight = computed(() => unref(items).length * normalizedRowHeight)
-  const offsetY = computed(() => startIndex.value * normalizedRowHeight)
+  const totalHeight = computed(() => unref(items).length * getRowHeight())
+  const offsetY = computed(() => startIndex.value * getRowHeight())
   const visibleItems = computed(() => unref(items).slice(startIndex.value, endIndex.value))
 
   onMounted(() => {
@@ -28,6 +27,13 @@ export function useVirtualRows(items, {
 
   watch(
     () => unref(items).length,
+    () => {
+      nextTick(updateRange)
+    }
+  )
+
+  watch(
+    () => unref(rowHeight),
     () => {
       nextTick(updateRange)
     }
@@ -65,6 +71,7 @@ export function useVirtualRows(items, {
     const scrollTop = rootElement.scrollTop
     const viewportHeight = rootElement.clientHeight
     const listTop = listElement.offsetTop
+    const normalizedRowHeight = getRowHeight()
     const visibleTop = Math.max(0, scrollTop - listTop)
     const visibleBottom = Math.max(0, scrollTop + viewportHeight - listTop)
     const nextStart = Math.min(
@@ -90,6 +97,10 @@ export function useVirtualRows(items, {
 
     window.cancelAnimationFrame(frame)
     frame = 0
+  }
+
+  function getRowHeight() {
+    return Math.max(1, Number(unref(rowHeight)) || 1)
   }
 
   return {

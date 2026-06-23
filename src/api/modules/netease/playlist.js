@@ -79,13 +79,26 @@ import {
   normalizeLyricKeyword,
   getLyricCandidate
 } from './shared'
+import { isAbortError } from '../../../utils/request'
 
-export const getPlaylistDetail = (params = {}) => {
+export const getPlaylistDetail = (params = {}, config = {}) => {
   if (/^\d+$/.test(String(params.id ?? ''))) {
     return Promise.all([
-      getKugou('/rank/info', { ...params, rankid: params.id }).catch(() => ({})),
-      getKugou('/rank/list').catch(() => ({})),
-      getKugou('/rank/audio', { ...params, rankid: params.id })
+      getKugou('/rank/info', { ...params, rankid: params.id }, config).catch((error) => {
+        if (isAbortError(error)) {
+          throw error
+        }
+
+        return {}
+      }),
+      getKugou('/rank/list', {}, config).catch((error) => {
+        if (isAbortError(error)) {
+          throw error
+        }
+
+        return {}
+      }),
+      getKugou('/rank/audio', { ...params, rankid: params.id }, config)
     ]).then(([infoResponse, listResponse, audioResponse]) => {
       const infoData = infoResponse.data ?? infoResponse
       const listRank = firstArray(listResponse.data?.info, listResponse.info, listResponse.data)
@@ -100,37 +113,38 @@ export const getPlaylistDetail = (params = {}) => {
     })
   }
 
-  return getKugou('/playlist/detail', params).then(toPlaylistDetailResponse)
+  return getKugou('/playlist/detail', params, config).then(toPlaylistDetailResponse)
 }
 
-export const getPlaylistTracks = (params = {}) => {
+export const getPlaylistTracks = (params = {}, config = {}) => {
   if (params.listid || params.listId) {
     const listid = params.listid ?? params.listId
 
-    return getKugou('/playlist/track/all/new', { ...params, listid }).then((response) =>
+    return getKugou('/playlist/track/all/new', { ...params, listid }, config).then((response) =>
       toPlaylistTracksResponse(response, listid)
     )
   }
 
   if (/^\d+$/.test(String(params.id ?? ''))) {
-    return getKugou('/rank/audio', { ...params, rankid: params.id }).then((response) =>
+    return getKugou('/rank/audio', { ...params, rankid: params.id }, config).then((response) =>
       toRankTracksResponse(response, params.id)
     )
   }
 
-  return getKugou('/playlist/track/all', params).then((response) =>
+  return getKugou('/playlist/track/all', params, config).then((response) =>
     toPlaylistTracksResponse(response, params.id)
   )
 }
 
-export const getPlaylistHotCategories = (params = {}) => getKugou('/playlist/tags', params)
+export const getPlaylistHotCategories = (params = {}, config = {}) => getKugou('/playlist/tags', params, config)
 
-export const getPlaylistCategories = (params = {}) => getKugou('/playlist/tags', params)
+export const getPlaylistCategories = (params = {}, config = {}) => getKugou('/playlist/tags', params, config)
 
-export const getSimilarPlaylists = (params = {}) => getKugou('/playlist/similar', params).then(toPlaylistListResponse)
+export const getSimilarPlaylists = (params = {}, config = {}) =>
+  getKugou('/playlist/similar', params, config).then(toPlaylistListResponse)
 
-export const getTopPlaylists = (params = {}) =>
-  getKugou('/top/playlist', { category_id: 0, ...params }, { noCookie: true }).then(toPlaylistListResponse)
+export const getTopPlaylists = (params = {}, config = {}) =>
+  getKugou('/top/playlist', { category_id: 0, ...params }, { noCookie: true, ...config }).then(toPlaylistListResponse)
 
-export const getHighQualityPlaylists = (params = {}) =>
-  getKugou('/top/playlist', { category_id: 11292, ...params }, { noCookie: true }).then(toPlaylistListResponse)
+export const getHighQualityPlaylists = (params = {}, config = {}) =>
+  getKugou('/top/playlist', { category_id: 11292, ...params }, { noCookie: true, ...config }).then(toPlaylistListResponse)

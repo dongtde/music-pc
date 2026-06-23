@@ -80,27 +80,27 @@ import {
   getLyricCandidate
 } from './shared'
 
-export const getArtistList = (params = {}) => getKugou('/artist/lists', params).then(toArtistListResponse)
+export const getArtistList = (params = {}, config = {}) => getKugou('/artist/lists', params, config).then(toArtistListResponse)
 
-export const getArtistToplist = (params = {}) => getKugou('/artist/lists', params).then(toArtistListResponse)
+export const getArtistToplist = (params = {}, config = {}) => getKugou('/artist/lists', params, config).then(toArtistListResponse)
 
-export const getArtistDetail = (params = {}) => getKugou('/artist/detail', params).then(toArtistDetailResponse)
+export const getArtistDetail = (params = {}, config = {}) => getKugou('/artist/detail', params, config).then(toArtistDetailResponse)
 
-export const getArtistHotSongs = (params = {}) => getKugou('/artist/audios', params).then(toArtistSongsResponse)
+export const getArtistHotSongs = (params = {}, config = {}) => getKugou('/artist/audios', params, config).then(toArtistSongsResponse)
 
-export const getArtistTopSongs = (params = {}) =>
-  getKugou('/artist/audios', { ...params, sort: 'hot' }).then(toArtistSongsResponse)
+export const getArtistTopSongs = (params = {}, config = {}) =>
+  getKugou('/artist/audios', { ...params, sort: 'hot' }, config).then(toArtistSongsResponse)
 
-export const getArtistSongs = (params = {}) => getKugou('/artist/audios', params).then(toArtistSongsResponse)
+export const getArtistSongs = (params = {}, config = {}) => getKugou('/artist/audios', params, config).then(toArtistSongsResponse)
 
-export const getArtistAlbums = (params = {}) => getKugou('/artist/albums', params).then(toArtistAlbumsResponse)
+export const getArtistAlbums = (params = {}, config = {}) => getKugou('/artist/albums', params, config).then(toArtistAlbumsResponse)
 
-export const getArtistMvs = (params = {}) => getKugou('/artist/videos', params)
+export const getArtistMvs = (params = {}, config = {}) => getKugou('/artist/videos', params, config)
 
-export const getArtistVideos = (params = {}) => getKugou('/artist/videos', params).then(toArtistVideosResponse)
+export const getArtistVideos = (params = {}, config = {}) => getKugou('/artist/videos', params, config).then(toArtistVideosResponse)
 
-export const getArtistDesc = (params = {}) => getKugou('/artist/detail', params).then(toArtistDetailResponse)
+export const getArtistDesc = (params = {}, config = {}) => getKugou('/artist/detail', params, config).then(toArtistDetailResponse)
 
-export const getArtistDynamic = (params = {}) => getKugou('/artist/detail', params).then(toArtistDetailResponse)
+export const getArtistDynamic = (params = {}, config = {}) => getKugou('/artist/detail', params, config).then(toArtistDetailResponse)
 
 // Albums

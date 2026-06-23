@@ -80,7 +80,7 @@
 | 状态 | 优先级 | 项 | 方案 |
 | --- | --- | --- | --- |
 | 已完成 | P0 | 缓存上限 | 已新增 `src/utils/lruCache.js`，并限制 `cacheStore`、歌词、封面取色、MV 播放、MV 评论、排行榜曲目缓存容量；服务层 TTL 逻辑保持不变 |
-| 部分完成 | P1 | 请求取消 | 搜索建议、顶部搜索结果、搜索详情结果、电台详情和电台节目分页已接入 `AbortController`，旧请求会真正取消；MV/歌单等仍待继续推广 |
+| 部分完成 | P1 | 请求取消 | 搜索建议、顶部搜索结果、搜索详情结果、电台详情/节目分页、发现歌手筛选、发现歌单分类、专辑地区筛选、歌单详情/曲目分页、专辑详情、歌手详情/tab 分页、MV 首屏/筛选/播放详情/清晰度已接入 `AbortController`，旧请求会真正取消；FM、Podcast 等仍待继续推广 |
 | 待处理 | P1 | 状态持久化节流 | `playerSnapshot` 已按秒节流，资料库 `persist()` 可继续加入防抖，批量导入本地文件时减少 localStorage 写入 |
 | 已完成 | P1 | 最近播放/喜欢列表 | 已新增 `src/composables/useVirtualRows.js`，并接入 `LibraryView.vue` 的本地/最近/喜欢歌曲列表，避免大量歌曲一次性渲染 |
 | 部分完成 | P2 | 统一错误模型 | 播放器链路已新增 `src/utils/playbackError.js`，统一成 `code/userMessage/action/recoverable/details`；全站 API 错误模型仍待继续推广 |
@@ -169,10 +169,10 @@
 
 | 优先级 | 功能 | 具体优化 |
 | --- | --- | --- |
-| P1 | 分页 | `PLAYLIST_LIMIT = 50` 一页较大，建议首屏 24-30，滚动补齐 |
+| P1（已完成） | 分页 | 已将 `PLAYLIST_LIMIT` 从 50 降到 30，首屏减量后继续用滚动加载补齐 |
 | P1 | 分类弹窗 | 分类弹窗 Teleport 到 body，需补焦点锁定、关闭后焦点回到按钮 |
-| P1 | 无限加载 | 已用 `useLoadMoreTrigger`，建议统一 retry 状态和请求取消 |
-| P2 | 分类缓存 | 分类元信息单独长期缓存，切分类只请求列表 |
+| P1（已完成） | 无限加载 | 已用 `useLoadMoreTrigger` + `AbortController`，切分类、重试或卸载会取消旧列表请求，Abort 不进入错误 UI |
+| P2（已完成） | 分类缓存 | 已新增页面级 LRU 分类缓存，保存已加载歌单、分类元信息、offset 和 hasMore；切回分类时直接恢复，重试强制刷新 |
 | P2 | 去重 | `mergePlaylists` 已做 ID 去重，建议将通用去重工具复用到其他页 |
 
 #### 4.2.3 排行榜 tab `/discover/charts`
@@ -181,10 +181,10 @@
 
 | 状态 | 优先级 | 功能 | 具体优化 |
 | --- | --- | --- | --- |
-| 待处理 | P1 | 榜单详情预取 | 点击播放榜单时才拉详情，建议 idle 预取首屏 3 个榜单或 hover 预取 |
+| 已完成 | P1 | 榜单详情预取 | 已新增 idle 预取首屏 3 个榜单，并在播放按钮 hover/focus 时预取；预取和点击播放共享 pending 请求，避免重复拉详情 |
 | 已完成 | P1 | 缓存容量 | 已将 `chartTrackCache` 改为 LRU 20 个榜单 |
-| 待处理 | P2 | 播放状态 | `playingChartId` 类型比较有字符串/原值混用风险，统一字符串 |
-| 待处理 | P2 | 图片 | 小榜单封面 lazy，可加 `sizes` 与固定 aspect-ratio |
+| 已完成 | P2 | 播放状态 | `playingChartId` 已统一按字符串比较，播放按钮禁用态和高亮态一致 |
+| 已完成 | P2 | 图片 | 小榜单封面已补 `sizes`，并显式固定真实图和占位图的 1:1 aspect-ratio |
 
 #### 4.2.4 歌手 tab `/discover/artists`
 
@@ -192,8 +192,9 @@
 
 | 优先级 | 功能 | 具体优化 |
 | --- | --- | --- |
-| P1 | 筛选请求 | 切换 area/type/initial 时取消旧请求；避免快速点击导致过期响应 |
+| P1（已完成） | 筛选请求 | 切换 area/type/initial 或卸载歌手 tab 时会取消旧请求，Abort 错误不进入错误 UI，避免快速点击导致过期响应 |
 | P1 | 列表渲染 | `ARTIST_LIMIT = 32` 可接受，但长滚动后应虚拟化或分页卸载旧节点 |
+| P2（已完成） | 筛选缓存 | 已新增 area/type/initial 页面级 LRU 缓存，保存已加载列表、热榜、offset 和 hasMore；切回筛选组合时直接恢复，重试会强制刷新 |
 | P2 | 筛选项 | initial 只显示 A-J，若 API 支持全字母，应提供更多或横向滚动 |
 | P2 | 热榜歌手 | `topArtists` reset 失败时保留旧数据，需标记“旧数据”或按策略清空 |
 
@@ -203,9 +204,11 @@
 
 | 优先级 | 功能 | 具体优化 |
 | --- | --- | --- |
-| P1 | 首屏 | `ALBUM_LIMIT = 36` 较重，建议首屏 18-24，滚动补齐 |
+| P1（已完成） | 首屏 | `ALBUM_LIMIT` 已从 36 降到 24，首屏 skeleton 从 18 降到 12；继续复用 `useLoadMoreTrigger` 靠近底部滚动补齐 |
+| P1（已完成） | 地区请求 | 切换地区、重试或卸载 tab 会取消旧专辑请求，Abort 不进入错误 UI |
 | P1 | 滚动 root | 已通过 `getRoot` 指向 `.view`，统一到 `useLoadMoreTrigger` 的模式 |
 | P2 | 热碟 | `topAlbums` 与列表并发加载，失败分区展示 |
+| P2（已完成） | 地区缓存 | 已新增页面级 LRU 缓存，保存已加载专辑、热碟、offset、total 和 hasMore；切回地区时直接恢复，重试强制刷新 |
 | P2 | 图片 | 专辑封面 hover meta 可延迟挂载，减少卡片 DOM |
 
 #### 4.2.6 最新音乐 tab
@@ -253,15 +256,16 @@
 
 | 优先级 | 功能 | 具体优化 |
 | --- | --- | --- |
-| P0 | 离开页面释放 | 当前 `onBeforeUnmount` 暂停视频，但全局 `KeepAlive` 下不会卸载；需在 deactivated 或路由离开时暂停并释放 `video.src` |
+| P0（已完成） | 离开页面释放 | 已新增 `releaseActiveVideo()`，切 MV、返回浏览页、路由离开、组件失活或卸载时会暂停视频、清空 `video.src` 并调用 `load()` 释放媒体资源 |
+| P1（已完成） | 请求取消 | MV 首屏、视频库筛选分页、播放详情和清晰度切换均已接入 `AbortController` + requestId；离开、切 MV、切筛选或重复切清晰度时会取消旧请求并忽略过期响应 |
 | P1 | 组件拆分 | 拆为 `MvBrowseView`、`MvWatchView`、`MvControls`、`MvLibraryGrid`、`MvComments` |
-| P1 | 无限加载 | `handleBrowseScroll` 每次滚动都检查，改为 `useLoadMoreTrigger` + requestAnimationFrame 节流 |
-| P1 | 视频播放地址 | `selectMv` 每次详情拉评论、相似视频、播放地址；清晰度切换应只拉播放地址，非必要数据复用 |
-| P1 | 弹幕评论 | `danmakuCommentLimit = 80` 首次太重，首屏降低到 20-30，弹幕层按需加载 |
-| P1 | 内存 | `filteredMvs` 长列表持续增长，超过 200 条考虑窗口化 |
-| P2 | 控制条 | 鼠标移动 `showControls`/`hideControlsSoon` 应避免频繁 reset timer |
-| P2 | 错误恢复 | 视频播放失败提供换清晰度、重新获取播放地址、外部打开三种恢复 |
-| P3 | 预加载 | 观看当前 MV 时预取下一条播放地址和 poster，但限制并发 |
+| P1（已完成） | 无限加载 | 已改为复用 `useLoadMoreTrigger` + sentinel，移除页面根节点手动 scroll 检测，列表加载完成和切回视频库后会重新 setup/check |
+| P1（已完成） | 视频播放地址 | 已新增 `getMvPlaybackUrlData()`；清晰度切换只拉播放地址并复用当前 MV 的详情、评论、相似视频和状态数据 |
+| P1（已完成） | 弹幕评论 | 弹幕补充批次已从 80 降到 24，首屏继续复用播放详情中的 12 条轻量评论，后续由弹幕层按需触发补齐 |
+| P1（已完成） | 内存 | 视频库 `filteredMvs` 已按响应式网格行窗口化，只渲染可视区附近行；`useVirtualRows` 已支持动态行高，窗口 resize 后会重新测量 |
+| P2（已完成） | 控制条 | 播放舞台已改为 `pointermove` 节流刷新隐藏定时器，连续移动时最多每 350ms reset 一次 timer |
+| P2（已完成） | 错误恢复 | 视频播放失败会显示恢复浮层，支持重新获取播放地址、切到备用清晰度、外部打开；自动播放被拦截只保留普通提示，不触发恢复浮层 |
+| P3（已完成） | 预加载 | 观看当前 MV 时会延迟预取队列下一条的播放地址和 poster；预取限制为单 pending + LRU 8 条，切 MV/离开页面会取消旧预取，播放下一条时复用已预取地址 |
 
 ### 4.6 私人 FM `/fm`
 
@@ -287,8 +291,8 @@
 | 优先级 | 功能 | 具体优化 |
 | --- | --- | --- |
 | P1（已完成） | 虚拟列表复用 | 已抽 `src/composables/useVirtualRows.js`，并复用到 `PlaylistDetailView.vue`、`LibraryView.vue`、`AlbumDetailView.vue`、`ArtistDetailView.vue` 歌曲 tab、`SearchDetailView.vue` 歌曲结果和 `PodcastDetailView.vue` 电台节目 |
-| P1 | 播放全部 | `loadAllRemainingTracks()` 可能一次拉 total 全量，超大歌单风险高；改为边播边补队列或分批拉取 |
-| P1 | 路由切换取消 | 已有 token，进一步接 AbortController 取消网络和避免 `activeTrackRequest` 悬挂 |
+| P1（已完成） | 播放全部 | `loadAllRemainingTracks()` 已取消 `limit: total` 全量拉取，改为复用分页接口按 `PLAYLIST_TRACK_PAGE_SIZE` 分批补齐 |
+| P1（已完成） | 路由切换取消 | 歌单详情首屏、曲目分页和播放全部补齐流程已接入 `AbortController` + token，路由切换/卸载会取消网络并清理 `activeTrackRequest` |
 | P1（已完成） | 行高假设 | 已将 `SongListRow.vue` 普通行锁定为 58px、compact 行锁定为 52px，虚拟列表行高假设与 CSS 一致；后续可补视觉回归 |
 | P2 | 本地歌单 | 本地歌单没有远程评论和封面，增加本地封面生成/首曲封面 |
 | P2 | 评论 | 已用 `usePaginatedComments`，可统一滚动加载和错误重试 |
@@ -300,9 +304,9 @@
 | 优先级 | 功能 | 具体优化 |
 | --- | --- | --- |
 | P1（已完成） | 歌曲列表 | 专辑曲目已接入 `useVirtualRows`，大专辑/合集只渲染可见行和缓冲行 |
-| P1 | 请求取消 | `loadAlbumDetail` 切换路由时取消旧请求 |
-| P2 | 评论加载 | 当前进入页面立即 `commentState.load`，可改为打开评论弹窗时加载，减少首屏接口 |
-| P2 | 封面 | hero 封面首屏应 `loading="eager"` + `fetchpriority="high"`，详情曲目封面 lazy |
+| P1（已完成） | 请求取消 | `loadAlbumDetail` 已接入 `AbortController` + requestId，切换专辑或卸载页面会取消旧请求并忽略过期响应 |
+| P2（已完成） | 评论加载 | 已取消进入页面即 `commentState.load`，改为打开评论弹窗时懒加载；弹窗打开状态下切换专辑才刷新评论 |
+| P2（已完成） | 封面 | hero 封面已改为 `loading="eager"` + `fetchpriority="high"`；详情曲目复用 `SongListRow`，封面保持 lazy |
 | P2 | 描述 Tooltip | 长描述 tooltip 可按需挂载，避免移动端 hover 不适配 |
 
 ### 4.9 歌手详情 `/artist/:id`
@@ -314,10 +318,10 @@
 | 优先级 | 功能 | 具体优化 |
 | --- | --- | --- |
 | P1 | 组件拆分 | 拆 `ArtistHero`、`ArtistSongsTab`、`ArtistAlbumsTab`、`ArtistVideosTab`、`ArtistIntroTab` |
-| P1 | 精选预加载 | `loadFeaturedPreviews()` 同时拉专辑、视频、简介；改 idle/低优先级，先保证热门歌曲可见 |
+| P1（已完成） | 精选预加载 | 精选专辑、视频、简介预览已改为 `requestIdleCallback`/fallback timer 低优先级调度，主详情和热门歌曲先渲染；切换歌手或卸载会取消 pending 预加载 |
 | P1（已完成） | 歌曲列表 | `artistSongs` 已接入 `useVirtualRows`；精选热门歌曲数量较小，保留直接渲染 |
-| P1 | 分页取消 | 歌手 id 或排序切换时取消旧 tab 请求，避免混入旧结果 |
-| P2 | tab 缓存 | 每个 tab 数据按 artistId + filter 缓存，切回无需重拉 |
+| P1（已完成） | 分页取消 | 歌手详情主请求和歌曲/专辑/视频/简介 tab 已接入 `AbortController` + requestId，歌手 id 或排序切换时会取消旧请求并忽略过期响应 |
+| P2（已完成） | tab 缓存 | 已新增页面级 LRU 缓存，歌曲按 artistId + order，专辑/视频/简介按 artistId 保存已加载状态、分页游标和 hasMore；缓存命中时取消旧请求并直接恢复 |
 | P2 | loading 最短时间 | `ARTIST_TAB_SKELETON_MIN_MS` 可按网络实际耗时动态，不强制慢设备等待 |
 
 ### 4.10 资料库 `/library/:type`
@@ -553,18 +557,18 @@
 | 路由 | 已完成：搜索、FM 可达；KeepAlive 白名单 | chunk 预加载 | 404 | - |
 | 首页 | 已完成：局部缓存上限、视频 feed hydration 小窗口、首页 FPS smoke；待处理：视频释放 | 弹幕降载、封面取色队列 | 抽 snap feed | 低性能模式 |
 | 发现推荐 | - | 分区接口降级、轮播暂停 | 组件拆分 | - |
-| 发现歌单 | - | 首屏减量、分页取消 | 分类缓存 | - |
-| 排行榜 | - | 已完成：缓存上限；待处理：榜单详情预取 | 类型统一 | - |
-| 歌手列表 | - | 请求取消、长列表治理 | tab/filter 缓存 | - |
-| 专辑列表 | - | 首屏减量、滚动加载 | hover meta 延迟 | - |
+| 发现歌单 | - | 已完成：首屏减量、分页取消 | 已完成：分类缓存 | - |
+| 排行榜 | - | 已完成：缓存上限、榜单详情预取 | 已完成：类型统一 | - |
+| 歌手列表 | - | 已完成：请求取消；待处理：长列表治理 | 已完成：tab/filter 缓存 | - |
+| 专辑列表 | - | 已完成：首屏减量、滚动加载、地区请求取消 | 已完成：地区缓存；待处理：hover meta 延迟 | - |
 | 最新音乐 | 是否启用 | API 化 | 复用 SongListRow | - |
 | 电台首页/榜单/乐库 | - | 拆子组件、分区加载 | rank 缓存 | - |
 | 电台详情 | - | 已完成：节目虚拟化、自动加载、路由切换取消 | 播放全部策略 | 评论/订阅完善 |
-| MV/视频 | 离开释放视频 | 组件拆分、弹幕降载、列表窗口化 | 控制条节流 | 下一条预取 |
+| MV/视频 | 已完成：离开释放视频 | 已完成：请求取消、无限加载治理、视频地址复用、弹幕降载、列表窗口化；待处理：组件拆分 | 已完成：控制条节流、错误恢复 | 已完成：下一条预取 |
 | 私人 FM | 已完成：路由启用 | 批量请求治理、队列补水 | 撤销不想听 | - |
-| 歌单详情 | - | 已完成：虚拟列表复用；待处理：播放全部分批 | 本地封面 | - |
-| 专辑详情 | - | 已完成：曲目虚拟化；待处理：评论懒加载 | tooltip 适配 | - |
-| 歌手详情 | - | 已完成：歌曲虚拟化；待处理：tab 拆分、请求取消 | tab 缓存 | - |
+| 歌单详情 | - | 已完成：虚拟列表复用、播放全部分批、路由切换取消 | 本地封面 | - |
+| 专辑详情 | - | 已完成：曲目虚拟化、请求取消、评论懒加载、首屏封面优先级 | tooltip 适配 | - |
+| 歌手详情 | - | 已完成：歌曲虚拟化、主请求与 tab 分页请求取消、精选预加载降优先级；待处理：tab 拆分 | 已完成：tab 缓存 | - |
 | 资料库 | - | 已完成：本地/最近/喜欢歌曲虚拟化；待处理：object URL 策略 | IndexedDB | ID3 元数据 |
 | 搜索 | 已完成：路由补齐 | 部分完成：已抽 `useSearch` 复用启动数据/历史/建议，搜索建议和结果请求已接 `AbortController`，搜索详情歌曲结果已接 `useVirtualRows` | 统一空状态、非歌曲网格虚拟化 | - |
 | 设置 | - | reduced motion、VIP 复用 | 分组重构 | 导入导出 |

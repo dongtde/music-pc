@@ -320,6 +320,27 @@
   gap: 28px 18px;
 }
 
+.mv-grid-virtual {
+  position: relative;
+  width: 100%;
+}
+
+.mv-grid-virtual__window {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  will-change: transform;
+}
+
+.mv-grid--virtual-row {
+  margin-bottom: 28px;
+}
+
+.mv-grid--virtual-row:last-child {
+  margin-bottom: 0;
+}
+
 .mv-video-card {
   display: grid;
   min-width: 0;
@@ -637,6 +658,69 @@
 .mv-watch__empty {
   gap: 8px;
   color: rgba(255, 255, 255, 0.62);
+}
+
+.mv-watch__recovery {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 10;
+  display: grid;
+  min-width: min(430px, calc(100% - 40px));
+  max-width: 520px;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  color: #fff;
+  background: rgba(13, 14, 18, 0.86);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.36);
+  text-align: center;
+  transform: translate(-50%, -50%);
+  backdrop-filter: blur(18px);
+}
+
+.mv-watch__recovery strong {
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.mv-watch__recovery > span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+}
+
+.mv-watch__recovery div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.mv-watch__recovery button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 104px;
+  height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.mv-watch__recovery button:hover:not(:disabled) {
+  background: rgba(var(--accent-rgb), 0.82);
+}
+
+.mv-watch__recovery button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .mv-watch__top {

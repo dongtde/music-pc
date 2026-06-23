@@ -1,15 +1,15 @@
 {
   "id": "/",
-  "name": "Mappic Music",
-  "short_name": "Mappic",
-  "description": "A desktop-style music player for discovery, playlists, radio, videos, and personal playback.",
+  "name": "澜音",
+  "short_name": "澜音",
+  "description": "一款为发现、歌单、电台、视频与私人播放设计的桌面音乐软件。",
   "lang": "zh-CN",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#101011",
-  "theme_color": "#ff3f73",
+  "background_color": "#0b0d11",
+  "theme_color": "#24e1ca",
   "categories": ["music", "entertainment"],
   "icons": [
     {

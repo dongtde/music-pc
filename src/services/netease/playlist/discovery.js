@@ -1,10 +1,21 @@
 import { getTopPlaylists } from '../../../api/modules/netease'
+import { isAbortError } from '../../../utils/request'
 import { CACHE_TTL } from '../../../config/app'
 import { cacheKey, getCachedData } from '../../cache'
-import { getPlaylistCategoryMeta, normalizePlaylistCategoryOption, PLAYLIST_DEFAULT_CATEGORY, resolvePlaylistCategory } from './categories'
+import {
+  getPlaylistCategoryMeta,
+  normalizePlaylistCategoryId,
+  normalizePlaylistCategoryOption,
+  PLAYLIST_DEFAULT_CATEGORY,
+  resolvePlaylistCategory
+} from './categories'
 import { mapPlaylist } from './mappers'
 
-export async function getPlaylistDiscoveryData(category = PLAYLIST_DEFAULT_CATEGORY.name, { limit = 50, offset = 0 } = {}) {
+export async function getPlaylistDiscoveryData(
+  category = PLAYLIST_DEFAULT_CATEGORY.name,
+  { limit = 50, offset = 0 } = {},
+  options = {}
+) {
   const requestedCategory = normalizePlaylistCategoryOption(category)
   const requestedCategoryCacheKey =
     requestedCategory.id !== '' ? requestedCategory.id : requestedCategory.name
@@ -22,7 +33,7 @@ export async function getPlaylistDiscoveryData(category = PLAYLIST_DEFAULT_CATEG
         withtag: 1,
         limit,
         offset
-      }).catch(() => ({}))
+      }, options).catch(toOptionalPlaylistDiscoveryResponse)
       const playlists = playlistResponse.playlists ?? []
       const total = playlistResponse.total ?? 0
 
@@ -36,4 +47,12 @@ export async function getPlaylistDiscoveryData(category = PLAYLIST_DEFAULT_CATEG
       }
     }
   )
+}
+
+function toOptionalPlaylistDiscoveryResponse(error) {
+  if (isAbortError(error)) {
+    throw error
+  }
+
+  return {}
 }

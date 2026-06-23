@@ -8,6 +8,7 @@ import {
   getSubscribedMvs as getNeteaseSubscribedMvs,
   getTopMvs as getNeteaseTopMvs
 } from '../../../api/modules/neteaseLegacy'
+import { isAbortError } from '../../../utils/request'
 import { getMvPlaybackData } from './playback'
 import { getMvListPayload, mapVideoMv } from './mappers'
 import { MV_DEFAULT_AREA, MV_DEFAULT_ORDER, MV_DEFAULT_TYPE, UNKNOWN_ARTIST, UNKNOWN_MV } from './shared'
@@ -18,7 +19,7 @@ export async function getVideoCenterData({
   order = MV_DEFAULT_ORDER,
   limit = 18,
   offset = 0
-} = {}) {
+} = {}, options = {}) {
   const [
     recommendedResponse,
     firstResponse,
@@ -28,23 +29,30 @@ export async function getVideoCenterData({
     subscribedResponse,
     followNewResponse
   ] = await Promise.all([
-    getNeteasePersonalizedMvs().catch(() => ({})),
-    getNeteaseFirstMvs({ area, limit: 12 }).catch(() => ({})),
-    getNeteaseExclusiveMvs({ limit: 12, offset: 0 }).catch(() => ({})),
-    getNeteaseTopMvs({ area: area === MV_DEFAULT_AREA ? undefined : area, limit: 10, offset: 0 }).catch(() => ({})),
-    getNeteaseAllMvs({ area, type, order, limit, offset }).catch(() => ({})),
-    getNeteaseSubscribedMvs().catch(() => ({})),
-    getNeteaseFollowArtistNewMvs({ limit: 10 }).catch(() => ({}))
+    getNeteasePersonalizedMvs({}, options).catch(toOptionalMvResponse),
+    getNeteaseFirstMvs({ area, limit: 12 }, options).catch(toOptionalMvResponse),
+    getNeteaseExclusiveMvs({ limit: 12, offset: 0 }, options).catch(toOptionalMvResponse),
+    getNeteaseTopMvs({ area: area === MV_DEFAULT_AREA ? undefined : area, limit: 10, offset: 0 }, options)
+      .catch(toOptionalMvResponse),
+    getNeteaseAllMvs({ area, type, order, limit, offset }, options).catch(toOptionalMvResponse),
+    getNeteaseSubscribedMvs({}, options).catch(toOptionalMvResponse),
+    getNeteaseFollowArtistNewMvs({ limit: 10 }, options).catch(toOptionalMvResponse)
   ])
   const recommended = (recommendedResponse.result ?? []).map(mapVideoMv)
   const first = getMvListPayload(firstResponse).map(mapVideoMv)
   const exclusive = getMvListPayload(exclusiveResponse).map(mapVideoMv)
-  const top = await hydrateMissingMvCards(getMvListPayload(topResponse).map(mapVideoMv))
+  const top = await hydrateMissingMvCards(getMvListPayload(topResponse).map(mapVideoMv), options)
   const all = getMvListPayload(allResponse).map(mapVideoMv)
   const subscribed = getMvListPayload(subscribedResponse).map(mapVideoMv)
   const followArtistNew = getMvListPayload(followNewResponse).map(mapVideoMv)
   const hero = top[0] ?? recommended[0] ?? first[0] ?? exclusive[0] ?? all[0] ?? null
-  const active = hero ? await getMvPlaybackData(hero.id).catch(() => ({ mv: hero })) : null
+  const active = hero ? await getMvPlaybackData(hero.id, 1080, options).catch((error) => {
+    if (isAbortError(error)) {
+      throw error
+    }
+
+    return { mv: hero }
+  }) : null
 
   return {
     recommended,
@@ -66,8 +74,8 @@ export async function getFilteredMvsData({
   order = MV_DEFAULT_ORDER,
   limit = 18,
   offset = 0
-} = {}) {
-  const response = await getNeteaseAllMvs({ area, type, order, limit, offset })
+} = {}, options = {}) {
+  const response = await getNeteaseAllMvs({ area, type, order, limit, offset }, options)
   const items = getMvListPayload(response).map(mapVideoMv)
 
   return {
@@ -77,7 +85,7 @@ export async function getFilteredMvsData({
   }
 }
 
-async function hydrateMissingMvCards(mvs = []) {
+async function hydrateMissingMvCards(mvs = [], options = {}) {
   const targets = mvs.filter((mv) => mv?.id && (!mv.coverUrl || !mv.playCountRaw))
 
   if (!targets.length) {
@@ -85,7 +93,13 @@ async function hydrateMissingMvCards(mvs = []) {
   }
 
   const detailResponses = await Promise.all(
-    targets.map((mv) => getNeteaseMvDetail({ mvid: mv.id }).catch(() => null))
+    targets.map((mv) => getNeteaseMvDetail({ mvid: mv.id }, options).catch((error) => {
+      if (isAbortError(error)) {
+        throw error
+      }
+
+      return null
+    }))
   )
   const detailsById = new Map()
 
@@ -118,4 +132,12 @@ async function hydrateMissingMvCards(mvs = []) {
       publishTime: mv.publishTime || detail.publishTime
     }
   })
+}
+
+function toOptionalMvResponse(error) {
+  if (isAbortError(error)) {
+    throw error
+  }
+
+  return {}
 }

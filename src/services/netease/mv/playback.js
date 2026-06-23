@@ -7,23 +7,26 @@ import {
   getSimilarMvs as getNeteaseSimilarMvs,
   getUgcMv as getNeteaseUgcMv
 } from '../../../api/modules/neteaseLegacy'
+import { isAbortError } from '../../../utils/request'
 import { mapMvCommentResult } from '../comments'
 import { getMvListPayload, mapMvEncyclopedia, mapMvStats, mapVideoMv } from './mappers'
 import { getMvPlaybackUrl } from './playbackUrl'
 import { formatPlainDate } from './shared'
 
-export async function getMvPlaybackData(id, quality = 1080) {
+export async function getMvPlaybackData(id, quality = 1080, options = {}, prefetchedPlaybackUrl = null) {
   const [detailResponse, infoResponse, urlResponse, simiResponse, commentResponse, ugcResponse] = await Promise.all([
-    getNeteaseMvDetail({ mvid: id }).catch(() => ({})),
-    getNeteaseMvDetailInfo({ mvid: id }).catch(() => ({})),
-    getNeteaseMvUrl({ id, r: quality || 1080 }).catch(() => ({})),
-    getNeteaseSimilarMvs({ mvid: id }).catch(() => ({})),
-    getNeteaseMvComments({ id, limit: 12, offset: 0 }).catch(() => ({})),
-    getNeteaseUgcMv({ id }).catch(() => ({}))
+    getNeteaseMvDetail({ mvid: id }, options).catch(toOptionalMvResponse),
+    getNeteaseMvDetailInfo({ mvid: id }, options).catch(toOptionalMvResponse),
+    prefetchedPlaybackUrl
+      ? Promise.resolve({})
+      : getNeteaseMvUrl({ id, r: quality || 1080 }, options).catch(toOptionalMvResponse),
+    getNeteaseSimilarMvs({ mvid: id }, options).catch(toOptionalMvResponse),
+    getNeteaseMvComments({ id, limit: 12, offset: 0 }, options).catch(toOptionalMvResponse),
+    getNeteaseUgcMv({ id }, options).catch(toOptionalMvResponse)
   ])
   const detail = detailResponse.data ?? detailResponse.mv ?? {}
   const mv = mapVideoMv(detail)
-  const playbackUrl = getMvPlaybackUrl({
+  const playbackUrl = prefetchedPlaybackUrl ?? getMvPlaybackUrl({
     urlResponse,
     brs: detail.brs,
     detail,
@@ -32,7 +35,7 @@ export async function getMvPlaybackData(id, quality = 1080) {
   })
   const artistId = mv.artistId || detail.artistId || detail.artists?.[0]?.id
   const artistMvResponse = artistId
-    ? await getNeteaseArtistMvs({ id: artistId, limit: 8 }).catch(() => ({}))
+    ? await getNeteaseArtistMvs({ id: artistId, limit: 8 }, options).catch(toOptionalMvResponse)
     : {}
 
   return {
@@ -51,4 +54,32 @@ export async function getMvPlaybackData(id, quality = 1080) {
     artistMvs: getMvListPayload(artistMvResponse).map(mapVideoMv),
     comments: mapMvCommentResult(commentResponse)
   }
+}
+
+export async function getMvPlaybackUrlData(id, quality = 1080, fallbackMv = {}, options = {}) {
+  const urlResponse = await getNeteaseMvUrl({ id, r: quality || 1080 }, options).catch(toOptionalMvResponse)
+  const playbackUrl = getMvPlaybackUrl({
+    urlResponse,
+    brs: fallbackMv?.brs,
+    detail: fallbackMv,
+    ugcResponse: fallbackMv?.encyclopedia,
+    quality
+  })
+
+  if (!playbackUrl.url) {
+    throw new Error('MV playback url is empty')
+  }
+
+  return {
+    url: playbackUrl.url,
+    quality: playbackUrl.quality || quality || ''
+  }
+}
+
+function toOptionalMvResponse(error) {
+  if (isAbortError(error)) {
+    throw error
+  }
+
+  return {}
 }

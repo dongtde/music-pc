@@ -30,66 +30,66 @@ function getNetease(path, params = {}, config = {}) {
   })
 }
 
-export function getPersonalizedMvs(params = {}) {
-  return getNetease('/personalized/mv', params)
+export function getPersonalizedMvs(params = {}, config = {}) {
+  return getNetease('/personalized/mv', params, config)
 }
 
-export function subscribeMv(params = {}) {
-  return getNetease('/mv/sub', params)
+export function subscribeMv(params = {}, config = {}) {
+  return getNetease('/mv/sub', params, config)
 }
 
-export function getSubscribedMvs(params = {}) {
-  return getNetease('/mv/sublist', params)
+export function getSubscribedMvs(params = {}, config = {}) {
+  return getNetease('/mv/sublist', params, config)
 }
 
-export function getMvComments(params = {}) {
-  return getNetease('/comment/mv', params)
+export function getMvComments(params = {}, config = {}) {
+  return getNetease('/comment/mv', params, config)
 }
 
-export function likeResource(params = {}) {
-  return getNetease('/resource/like', params)
+export function likeResource(params = {}, config = {}) {
+  return getNetease('/resource/like', params, config)
 }
 
-export function getSimilarMvs(params = {}) {
-  return getNetease('/simi/mv', params)
+export function getSimilarMvs(params = {}, config = {}) {
+  return getNetease('/simi/mv', params, config)
 }
 
-export function getAllMvs(params = {}) {
-  return getNetease('/mv/all', params)
+export function getAllMvs(params = {}, config = {}) {
+  return getNetease('/mv/all', params, config)
 }
 
-export function getFirstMvs(params = {}) {
-  return getNetease('/mv/first', params)
+export function getFirstMvs(params = {}, config = {}) {
+  return getNetease('/mv/first', params, config)
 }
 
-export function getExclusiveMvs(params = {}) {
-  return getNetease('/mv/exclusive/rcmd', params)
+export function getExclusiveMvs(params = {}, config = {}) {
+  return getNetease('/mv/exclusive/rcmd', params, config)
 }
 
-export function getTopMvs(params = {}) {
-  return getNetease('/top/mv', params)
+export function getTopMvs(params = {}, config = {}) {
+  return getNetease('/top/mv', params, config)
 }
 
-export function getMvDetail(params = {}) {
-  return getNetease('/mv/detail', params)
+export function getMvDetail(params = {}, config = {}) {
+  return getNetease('/mv/detail', params, config)
 }
 
-export function getMvDetailInfo(params = {}) {
-  return getNetease('/mv/detail/info', params)
+export function getMvDetailInfo(params = {}, config = {}) {
+  return getNetease('/mv/detail/info', params, config)
 }
 
-export function getMvUrl(params = {}) {
-  return getNetease('/mv/url', params)
+export function getMvUrl(params = {}, config = {}) {
+  return getNetease('/mv/url', params, config)
 }
 
-export function getFollowArtistNewMvs(params = {}) {
-  return getNetease('/artist/new/mv', params)
+export function getFollowArtistNewMvs(params = {}, config = {}) {
+  return getNetease('/artist/new/mv', params, config)
 }
 
-export function getArtistMvs(params = {}) {
-  return getNetease('/artist/mv', params)
+export function getArtistMvs(params = {}, config = {}) {
+  return getNetease('/artist/mv', params, config)
 }
 
-export function getUgcMv(params = {}) {
-  return getNetease('/ugc/mv/get', params)
+export function getUgcMv(params = {}, config = {}) {
+  return getNetease('/ugc/mv/get', params, config)
 }

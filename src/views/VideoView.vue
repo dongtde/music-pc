@@ -3,11 +3,11 @@
     ref="viewRoot"
     class="view mv-view"
     :class="{ 'mv-view--watch': isWatchMode }"
-    @scroll.passive="handleBrowseScroll"
+    @scroll.passive="handleViewScroll"
   >
     <template v-if="isWatchMode">
       <section ref="playerSection" class="mv-watch">
-        <div ref="playerStage" class="mv-watch__stage" @mousemove="showControls" @mouseleave="hideControlsSoon">
+        <div ref="playerStage" class="mv-watch__stage" @pointermove="handleStagePointerMove" @pointerleave="hideControlsSoon">
           <video
             v-if="activeVideoUrl"
             :key="`${activeMv.id}-${activeMv.urlQuality || 'auto'}-${activeVideoUrl}`"
@@ -54,6 +54,29 @@
           <div v-if="!activeMv" class="mv-watch__empty">
             <Video :size="48" />
             <span>{{ loading ? '正在加载 MV' : '暂无可播放 MV' }}</span>
+          </div>
+
+          <div v-if="videoRecoveryVisible" class="mv-watch__recovery" role="alert">
+            <strong>{{ videoState.error }}</strong>
+            <span>可以重新获取播放地址，或者换一个清晰度继续。</span>
+            <div>
+              <button type="button" :disabled="loading" @click.stop="retryActiveMvPlayback">
+                <RefreshCw :size="16" :class="{ 'mv-spin': loading }" />
+                <span>重新获取</span>
+              </button>
+              <button
+                v-if="recoveryQuality"
+                type="button"
+                :disabled="loading"
+                @click.stop="selectQuality(recoveryQuality, { autoplay: true })"
+              >
+                <span>切到 {{ recoveryQuality }}P</span>
+              </button>
+              <button type="button" :disabled="!activeVideoUrl" @click.stop="openActiveVideoExternally">
+                <ExternalLink :size="16" />
+                <span>外部打开</span>
+              </button>
+            </div>
           </div>
 
           <DanmakuLayer
@@ -326,22 +349,38 @@
         <div v-if="filteredLoading && !filteredMvs.length" class="mv-grid mv-grid--skeleton">
           <span v-for="item in 12" :key="item" class="mv-card-skeleton" />
         </div>
-        <div v-else-if="filteredMvs.length" class="mv-grid">
-          <button
-            v-for="mv in filteredMvs"
-            :key="`all-${mv.id}`"
-            class="mv-video-card"
-            type="button"
-            @click="selectMv(mv, { autoplay: true })"
+        <div
+          v-else-if="filteredMvs.length"
+          ref="filteredVirtualList"
+          class="mv-grid-virtual"
+          :style="{ height: `${filteredVirtualTotalHeight}px` }"
+        >
+          <div
+            class="mv-grid-virtual__window"
+            :style="{ transform: `translateY(${filteredVirtualOffsetY}px)` }"
           >
-            <span class="mv-video-card__cover">
-              <img v-if="mv.coverUrl" :src="mv.coverUrl" :alt="mv.title" loading="lazy" decoding="async" />
-              <span class="mv-video-card__count"><Video :size="12" />{{ mv.playCount }}</span>
-              <span class="mv-video-card__play"><Play :size="17" fill="currentColor" /></span>
-            </span>
-            <strong>{{ mv.title }}</strong>
-            <small>{{ mv.artist }}</small>
-          </button>
+            <div
+              v-for="row in visibleFilteredMvRows"
+              :key="row.key"
+              class="mv-grid mv-grid--virtual-row"
+            >
+              <button
+                v-for="mv in row.items"
+                :key="`all-${mv.id}`"
+                class="mv-video-card"
+                type="button"
+                @click="selectMv(mv, { autoplay: true })"
+              >
+                <span class="mv-video-card__cover">
+                  <img v-if="mv.coverUrl" :src="mv.coverUrl" :alt="mv.title" loading="lazy" decoding="async" />
+                  <span class="mv-video-card__count"><Video :size="12" />{{ mv.playCount }}</span>
+                  <span class="mv-video-card__play"><Play :size="17" fill="currentColor" /></span>
+                </span>
+                <strong>{{ mv.title }}</strong>
+                <small>{{ mv.artist }}</small>
+              </button>
+            </div>
+          </div>
         </div>
         <div v-else class="mv-state">暂无 MV 数据，换个筛选条件试试。</div>
 
@@ -349,7 +388,7 @@
           <LoaderCircle :size="17" class="mv-spin" />
           <span>加载中</span>
         </div>
-        <div v-else-if="filteredMore" class="mv-library__sentinel" aria-hidden="true" />
+        <div v-else-if="filteredMore" ref="filteredLoadMoreTrigger" class="mv-library__sentinel" aria-hidden="true" />
         </section>
       </template>
     </template>
@@ -370,14 +409,15 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { computed, nextTick, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch } from 'vue'
+import { RouterLink, onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import {
   Bookmark,
   ChevronLeft,
   ChevronRight,
   Download,
+  ExternalLink,
   Heart,
   LoaderCircle,
   Maximize,
@@ -396,16 +436,21 @@ import {
 } from 'lucide-vue-next'
 import CommentModal from '../components/CommentModal.vue'
 import DanmakuLayer from '../components/DanmakuLayer.vue'
+import { useLoadMoreTrigger } from '../composables/useLoadMoreTrigger'
+import { useVirtualRows } from '../composables/useVirtualRows'
 import {
   getFilteredMvsData,
   getMvCommentsData,
   getMvPlaybackData,
+  getMvPlaybackUrlData,
   getVideoCenterData,
   toggleMvLikeData,
   toggleMvSubscribeData
 } from '../services/netease'
 import { useAuthStore } from '../stores/auth'
 import { usePlayerStore } from '../stores/player'
+import { createLruCache } from '../utils/lruCache'
+import { isAbortError } from '../utils/request'
 import { parseDuration } from '../utils/time'
 import '../styles/mv.css'
 
@@ -427,6 +472,8 @@ const viewRoot = ref(null)
 const playerSection = ref(null)
 const playerStage = ref(null)
 const videoElement = ref(null)
+const filteredLoadMoreTrigger = ref(null)
+const filteredVirtualList = ref(null)
 const activeBrowseTab = ref('recommend')
 const loading = ref(false)
 const filteredLoading = ref(false)
@@ -450,6 +497,8 @@ const artistMvs = ref([])
 const filteredTotal = ref(0)
 const filteredMore = ref(false)
 const filteredOffset = ref(0)
+const filteredGridColumns = ref(getFilteredGridColumnCount())
+const filteredGridRowHeight = ref(FILTERED_GRID_DEFAULT_ROW_HEIGHT)
 const filters = reactive({
   area: '全部',
   type: '全部',
@@ -462,6 +511,7 @@ const videoState = reactive({
   duration: 0,
   durationText: '--:--',
   error: '',
+  recoverable: false,
   volume: 1,
   muted: false
 })
@@ -487,8 +537,30 @@ const danmakuCommentState = reactive({
 })
 
 let controlsTimer = null
+let controlsHideRefreshAt = 0
 let danmakuCommentRequestId = 0
-const danmakuCommentLimit = 80
+let bootRequestId = 0
+let bootRequestController = null
+let filteredRequestId = 0
+let filteredRequestController = null
+let playbackRequestId = 0
+let playbackRequestController = null
+let qualityRequestId = 0
+let qualityRequestController = null
+let filteredGridMetricsFrame = 0
+let nextMvPrefetchTimer = 0
+let nextMvPrefetchController = null
+let nextMvPrefetchKey = ''
+const nextMvPlaybackUrlCache = createLruCache(8)
+const DANMAKU_COMMENT_PAGE_SIZE = 24
+const CONTROLS_HIDE_DELAY_MS = 2200
+const CONTROLS_HIDE_REFRESH_INTERVAL_MS = 350
+const FILTERED_GRID_DEFAULT_ROW_HEIGHT = 230
+const FILTERED_GRID_COLUMN_GAP = 18
+const FILTERED_GRID_ROW_GAP = 28
+const FILTERED_GRID_OVERSCAN_ROWS = 4
+const FILTERED_GRID_FALLBACK_ROWS = 8
+const NEXT_MV_PREFETCH_DELAY_MS = 700
 
 const activeMv = computed(() => activePayload.value?.mv ?? null)
 const activeVideoUrl = computed(() => normalizePlayableUrl(activeMv.value?.url))
@@ -534,6 +606,21 @@ const playbackQueue = computed(() =>
     ...artistMvs.value
   ])
 )
+const nextPlaybackCandidate = computed(() => {
+  const queue = playbackQueue.value
+
+  if (!activeMv.value?.id || queue.length < 2) {
+    return null
+  }
+
+  const currentIndex = queue.findIndex((mv) => String(mv.id) === String(activeMv.value.id))
+
+  if (currentIndex < 0) {
+    return null
+  }
+
+  return queue[(currentIndex + 1) % queue.length] ?? null
+})
 const qualityOptions = computed(() => {
   const values = extractQualityValues(activeMv.value?.brs)
   const currentQuality = Number(activeMv.value?.urlQuality)
@@ -543,6 +630,47 @@ const qualityOptions = computed(() => {
   }
 
   return [...new Set(values.filter(Boolean))].sort((current, next) => next - current)
+})
+const recoveryQuality = computed(() => {
+  const currentQuality = Number(activeMv.value?.urlQuality)
+  const qualities = qualityOptions.value.map(Number).filter((quality) => Number.isFinite(quality) && quality > 0)
+
+  if (!qualities.length) {
+    return null
+  }
+
+  const lowerQuality = qualities.find((quality) => quality < currentQuality)
+  return lowerQuality ?? qualities.find((quality) => quality !== currentQuality) ?? null
+})
+const videoRecoveryVisible = computed(() =>
+  Boolean(activeMv.value && videoState.error && videoState.recoverable)
+)
+const filteredGridRows = computed(() => createMvGridRows(filteredMvs.value, filteredGridColumns.value))
+const {
+  offsetY: filteredVirtualOffsetY,
+  scheduleRangeUpdate: scheduleFilteredVirtualRangeUpdate,
+  totalHeight: filteredVirtualTotalHeight,
+  updateRange: updateFilteredVirtualRange,
+  visibleItems: visibleFilteredMvRows
+} = useVirtualRows(filteredGridRows, {
+  root: viewRoot,
+  list: filteredVirtualList,
+  rowHeight: filteredGridRowHeight,
+  overscan: FILTERED_GRID_OVERSCAN_ROWS,
+  fallbackCount: FILTERED_GRID_FALLBACK_ROWS
+})
+const filteredLoadMoreController = useLoadMoreTrigger({
+  trigger: filteredLoadMoreTrigger,
+  canLoad: () =>
+    activeBrowseTab.value === 'library' &&
+    !isWatchMode.value &&
+    !filteredLoading.value &&
+    filteredMore.value,
+  loadMore: () => loadFiltered(),
+  getRoot: () => viewRoot.value,
+  rootMargin: '420px 0px 420px',
+  scrollThreshold: 320,
+  threshold: 0
 })
 const playbackStatusText = computed(() => {
   if (loading.value) {
@@ -561,11 +689,28 @@ const playbackStatusText = computed(() => {
 })
 
 onMounted(() => {
+  window.addEventListener('resize', scheduleFilteredGridMetrics, { passive: true })
+  scheduleFilteredGridMetrics()
   loadBootData()
 })
 
 onBeforeUnmount(() => {
-  pauseActiveVideo()
+  window.removeEventListener('resize', scheduleFilteredGridMetrics)
+  cancelFilteredGridMetricsFrame()
+  cancelPendingMvRequests()
+  releaseActiveVideo()
+  clearControlsTimer()
+})
+
+onDeactivated(() => {
+  cancelPendingMvRequests()
+  releaseActiveVideo()
+  clearControlsTimer()
+})
+
+onBeforeRouteLeave(() => {
+  cancelPendingMvRequests()
+  releaseActiveVideo()
   clearControlsTimer()
 })
 
@@ -578,7 +723,9 @@ watch(
     }
 
     if (!id) {
-      pauseActiveVideo()
+      cancelPlaybackRequest()
+      cancelQualityRequest()
+      releaseActiveVideo()
       resetVideoState()
     }
   }
@@ -590,10 +737,202 @@ watch(activeBrowseTab, async (tab) => {
   }
 
   await nextTick()
-  maybeLoadMoreFiltered()
+  filteredLoadMoreController.setup()
+  scheduleFilteredGridMetrics()
 })
 
+watch(
+  () => [nextPlaybackCandidate.value?.id, activeMv.value?.urlQuality],
+  () => {
+    scheduleNextMvPrefetch()
+  },
+  { flush: 'post' }
+)
+
+function handleViewScroll() {
+  scheduleFilteredVirtualRangeUpdate()
+}
+
+function scheduleFilteredGridMetrics() {
+  if (filteredGridMetricsFrame || typeof window === 'undefined') {
+    return
+  }
+
+  filteredGridMetricsFrame = window.requestAnimationFrame(() => {
+    filteredGridMetricsFrame = 0
+    updateFilteredGridMetrics()
+  })
+}
+
+function cancelFilteredGridMetricsFrame() {
+  if (!filteredGridMetricsFrame || typeof window === 'undefined') {
+    return
+  }
+
+  window.cancelAnimationFrame(filteredGridMetricsFrame)
+  filteredGridMetricsFrame = 0
+}
+
+function updateFilteredGridMetrics() {
+  const nextColumns = getFilteredGridColumnCount()
+  const columnsChanged = nextColumns !== filteredGridColumns.value
+  filteredGridColumns.value = nextColumns
+
+  const firstRow = filteredVirtualList.value?.querySelector('.mv-grid--virtual-row')
+  const measuredHeight = columnsChanged || !firstRow
+    ? getEstimatedFilteredGridRowHeight()
+    : getElementOuterHeight(firstRow)
+
+  if (measuredHeight > 0 && Math.abs(measuredHeight - filteredGridRowHeight.value) > 1) {
+    filteredGridRowHeight.value = measuredHeight
+  }
+
+  updateFilteredVirtualRange()
+
+  if (columnsChanged) {
+    nextTick(scheduleFilteredGridMetrics)
+  }
+}
+
+function scheduleNextMvPrefetch() {
+  const candidate = nextPlaybackCandidate.value
+  const quality = getPreferredMvPlaybackQuality()
+  const key = getMvPlaybackPrefetchKey(candidate?.id, quality)
+
+  if (!candidate?.id || !key) {
+    cancelNextMvPrefetch()
+    return
+  }
+
+  if (nextMvPlaybackUrlCache.has(key)) {
+    if (nextMvPrefetchKey && nextMvPrefetchKey !== key) {
+      cancelNextMvPrefetch()
+    }
+    return
+  }
+
+  if (nextMvPrefetchKey === key) {
+    return
+  }
+
+  cancelNextMvPrefetch()
+
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  nextMvPrefetchKey = key
+  nextMvPrefetchTimer = window.setTimeout(() => {
+    nextMvPrefetchTimer = 0
+    prefetchNextMvPlayback(candidate, quality, key)
+  }, NEXT_MV_PREFETCH_DELAY_MS)
+}
+
+function cancelNextMvPrefetch() {
+  if (nextMvPrefetchTimer && typeof window !== 'undefined') {
+    window.clearTimeout(nextMvPrefetchTimer)
+    nextMvPrefetchTimer = 0
+  }
+
+  if (nextMvPrefetchController) {
+    nextMvPrefetchController.abort()
+    nextMvPrefetchController = null
+  }
+
+  nextMvPrefetchKey = ''
+}
+
+async function prefetchNextMvPlayback(candidate, quality, key) {
+  if (!candidate?.id || !key || nextMvPlaybackUrlCache.has(key)) {
+    nextMvPrefetchKey = ''
+    return
+  }
+
+  const controller = new AbortController()
+  nextMvPrefetchController = controller
+
+  try {
+    const playbackUrl = await getMvPlaybackUrlData(candidate.id, quality, candidate, {
+      signal: controller.signal
+    })
+
+    if (!controller.signal.aborted && playbackUrl?.url) {
+      nextMvPlaybackUrlCache.set(key, playbackUrl)
+      prefetchMvPoster(candidate.coverUrl)
+    }
+  } catch (error) {
+    if (!isAbortError(error)) {
+      console.debug('Failed to prefetch next MV playback:', error)
+    }
+  } finally {
+    if (nextMvPrefetchController === controller) {
+      nextMvPrefetchController = null
+    }
+
+    if (nextMvPrefetchKey === key) {
+      nextMvPrefetchKey = ''
+    }
+  }
+}
+
+function cancelPendingMvRequests() {
+  cancelBootRequest()
+  cancelFilteredRequest()
+  cancelPlaybackRequest()
+  cancelQualityRequest()
+  cancelNextMvPrefetch()
+  danmakuCommentRequestId += 1
+}
+
+function cancelBootRequest() {
+  bootRequestId += 1
+
+  if (bootRequestController) {
+    bootRequestController.abort()
+    bootRequestController = null
+  }
+
+  loading.value = false
+}
+
+function cancelFilteredRequest() {
+  filteredRequestId += 1
+
+  if (filteredRequestController) {
+    filteredRequestController.abort()
+    filteredRequestController = null
+  }
+
+  filteredLoading.value = false
+}
+
+function cancelPlaybackRequest() {
+  playbackRequestId += 1
+
+  if (playbackRequestController) {
+    playbackRequestController.abort()
+    playbackRequestController = null
+  }
+
+  loading.value = false
+}
+
+function cancelQualityRequest() {
+  qualityRequestId += 1
+
+  if (qualityRequestController) {
+    qualityRequestController.abort()
+    qualityRequestController = null
+  }
+
+  loading.value = false
+}
+
 async function loadBootData() {
+  cancelBootRequest()
+  const requestId = ++bootRequestId
+  const controller = new AbortController()
+  bootRequestController = controller
   loading.value = true
   errorMessage.value = ''
 
@@ -604,7 +943,13 @@ async function loadBootData() {
       order: filters.order,
       limit: PAGE_SIZE,
       offset: 0
+    }, {
+      signal: controller.signal
     })
+
+    if (requestId !== bootRequestId || controller.signal.aborted) {
+      return
+    }
 
     recommendedMvs.value = data.recommended
     firstMvs.value = data.first
@@ -616,6 +961,8 @@ async function loadBootData() {
     filteredTotal.value = data.total
     filteredMore.value = data.more
     filteredOffset.value = data.all.length
+    await nextTick()
+    scheduleFilteredGridMetrics()
 
     const routeMvId = route.query.mvId
     if (routeMvId) {
@@ -624,11 +971,21 @@ async function loadBootData() {
       setActivePayload(data.active)
     }
   } catch (error) {
+    if (isAbortError(error) || requestId !== bootRequestId) {
+      return
+    }
+
     console.warn('Failed to load MV center:', error)
     errorMessage.value = error?.message || 'MV 内容加载失败'
     message.error(errorMessage.value)
   } finally {
-    loading.value = false
+    if (requestId === bootRequestId && !controller.signal.aborted) {
+      loading.value = false
+    }
+
+    if (bootRequestController === controller) {
+      bootRequestController = null
+    }
   }
 }
 
@@ -646,8 +1003,11 @@ function openMore(tab) {
 }
 
 async function reloadFiltered() {
+  filteredLoadMoreController.cleanup()
+  cancelFilteredRequest()
   filteredOffset.value = 0
   filteredMvs.value = []
+  updateFilteredVirtualRange()
   await loadFiltered({ reset: true })
 }
 
@@ -656,6 +1016,10 @@ async function loadFiltered({ reset = false } = {}) {
     return
   }
 
+  const requestId = ++filteredRequestId
+  const controller = new AbortController()
+  filteredRequestController = controller
+  const requestOffset = reset ? 0 : filteredOffset.value
   filteredLoading.value = true
 
   try {
@@ -664,42 +1028,41 @@ async function loadFiltered({ reset = false } = {}) {
       type: filters.type,
       order: filters.order,
       limit: PAGE_SIZE,
-      offset: reset ? 0 : filteredOffset.value
+      offset: requestOffset
+    }, {
+      signal: controller.signal
     })
-    const requestOffset = reset ? 0 : filteredOffset.value
+
+    if (requestId !== filteredRequestId || controller.signal.aborted) {
+      return
+    }
+
     filteredMvs.value = reset ? data.items : uniqueMvs([...filteredMvs.value, ...data.items])
     filteredTotal.value = data.total
     filteredMore.value = Boolean(data.more && data.items.length)
     filteredOffset.value = requestOffset + data.items.length
+    await nextTick()
+    scheduleFilteredGridMetrics()
   } catch (error) {
+    if (isAbortError(error) || requestId !== filteredRequestId) {
+      return
+    }
+
     console.warn('Failed to load filtered MVs:', error)
     message.error(error?.message || '筛选 MV 加载失败')
   } finally {
-    filteredLoading.value = false
+    if (requestId === filteredRequestId && !controller.signal.aborted) {
+      filteredLoading.value = false
+    }
+
+    if (filteredRequestController === controller) {
+      filteredRequestController = null
+    }
   }
 
-  if (activeBrowseTab.value === 'library') {
+  if (requestId === filteredRequestId && !controller.signal.aborted && activeBrowseTab.value === 'library') {
     await nextTick()
-    maybeLoadMoreFiltered()
-  }
-}
-
-function handleBrowseScroll(event) {
-  if (activeBrowseTab.value !== 'library' || isWatchMode.value) {
-    return
-  }
-
-  maybeLoadMoreFiltered(event.currentTarget)
-}
-
-function maybeLoadMoreFiltered(container = viewRoot.value) {
-  if (!container || filteredLoading.value || !filteredMore.value) {
-    return
-  }
-
-  const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight
-  if (distanceToBottom <= 280) {
-    loadFiltered()
+    filteredLoadMoreController.setup()
   }
 }
 
@@ -709,14 +1072,28 @@ async function selectMv(mv, options = {}) {
     return
   }
 
+  cancelPlaybackRequest()
+  cancelQualityRequest()
+  const requestId = ++playbackRequestId
+  const controller = new AbortController()
+  playbackRequestController = controller
   loading.value = true
   errorMessage.value = ''
+  releaseActiveVideo()
   resetVideoState()
-  pauseActiveVideo()
   shouldPlayAfterLoad.value = Boolean(options.autoplay)
 
   try {
-    const data = await getMvPlaybackData(id, options.quality)
+    const quality = options.quality || 1080
+    const prefetchedPlaybackUrl = getCachedMvPlaybackUrl(id, quality)
+    const data = await getMvPlaybackData(id, quality, {
+      signal: controller.signal
+    }, prefetchedPlaybackUrl)
+
+    if (requestId !== playbackRequestId || controller.signal.aborted) {
+      return
+    }
+
     setActivePayload(data)
     if (!options.replace) {
       router.replace({ name: 'video', query: { mvId: id } })
@@ -730,11 +1107,21 @@ async function selectMv(mv, options = {}) {
       await playActiveMv({ skipScroll: true })
     }
   } catch (error) {
+    if (isAbortError(error) || requestId !== playbackRequestId) {
+      return
+    }
+
     console.warn('Failed to load MV playback:', error)
     errorMessage.value = error?.message || 'MV 播放信息加载失败'
     message.error(errorMessage.value)
   } finally {
-    loading.value = false
+    if (requestId === playbackRequestId && !controller.signal.aborted) {
+      loading.value = false
+    }
+
+    if (playbackRequestController === controller) {
+      playbackRequestController = null
+    }
   }
 }
 
@@ -770,6 +1157,7 @@ async function playActiveMv({ skipScroll = false } = {}) {
   }
 
   videoState.error = ''
+  videoState.recoverable = false
   shouldPlayAfterLoad.value = true
 
   if (!activeVideoUrl.value) {
@@ -795,6 +1183,7 @@ async function playActiveMv({ skipScroll = false } = {}) {
   } catch (error) {
     console.warn('Failed to play MV:', error)
     videoState.error = '浏览器阻止自动播放，请点击播放'
+    videoState.recoverable = false
     return false
   }
 }
@@ -805,23 +1194,115 @@ async function reloadActiveMv(options = {}) {
   }
 }
 
-async function selectQuality(quality) {
+async function retryActiveMvPlayback() {
+  const quality = Number(activeMv.value?.urlQuality) || Number(qualityOptions.value[0]) || 1080
+  await applyActiveMvPlaybackUrl({
+    quality,
+    autoplay: true,
+    resumeAt: videoState.currentTime,
+    failureMessage: '播放地址刷新失败'
+  })
+}
+
+async function selectQuality(quality, options = {}) {
   qualityMenuVisible.value = false
-  if (!activeMv.value?.id || Number(activeMv.value.urlQuality) === Number(quality)) {
+  if (!activeMv.value?.id || (!options.force && Number(activeMv.value.urlQuality) === Number(quality))) {
     return
   }
 
-  const wasPlaying = videoState.isPlaying
-  const resumeAt = videoState.currentTime
-  await selectMv(activeMv.value, { replace: true, silent: true, autoplay: false, quality })
-  await nextTick()
+  await applyActiveMvPlaybackUrl({
+    quality,
+    autoplay: options.autoplay ?? videoState.isPlaying,
+    resumeAt: options.resumeAt ?? videoState.currentTime,
+    failureMessage: '清晰度切换失败'
+  })
+}
 
-  if (videoElement.value && resumeAt > 0) {
-    videoElement.value.currentTime = resumeAt
+async function applyActiveMvPlaybackUrl({
+  quality = 1080,
+  autoplay = false,
+  resumeAt = 0,
+  failureMessage = '播放地址加载失败'
+} = {}) {
+  if (!activeMv.value?.id) {
+    return false
   }
 
-  if (wasPlaying) {
-    await playActiveMv({ skipScroll: true })
+  cancelQualityRequest()
+  const requestId = ++qualityRequestId
+  const controller = new AbortController()
+  qualityRequestController = controller
+  const currentMv = activeMv.value
+  loading.value = true
+  videoState.error = ''
+  videoState.recoverable = false
+
+  try {
+    const playbackUrl = await getMvPlaybackUrlData(currentMv.id, quality, currentMv, {
+      signal: controller.signal
+    })
+
+    if (
+      requestId !== qualityRequestId ||
+      controller.signal.aborted ||
+      String(activeMv.value?.id ?? '') !== String(currentMv.id)
+    ) {
+      return
+    }
+
+    releaseActiveVideo()
+    resetVideoState()
+    activePayload.value = {
+      ...activePayload.value,
+      mv: {
+        ...currentMv,
+        url: playbackUrl.url,
+        urlQuality: playbackUrl.quality
+      }
+    }
+
+    await nextTick()
+
+    if (videoElement.value && resumeAt > 0) {
+      videoElement.value.currentTime = resumeAt
+      videoState.currentTime = resumeAt
+    }
+
+    if (autoplay) {
+      await playActiveMv({ skipScroll: true })
+    }
+
+    return true
+  } catch (error) {
+    if (isAbortError(error) || requestId !== qualityRequestId) {
+      return false
+    }
+
+    console.warn('Failed to refresh MV playback url:', error)
+    videoState.error = failureMessage
+    videoState.recoverable = true
+    message.error(error?.message || failureMessage)
+    return false
+  } finally {
+    if (requestId === qualityRequestId && !controller.signal.aborted) {
+      loading.value = false
+    }
+
+    if (qualityRequestController === controller) {
+      qualityRequestController = null
+    }
+  }
+}
+
+function openActiveVideoExternally() {
+  if (!activeVideoUrl.value) {
+    return
+  }
+
+  const opened = window.open(activeVideoUrl.value, '_blank', 'noopener,noreferrer')
+
+  if (!opened) {
+    message.warning('外部窗口打开失败，可以先下载或复制页面链接')
   }
 }
 
@@ -833,6 +1314,29 @@ function pauseActiveVideo() {
   videoState.isPlaying = false
 }
 
+function releaseActiveVideo() {
+  const video = videoElement.value
+  shouldPlayAfterLoad.value = false
+
+  if (!video) {
+    videoState.isPlaying = false
+    return
+  }
+
+  if (typeof document !== 'undefined' && document.pictureInPictureElement === video) {
+    document.exitPictureInPicture().catch(() => {})
+  }
+
+  if (!video.paused) {
+    video.pause()
+  }
+
+  video.removeAttribute('src')
+  video.load()
+  videoState.isPlaying = false
+  videoState.isReady = false
+}
+
 function playRelativeMv(offset) {
   const queue = playbackQueue.value
   if (!queue.length) {
@@ -841,7 +1345,7 @@ function playRelativeMv(offset) {
 
   const currentIndex = Math.max(0, queue.findIndex((mv) => String(mv.id) === String(activeMv.value?.id)))
   const nextIndex = (currentIndex + offset + queue.length) % queue.length
-  selectMv(queue[nextIndex], { autoplay: true })
+  selectMv(queue[nextIndex], { autoplay: true, quality: getPreferredMvPlaybackQuality() })
 }
 
 function handleVideoMetadata(event) {
@@ -864,6 +1368,7 @@ function handleVideoTimeUpdate(event) {
 function handleVideoPlay() {
   videoState.isPlaying = true
   videoState.error = ''
+  videoState.recoverable = false
   if (player.state.isPlaying) {
     player.togglePlay()
   }
@@ -880,9 +1385,14 @@ function handleVideoEnded() {
   playRelativeMv(1)
 }
 
-function handleVideoError() {
+function handleVideoError(event) {
+  if (event?.target && !event.target.currentSrc && !event.target.src) {
+    return
+  }
+
   videoState.isPlaying = false
-  videoState.error = '视频播放失败'
+  videoState.error = getVideoElementErrorMessage(event?.target?.error)
+  videoState.recoverable = true
   showControls()
 }
 
@@ -966,19 +1476,31 @@ async function toggleFullscreen() {
   }
 }
 
-function showControls() {
-  controlsVisible.value = true
-  hideControlsSoon()
+function handleStagePointerMove() {
+  showControls({ throttle: true })
 }
 
-function hideControlsSoon() {
+function showControls({ throttle = false } = {}) {
+  const now = Date.now()
+  controlsVisible.value = true
+
+  if (throttle && now - controlsHideRefreshAt < CONTROLS_HIDE_REFRESH_INTERVAL_MS) {
+    return
+  }
+
+  hideControlsSoon(now)
+}
+
+function hideControlsSoon(refreshAt = Date.now()) {
+  const requestedAt = typeof refreshAt === 'number' ? refreshAt : Date.now()
   clearControlsTimer()
   if (!videoState.isPlaying) {
     return
   }
+  controlsHideRefreshAt = requestedAt
   controlsTimer = window.setTimeout(() => {
     controlsVisible.value = false
-  }, 2200)
+  }, CONTROLS_HIDE_DELAY_MS)
 }
 
 function clearControlsTimer() {
@@ -986,10 +1508,12 @@ function clearControlsTimer() {
     window.clearTimeout(controlsTimer)
     controlsTimer = null
   }
+  controlsHideRefreshAt = 0
 }
 
 function backToBrowse() {
-  pauseActiveVideo()
+  releaseActiveVideo()
+  resetVideoState()
   router.replace({ name: 'video' })
 }
 
@@ -1149,7 +1673,7 @@ async function loadMoreDanmakuComments() {
   try {
     const data = await getMvCommentsData({
       id,
-      limit: danmakuCommentLimit,
+      limit: DANMAKU_COMMENT_PAGE_SIZE,
       offset: danmakuCommentState.offset
     })
 
@@ -1182,6 +1706,7 @@ function resetVideoState() {
   videoState.duration = 0
   videoState.durationText = '--:--'
   videoState.error = ''
+  videoState.recoverable = false
   controlsVisible.value = true
 }
 
@@ -1219,6 +1744,101 @@ function normalizePlayableUrl(url) {
   }
 
   return value.startsWith('//') ? `https:${value}` : value
+}
+
+function getPreferredMvPlaybackQuality() {
+  return Number(activeMv.value?.urlQuality) || Number(qualityOptions.value[0]) || 1080
+}
+
+function getMvPlaybackPrefetchKey(id, quality = 1080) {
+  const normalizedId = String(id ?? '')
+
+  if (!normalizedId) {
+    return ''
+  }
+
+  return `${normalizedId}:${Number(quality) || 1080}`
+}
+
+function getCachedMvPlaybackUrl(id, quality = 1080) {
+  return nextMvPlaybackUrlCache.get(getMvPlaybackPrefetchKey(id, quality)) ?? null
+}
+
+function prefetchMvPoster(coverUrl) {
+  if (!coverUrl || typeof Image === 'undefined') {
+    return
+  }
+
+  const image = new Image()
+  image.decoding = 'async'
+  image.src = coverUrl
+}
+
+function getVideoElementErrorMessage(error) {
+  switch (error?.code) {
+    case 2:
+      return '视频网络加载失败'
+    case 3:
+      return '视频解码失败'
+    case 4:
+      return '当前播放地址不可用'
+    case 1:
+      return '视频加载已中断'
+    default:
+      return '视频播放失败'
+  }
+}
+
+function createMvGridRows(items = [], columns = 1) {
+  const normalizedColumns = Math.max(1, Number(columns) || 1)
+  const rows = []
+
+  for (let index = 0; index < items.length; index += normalizedColumns) {
+    const rowItems = items.slice(index, index + normalizedColumns)
+    rows.push({
+      key: rowItems.map((item) => item.id).join('-') || `mv-row-${index}`,
+      items: rowItems
+    })
+  }
+
+  return rows
+}
+
+function getFilteredGridColumnCount() {
+  if (typeof window === 'undefined') {
+    return 5
+  }
+
+  if (window.innerWidth <= 1240) {
+    return 3
+  }
+
+  if (window.innerWidth <= 1500) {
+    return 4
+  }
+
+  return 5
+}
+
+function getEstimatedFilteredGridRowHeight() {
+  const listWidth = filteredVirtualList.value?.clientWidth || viewRoot.value?.clientWidth || 0
+  const columns = Math.max(1, filteredGridColumns.value)
+
+  if (!listWidth) {
+    return FILTERED_GRID_DEFAULT_ROW_HEIGHT
+  }
+
+  const cardWidth = (listWidth - FILTERED_GRID_COLUMN_GAP * (columns - 1)) / columns
+  const coverHeight = Math.max(0, cardWidth) * 9 / 16
+
+  return Math.ceil(coverHeight + 42 + FILTERED_GRID_ROW_GAP)
+}
+
+function getElementOuterHeight(element) {
+  const styles = window.getComputedStyle(element)
+  const marginBottom = Number.parseFloat(styles.marginBottom) || 0
+
+  return Math.ceil(element.getBoundingClientRect().height + marginBottom)
 }
 
 function uniqueMvs(items = []) {

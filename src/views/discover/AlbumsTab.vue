@@ -134,16 +134,19 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Disc3, Play } from 'lucide-vue-next'
 import SectionTitle from '../../components/SectionTitle.vue'
 import { useLoadMoreTrigger } from '../../composables/useLoadMoreTrigger'
 import { getAlbumsDiscoveryData } from '../../services/netease'
+import { createLruCache } from '../../utils/lruCache'
+import { isAbortError } from '../../utils/request'
 
-const ALBUM_LIMIT = 36
-const ALBUM_SKELETON_COUNT = 18
+const ALBUM_LIMIT = 24
+const ALBUM_SKELETON_COUNT = 12
 const ALBUM_RANK_SKELETON_COUNT = 10
 const ALBUM_LOAD_MORE_SKELETON_COUNT = 6
+const ALBUM_AREA_CACHE_SIZE = 12
 const albumAreas = [
   { label: '全部', value: 'ALL' },
   { label: '华语', value: 'ZH' },
@@ -163,7 +166,9 @@ const hasMore = ref(false)
 const albumOffset = ref(0)
 const pageRoot = ref(null)
 const loadMoreTrigger = ref(null)
+const albumAreaCache = createLruCache(ALBUM_AREA_CACHE_SIZE)
 let albumRequestId = 0
+let albumRequestController = null
 const loadMoreController = useLoadMoreTrigger({
   trigger: loadMoreTrigger,
   canLoad: () =>
@@ -186,6 +191,10 @@ onMounted(() => {
   loadData({ reset: true })
 })
 
+onBeforeUnmount(() => {
+  cancelAlbumRequest()
+})
+
 function selectArea(area) {
   if (activeArea.value === area) {
     return
@@ -196,7 +205,7 @@ function selectArea(area) {
 }
 
 function reload() {
-  loadData({ reset: true })
+  loadData({ reset: true, force: true })
 }
 
 function loadMore({ force = false } = {}) {
@@ -212,12 +221,67 @@ function loadMore({ force = false } = {}) {
   loadData({ reset: false })
 }
 
-async function loadData({ reset = true } = {}) {
+function cancelAlbumRequest() {
+  albumRequestId += 1
+
+  if (!albumRequestController) {
+    return
+  }
+
+  albumRequestController.abort()
+  albumRequestController = null
+}
+
+function restoreAlbumAreaCache(area) {
+  const cached = albumAreaCache.get(getAlbumAreaCacheKey(area))
+
+  if (!cached) {
+    return false
+  }
+
+  loadMoreController.cleanup()
+  topAlbums.value = Array.isArray(cached.topAlbums) ? cached.topAlbums.slice() : []
+  albums.value = Array.isArray(cached.albums) ? cached.albums.slice() : []
+  total.value = Number(cached.total) || 0
+  albumOffset.value = Number(cached.offset) || albums.value.length
+  hasMore.value = Boolean(cached.hasMore)
+  loading.value = false
+  loadingMore.value = false
+  error.value = null
+  nextTick(loadMoreController.setup)
+  return true
+}
+
+function saveAlbumAreaCache(area) {
+  albumAreaCache.set(getAlbumAreaCacheKey(area), {
+    topAlbums: topAlbums.value.slice(),
+    albums: albums.value.slice(),
+    total: total.value,
+    offset: albumOffset.value,
+    hasMore: hasMore.value
+  })
+}
+
+function getAlbumAreaCacheKey(area) {
+  return `albums:${area}`
+}
+
+async function loadData({ reset = true, force = false } = {}) {
+  const areaSnapshot = activeArea.value
+  cancelAlbumRequest()
+
+  if (reset && !force && restoreAlbumAreaCache(areaSnapshot)) {
+    return
+  }
+
   const requestId = ++albumRequestId
+  const controller = new AbortController()
+  albumRequestController = controller
 
   if (reset) {
     loadMoreController.cleanup()
     loading.value = true
+    loadingMore.value = false
     albums.value = []
     albumOffset.value = 0
     hasMore.value = false
@@ -230,12 +294,14 @@ async function loadData({ reset = true } = {}) {
 
   try {
     const data = await getAlbumsDiscoveryData({
-      area: activeArea.value,
+      area: areaSnapshot,
       limit: ALBUM_LIMIT,
       offset
+    }, {
+      signal: controller.signal
     })
 
-    if (requestId !== albumRequestId) {
+    if (requestId !== albumRequestId || controller.signal.aborted) {
       return
     }
 
@@ -249,18 +315,23 @@ async function loadData({ reset = true } = {}) {
     total.value = data.total
     albumOffset.value = albums.value.length
     hasMore.value = data.more
+    saveAlbumAreaCache(areaSnapshot)
   } catch (loadError) {
-    if (requestId !== albumRequestId) {
+    if (isAbortError(loadError) || requestId !== albumRequestId) {
       return
     }
 
     console.warn('Failed to load albums:', loadError)
     error.value = loadError
   } finally {
-    if (requestId === albumRequestId) {
+    if (requestId === albumRequestId && !controller.signal.aborted) {
       loading.value = false
       loadingMore.value = false
       nextTick(loadMoreController.setup)
+    }
+
+    if (albumRequestController === controller) {
+      albumRequestController = null
     }
   }
 }

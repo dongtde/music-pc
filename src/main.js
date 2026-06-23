@@ -26,6 +26,9 @@ app.component('NMessageProvider', NMessageProvider)
 app.component('NModal', NModal)
 app.component('NTooltip', NTooltip)
 
-app.use(router).mount('#app')
+app.use(router)
 
-registerServiceWorker()
+router.isReady().then(() => {
+  app.mount('#app')
+  registerServiceWorker()
+})

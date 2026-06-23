@@ -1,7 +1,7 @@
 {
-  "name": "mappic-music",
+  "name": "lanyin-music",
   "version": "1.0.0",
-  "description": "Mappic Music desktop app",
+  "description": "澜音 desktop music app",
   "private": true,
   "type": "module",
   "main": "electron/main.cjs",
@@ -35,8 +35,8 @@
     "electron-builder": "^26.15.3"
   },
   "build": {
-    "appId": "com.mappic.music",
-    "productName": "Mappic Music",
+    "appId": "com.lanyin.music",
+    "productName": "澜音",
     "electronDist": "node_modules/electron/dist",
     "directories": {
       "output": "release"

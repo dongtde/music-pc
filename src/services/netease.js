@@ -41,6 +41,7 @@ export {
 export {
   getFilteredMvsData,
   getMvPlaybackData,
+  getMvPlaybackUrlData,
   getVideoCenterData,
   toggleMvLikeData,
   toggleMvSubscribeData

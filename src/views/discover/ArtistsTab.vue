@@ -171,6 +171,7 @@
 import {
   computed,
   nextTick,
+  onBeforeUnmount,
   onMounted,
   reactive,
   ref,
@@ -178,6 +179,8 @@ import {
 import { Mic2 } from 'lucide-vue-next';
 import { useLoadMoreTrigger } from '../../composables/useLoadMoreTrigger';
 import { getArtistsDiscoveryData } from '../../services/netease';
+import { createLruCache } from '../../utils/lruCache';
+import { isAbortError } from '../../utils/request';
 import { waitForMinimumDelay } from '../../utils/time';
 
 const ARTIST_LIMIT = 32;
@@ -185,6 +188,7 @@ const ARTIST_SKELETON_COUNT = 20;
 const ARTIST_RANK_SKELETON_COUNT = 10;
 const ARTIST_LOAD_MORE_SKELETON_COUNT = 8;
 const ARTIST_SKELETON_MIN_MS = 360;
+const ARTIST_FILTER_CACHE_SIZE = 24;
 
 const areaFilters = [
   { label: '全部', value: -1 },
@@ -225,7 +229,9 @@ const loadMoreTrigger = ref(null);
 const hasArtistContent = computed(() =>
   Boolean(artists.value.length || topArtists.value.length),
 );
+const artistFilterCache = createLruCache(ARTIST_FILTER_CACHE_SIZE);
 let artistRequestId = 0;
+let artistRequestController = null;
 const loadMoreController = useLoadMoreTrigger({
   trigger: loadMoreTrigger,
   canLoad: () => !loading.value && !loadingMore.value && hasMore.value && !error.value,
@@ -238,6 +244,10 @@ onMounted(() => {
   loadData({ reset: true });
 });
 
+onBeforeUnmount(() => {
+  cancelArtistRequest();
+});
+
 function setFilter(key, value) {
   if (filters[key] === value) {
     return;
@@ -248,7 +258,7 @@ function setFilter(key, value) {
 }
 
 function reload() {
-  loadData({ reset: true });
+  loadData({ reset: true, force: true });
 }
 
 function loadMore({ force = false } = {}) {
@@ -278,9 +288,75 @@ function getArtistDetails(artist) {
   return details.length ? details.slice(0, 3) : ['暂无更多资料'];
 }
 
-async function loadData({ reset = false } = {}) {
+function cancelArtistRequest() {
+  artistRequestId += 1;
+
+  if (!artistRequestController) {
+    return;
+  }
+
+  artistRequestController.abort();
+  artistRequestController = null;
+}
+
+function getFilterSnapshot() {
+  return {
+    area: filters.area,
+    type: filters.type,
+    initial: filters.initial,
+  };
+}
+
+function getArtistFilterCacheKey(filterState) {
+  return [
+    'artists',
+    filterState.area,
+    filterState.type,
+    filterState.initial,
+  ].join(':');
+}
+
+function restoreArtistFilterCache(filterState) {
+  const cached = artistFilterCache.get(getArtistFilterCacheKey(filterState));
+
+  if (!cached) {
+    return false;
+  }
+
+  loadMoreController.cleanup();
+  artists.value = Array.isArray(cached.artists) ? cached.artists.slice() : [];
+  topArtists.value = Array.isArray(cached.topArtists) ? cached.topArtists.slice() : [];
+  artistsOffset.value = Number(cached.offset) || artists.value.length;
+  hasMore.value = Boolean(cached.hasMore);
+  loading.value = false;
+  loadingMore.value = false;
+  skeletonVisible.value = false;
+  error.value = null;
+  nextTick(loadMoreController.setup);
+  return true;
+}
+
+function saveArtistFilterCache(filterState) {
+  artistFilterCache.set(getArtistFilterCacheKey(filterState), {
+    artists: artists.value.slice(),
+    topArtists: topArtists.value.slice(),
+    offset: artistsOffset.value,
+    hasMore: hasMore.value,
+  });
+}
+
+async function loadData({ reset = false, force = false } = {}) {
   const startedAt = Date.now();
+  const filterSnapshot = getFilterSnapshot();
+  cancelArtistRequest();
+
+  if (reset && !force && restoreArtistFilterCache(filterSnapshot)) {
+    return;
+  }
+
   const requestId = ++artistRequestId;
+  const controller = new AbortController();
+  artistRequestController = controller;
 
   if (reset) {
     loadMoreController.cleanup();
@@ -299,12 +375,14 @@ async function loadData({ reset = false } = {}) {
 
   try {
     const data = await getArtistsDiscoveryData({
-      ...filters,
+      ...filterSnapshot,
       limit: ARTIST_LIMIT,
       offset,
+    }, {
+      signal: controller.signal,
     });
 
-    if (requestId !== artistRequestId) {
+    if (requestId !== artistRequestId || controller.signal.aborted) {
       return;
     }
 
@@ -316,19 +394,20 @@ async function loadData({ reset = false } = {}) {
     topArtists.value = data.topArtists.length
       ? data.topArtists
       : topArtists.value;
+    saveArtistFilterCache(filterSnapshot);
   } catch (loadError) {
-    if (requestId !== artistRequestId) {
+    if (isAbortError(loadError) || requestId !== artistRequestId) {
       return;
     }
 
     console.warn('Failed to load artists:', loadError);
     error.value = loadError;
   } finally {
-    if (requestId === artistRequestId) {
+    if (requestId === artistRequestId && !controller.signal.aborted) {
       if (reset) {
         await waitForMinimumDelay(startedAt, ARTIST_SKELETON_MIN_MS);
 
-        if (requestId !== artistRequestId) {
+        if (requestId !== artistRequestId || controller.signal.aborted) {
           return;
         }
 
@@ -338,6 +417,10 @@ async function loadData({ reset = false } = {}) {
       loading.value = false;
       loadingMore.value = false;
       nextTick(loadMoreController.setup);
+    }
+
+    if (artistRequestController === controller) {
+      artistRequestController = null;
     }
   }
 }

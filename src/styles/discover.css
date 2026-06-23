@@ -540,6 +540,7 @@
 
 .chart-summary-card__cover img,
 .chart-summary-card__cover > .song-thumb {
+  aspect-ratio: 1 / 1;
   width: 100%;
   height: 100%;
   border-radius: 0;
@@ -713,6 +714,7 @@
   position: absolute;
   inset: 0;
   display: block;
+  aspect-ratio: 1 / 1;
   width: 100%;
   height: 100%;
   border-radius: 0;

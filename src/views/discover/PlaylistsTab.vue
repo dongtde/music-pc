@@ -135,11 +135,14 @@ import PlaylistCard from '../../components/PlaylistCard.vue'
 import SectionTitle from '../../components/SectionTitle.vue'
 import { useLoadMoreTrigger } from '../../composables/useLoadMoreTrigger'
 import { getPlaylistDiscoveryData } from '../../services/netease'
+import { createLruCache } from '../../utils/lruCache'
+import { isAbortError } from '../../utils/request'
 import { waitForMinimumDelay } from '../../utils/time'
 
-const PLAYLIST_LIMIT = 50
+const PLAYLIST_LIMIT = 30
 const PLAYLIST_SKELETON_COUNT = 24
 const PLAYLIST_SKELETON_MIN_MS = 420
+const PLAYLIST_CATEGORY_CACHE_SIZE = 24
 const defaultCategory = {
   id: 0,
   name: '全部'
@@ -156,7 +159,9 @@ const playlists = ref([])
 const playlistsOffset = ref(0)
 const hasMore = ref(true)
 const loadMoreTrigger = ref(null)
+const playlistCategoryCache = createLruCache(PLAYLIST_CATEGORY_CACHE_SIZE)
 let playlistRequestId = 0
+let playlistRequestController = null
 
 const visibleCategoryGroups = computed(() => categoryGroups.value.length
   ? categoryGroups.value
@@ -200,6 +205,8 @@ onBeforeUnmount(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('keydown', handleCategoryModalKeydown)
   }
+
+  cancelPlaylistRequest()
 })
 
 function openCategoryModal() {
@@ -237,7 +244,7 @@ function selectCategory(category, { closeModal = false } = {}) {
 }
 
 function reload() {
-  loadData({ reset: true })
+  loadData({ reset: true, force: true })
 }
 
 function loadMore({ force = false } = {}) {
@@ -248,12 +255,69 @@ function loadMore({ force = false } = {}) {
   loadData({ reset: false })
 }
 
-async function loadData({ reset = false } = {}) {
+function cancelPlaylistRequest() {
+  playlistRequestId += 1
+
+  if (!playlistRequestController) {
+    return
+  }
+
+  playlistRequestController.abort()
+  playlistRequestController = null
+}
+
+function restorePlaylistCategoryCache(category) {
+  const cached = playlistCategoryCache.get(getPlaylistCategoryCacheKey(category))
+
+  if (!cached) {
+    return false
+  }
+
+  loadMoreController.cleanup()
+  activeCategory.value = normalizeCategory(cached.activeCategory ?? category)
+  categoryGroups.value = cloneCategoryGroups(cached.categoryGroups)
+  playlists.value = Array.isArray(cached.playlists) ? cached.playlists.slice() : []
+  playlistsOffset.value = Number(cached.offset) || playlists.value.length
+  hasMore.value = Boolean(cached.hasMore)
+  loading.value = false
+  loadingMore.value = false
+  skeletonVisible.value = false
+  error.value = null
+  nextTick(loadMoreController.setup)
+  return true
+}
+
+function savePlaylistCategoryCache(category) {
+  playlistCategoryCache.set(getPlaylistCategoryCacheKey(category), {
+    activeCategory: { ...activeCategory.value },
+    categoryGroups: cloneCategoryGroups(categoryGroups.value),
+    playlists: playlists.value.slice(),
+    offset: playlistsOffset.value,
+    hasMore: hasMore.value
+  })
+}
+
+function getPlaylistCategoryCacheKey(category) {
+  return `playlists:${categoryKey(category)}`
+}
+
+async function loadData({ reset = false, force = false } = {}) {
   const startedAt = Date.now()
+  const categorySnapshot = normalizeCategory(activeCategory.value)
+  cancelPlaylistRequest()
+
+  if (reset && !force && restorePlaylistCategoryCache(categorySnapshot)) {
+    return
+  }
+
+  const requestId = ++playlistRequestId
+  const controller = new AbortController()
+  playlistRequestController = controller
 
   if (reset) {
     loadMoreController.cleanup()
     loading.value = true
+    loadingMore.value = false
     skeletonVisible.value = true
     playlists.value = []
     playlistsOffset.value = 0
@@ -263,16 +327,17 @@ async function loadData({ reset = false } = {}) {
   }
 
   error.value = null
-  const requestId = ++playlistRequestId
   const offset = reset ? 0 : playlistsOffset.value
 
   try {
     const data = await getPlaylistDiscoveryData(activeCategory.value, {
       limit: PLAYLIST_LIMIT,
       offset
+    }, {
+      signal: controller.signal
     })
 
-    if (requestId !== playlistRequestId) {
+    if (requestId !== playlistRequestId || controller.signal.aborted) {
       return
     }
 
@@ -284,19 +349,20 @@ async function loadData({ reset = false } = {}) {
       id: data.activeCategoryId ?? activeCategory.value.id,
       name: data.activeCategory || activeCategory.value.name
     })
+    savePlaylistCategoryCache(categorySnapshot)
   } catch (loadError) {
-    if (requestId !== playlistRequestId) {
+    if (isAbortError(loadError) || requestId !== playlistRequestId) {
       return
     }
 
     console.warn('Failed to load playlist discovery:', loadError)
     error.value = loadError
   } finally {
-    if (requestId === playlistRequestId) {
+    if (requestId === playlistRequestId && !controller.signal.aborted) {
       if (reset) {
         await waitForMinimumDelay(startedAt, PLAYLIST_SKELETON_MIN_MS)
 
-        if (requestId !== playlistRequestId) {
+        if (requestId !== playlistRequestId || controller.signal.aborted) {
           return
         }
 
@@ -306,6 +372,10 @@ async function loadData({ reset = false } = {}) {
       loading.value = false
       loadingMore.value = false
       nextTick(loadMoreController.setup)
+    }
+
+    if (playlistRequestController === controller) {
+      playlistRequestController = null
     }
   }
 }
@@ -375,6 +445,14 @@ function normalizeCategoryGroups(groups = []) {
         name: '全部分类',
         tags: [defaultCategory]
       }]
+}
+
+function cloneCategoryGroups(groups = []) {
+  return (Array.isArray(groups) ? groups : []).map((group, index) => ({
+    id: group.id ?? `group-${index}`,
+    name: group.name ?? '',
+    tags: Array.isArray(group.tags) ? group.tags.map(normalizeCategory) : []
+  }))
 }
 
 function uniqueCategories(categories = []) {

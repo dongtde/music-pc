@@ -7,8 +7,9 @@
           class="album-cover__image"
           :src="album.coverUrl"
           :alt="album.title"
-          loading="lazy"
+          loading="eager"
           decoding="async"
+          fetchpriority="high"
         />
       </div>
 
@@ -112,7 +113,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   Heart,
@@ -131,6 +132,7 @@ import { usePaginatedComments } from '../composables/usePaginatedComments'
 import { useQueuePlayback } from '../composables/useQueuePlayback'
 import { useVirtualRows } from '../composables/useVirtualRows'
 import { formatCompactCount } from '../utils/number'
+import { isAbortError } from '../utils/request'
 import '../styles/album.css'
 import '../styles/playlist.css'
 
@@ -145,6 +147,8 @@ const remoteAlbum = ref(null)
 const remoteTracks = ref([])
 const isLoading = ref(false)
 const errorMessage = ref('')
+let albumRequestId = 0
+let albumController = null
 
 const album = computed(() =>
   remoteAlbum.value || {
@@ -217,33 +221,63 @@ watch(
   () => route.params.id,
   (id) => {
     loadAlbumDetail(id)
-    commentState.load(id, { reset: true })
+    commentState.reset()
+
+    if (commentsModalVisible.value) {
+      commentState.load(id, { reset: true })
+    }
   },
   { immediate: true }
 )
 
+onUnmounted(() => {
+  cancelAlbumRequest()
+})
+
 async function loadAlbumDetail(id) {
+  cancelAlbumRequest()
   remoteAlbum.value = null
   remoteTracks.value = []
   errorMessage.value = ''
 
   if (!/^\d+$/.test(String(id ?? ''))) {
     errorMessage.value = '专辑 ID 不正确'
+    isLoading.value = false
     return
   }
 
+  const requestId = ++albumRequestId
+  const controller = new AbortController()
+  albumController = controller
   isLoading.value = true
 
   try {
-    const data = await getAlbumDetailData(id)
+    const data = await getAlbumDetailData(id, {
+      signal: controller.signal
+    })
+
+    if (requestId !== albumRequestId || controller.signal.aborted) {
+      return
+    }
+
     remoteAlbum.value = data.album
     remoteTracks.value = data.tracks
     nextTick(updateAlbumVirtualRange)
   } catch (error) {
+    if (isAbortError(error) || requestId !== albumRequestId) {
+      return
+    }
+
     console.warn('Failed to load album detail:', error)
     errorMessage.value = '专辑详情加载失败'
   } finally {
-    isLoading.value = false
+    if (requestId === albumRequestId && !controller.signal.aborted) {
+      isLoading.value = false
+    }
+
+    if (albumController === controller) {
+      albumController = null
+    }
   }
 }
 
@@ -257,5 +291,16 @@ function openCommentsModal() {
 
 function formatStat(value = 0) {
   return formatCompactCount(value)
+}
+
+function cancelAlbumRequest() {
+  albumRequestId += 1
+
+  if (!albumController) {
+    return
+  }
+
+  albumController.abort()
+  albumController = null
 }
 </script>

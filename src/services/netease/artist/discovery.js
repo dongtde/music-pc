@@ -1,4 +1,5 @@
 import { getArtistList, getArtistToplist } from '../../../api/modules/netease'
+import { isAbortError } from '../../../utils/request'
 import { mapArtist, mapRankedArtist } from './mappers'
 
 let artistToplistPromise = null
@@ -9,7 +10,7 @@ export async function getArtistsDiscoveryData({
   initial = -1,
   limit = 32,
   offset = 0
-} = {}) {
+} = {}, options = {}) {
   const artistListParams = getKugouArtistListParams({
     area,
     type,
@@ -18,8 +19,8 @@ export async function getArtistsDiscoveryData({
     offset
   })
   const [artistResponse, toplistResponse] = await Promise.all([
-    getArtistList(artistListParams).catch(() => ({})),
-    getArtistToplistCached().catch(() => ({}))
+    getArtistList(artistListParams, options).catch(toOptionalArtistDiscoveryResponse),
+    getArtistToplistCached().catch(toOptionalArtistDiscoveryResponse)
   ])
   const artistPage = getKugouArtistPage(artistResponse, {
     initial,
@@ -32,6 +33,14 @@ export async function getArtistsDiscoveryData({
     topArtists: getKugouHotArtists(toplistResponse).slice(0, 10).map(mapRankedArtist),
     more: artistPage.more
   }
+}
+
+function toOptionalArtistDiscoveryResponse(error) {
+  if (isAbortError(error)) {
+    throw error
+  }
+
+  return {}
 }
 
 function getArtistToplistCached() {

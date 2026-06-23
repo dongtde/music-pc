@@ -8,6 +8,13 @@ import {
 } from '../../utils/kugouAuth'
 import { readJsonStorage, writeJsonStorage } from '../../utils/storage'
 
+const FALLBACK_ACCOUNT_NAME = '酷狗账号'
+const FALLBACK_ACCOUNT_NAMES = new Set([
+  FALLBACK_ACCOUNT_NAME,
+  '酷狗用户',
+  '閰风嫍鐢ㄦ埛'
+])
+
 export function readInitialAuthSession() {
   const auth = readStoredKugouAuth()
   const cookie = toKugouAuthCookie(auth)
@@ -45,13 +52,32 @@ export function mergeAuthCookieString(currentCookie = '', nextCookie = '') {
 }
 
 export function saveStoredSession({ cookie, auth, account, profile, loginType }) {
-  writeJsonStorage(STORAGE_KEYS.neteaseSession, {
+  const nextSession = {
     cookie,
     auth,
     account,
     profile,
     loginType: loginType || 'account',
     savedAt: Date.now()
+  }
+
+  if (isFallbackStoredSession(nextSession)) {
+    const currentSession = readJsonStorage(STORAGE_KEYS.neteaseSession, {})
+
+    if (
+      currentSession &&
+      typeof currentSession === 'object' &&
+      !isFallbackStoredSession(currentSession) &&
+      isSameStoredAccount(currentSession, cookie)
+    ) {
+      return
+    }
+
+    return
+  }
+
+  writeJsonStorage(STORAGE_KEYS.neteaseSession, {
+    ...nextSession
   })
 }
 
@@ -113,7 +139,7 @@ export function parseAuthCookie(cookie = '') {
 function readStoredSession(cookie) {
   const session = readJsonStorage(STORAGE_KEYS.neteaseSession, {})
 
-  if (!session || typeof session !== 'object' || session.cookie !== cookie) {
+  if (!session || typeof session !== 'object') {
     return {}
   }
 
@@ -122,11 +148,55 @@ function readStoredSession(cookie) {
     return {}
   }
 
+  if (isFallbackStoredSession(session)) {
+    clearStoredSession()
+    return {}
+  }
+
+  if (!isSameStoredAccount(session, cookie)) {
+    return {}
+  }
+
   return {
     account: session.account ?? null,
     profile: session.profile ?? null,
     loginType: session.loginType || 'account'
   }
+}
+
+function isSameStoredAccount(session = {}, cookie = '') {
+  const sessionIdentity = getSessionIdentity(session)
+  const currentIdentity = getSessionIdentity({ cookie })
+
+  if (sessionIdentity && currentIdentity) {
+    return sessionIdentity === currentIdentity
+  }
+
+  return Boolean(session.cookie && session.cookie === cookie)
+}
+
+function isFallbackStoredSession(session = {}) {
+  const profileName = String(session.profile?.nickname || '').trim()
+  const accountName = String(session.account?.userName || '').trim()
+
+  return Boolean(
+    session.profile?.isFallback ||
+      session.account?.isFallback ||
+      FALLBACK_ACCOUNT_NAMES.has(profileName) ||
+      FALLBACK_ACCOUNT_NAMES.has(accountName)
+  )
+}
+
+function getSessionIdentity(source = {}) {
+  const cookieValues = mergeKugouAuth(source.auth, source.cookie)
+
+  return String(
+    source.profile?.userId ||
+      source.account?.id ||
+      cookieValues.userid ||
+      cookieValues.token ||
+      ''
+  )
 }
 
 function createSessionFromCookie(cookie) {
@@ -140,12 +210,14 @@ function createSessionFromCookie(cookie) {
     return {
       account: {
         id: cookieValues.userid,
-        userName: '酷狗账号'
+        userName: FALLBACK_ACCOUNT_NAME,
+        isFallback: true
       },
       profile: {
         userId: cookieValues.userid,
-        nickname: '酷狗账号',
-        avatarUrl: ''
+        nickname: FALLBACK_ACCOUNT_NAME,
+        avatarUrl: '',
+        isFallback: true
       },
       loginType: 'account'
     }

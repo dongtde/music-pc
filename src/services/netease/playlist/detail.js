@@ -1,13 +1,14 @@
 import { getPlaylistDetail, getPlaylistTracks, getSimilarPlaylists } from '../../../api/modules/netease'
 import { CACHE_TTL } from '../../../config/app'
+import { isAbortError } from '../../../utils/request'
 import { cacheKey, getCachedData } from '../../cache'
 import { mapPlaylist, mapPlaylistDetail, mapPlaylistTrack } from './mappers'
 import { canLoadRemotePlaylistDetail, isKugouCollectionId } from './shared'
 
-export async function getPlaylistDetailData(id, { listid = '', fallbackPlaylist = null } = {}) {
+export async function getPlaylistDetailData(id, { listid = '', fallbackPlaylist = null } = {}, options = {}) {
   return getCachedData(cacheKey('playlist-detail', { id, listid }), CACHE_TTL.playlistDetail, async () => {
     const detailResponse = canLoadRemotePlaylistDetail(id, listid)
-      ? await getPlaylistDetail({ id })
+      ? await getPlaylistDetail({ id }, options)
       : { playlist: fallbackPlaylist }
     const rawPlaylist = detailResponse.playlist ?? fallbackPlaylist
 
@@ -23,12 +24,16 @@ export async function getPlaylistDetailData(id, { listid = '', fallbackPlaylist 
         listid,
         limit: rawPlaylist.trackCount || 1000,
         offset: 0
-      })
+      }, options)
 
       if (Array.isArray(trackResponse.songs) && trackResponse.songs.length) {
         tracks = trackResponse.songs
       }
     } catch (error) {
+      if (isAbortError(error)) {
+        throw error
+      }
+
       console.warn('Failed to load full playlist tracks:', error)
     }
 
@@ -39,21 +44,27 @@ export async function getPlaylistDetailData(id, { listid = '', fallbackPlaylist 
   })
 }
 
-export async function getPlaylistOverviewData(id, { trackLimit = 60, listid = '', fallbackPlaylist = null } = {}) {
+export async function getPlaylistOverviewData(id, { trackLimit = 60, listid = '', fallbackPlaylist = null } = {}, options = {}) {
   return getCachedData(
     cacheKey('playlist-overview', { id, listid, trackLimit }),
     CACHE_TTL.playlistDetail,
     async () => {
       const [detailResponse, trackResponse] = await Promise.all([
         canLoadRemotePlaylistDetail(id, listid)
-          ? getPlaylistDetail({ id })
+          ? getPlaylistDetail({ id }, options)
           : Promise.resolve({ playlist: fallbackPlaylist }),
         getPlaylistTracks({
           id,
           listid,
           limit: trackLimit,
           offset: 0
-        }).catch(() => ({}))
+        }, options).catch((error) => {
+          if (isAbortError(error)) {
+            throw error
+          }
+
+          return {}
+        })
       ])
       const rawPlaylist = detailResponse.playlist ?? fallbackPlaylist
 
@@ -79,12 +90,12 @@ export async function getPlaylistOverviewData(id, { trackLimit = 60, listid = ''
   )
 }
 
-export async function getPlaylistTracksData({ id, listid = '', limit = 100, offset = 0 }) {
+export async function getPlaylistTracksData({ id, listid = '', limit = 100, offset = 0 }, options = {}) {
   return getCachedData(
     cacheKey('playlist-tracks', { id, listid, limit, offset }),
     CACHE_TTL.playlistDetail,
     async () => {
-      const response = await getPlaylistTracks({ id, listid, limit, offset })
+      const response = await getPlaylistTracks({ id, listid, limit, offset }, options)
       const songs = Array.isArray(response.songs) ? response.songs : []
       const total = Number(response.total) || 0
 

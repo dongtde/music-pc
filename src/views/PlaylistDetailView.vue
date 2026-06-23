@@ -185,7 +185,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { MessageCircle, Pause, Play } from 'lucide-vue-next';
 import { useMessage } from 'naive-ui';
@@ -203,6 +203,7 @@ import { usePaginatedComments } from '../composables/usePaginatedComments';
 import { useQueuePlayback } from '../composables/useQueuePlayback';
 import { useVirtualRows } from '../composables/useVirtualRows';
 import { useLibraryStore } from '../stores/library';
+import { isAbortError } from '../utils/request';
 import { waitForMinimumDelay } from '../utils/time';
 import '../styles/playlist.css';
 
@@ -227,6 +228,8 @@ const trackHasMore = ref(false);
 const playAllLoading = ref(false);
 let playlistLoadToken = 0;
 let activeTrackRequest = null;
+let detailController = null;
+let trackController = null;
 
 const playlist = computed(
   () =>
@@ -327,6 +330,13 @@ watch(
   { immediate: true },
 );
 
+onUnmounted(() => {
+  playlistLoadToken += 1;
+  abortDetailRequest();
+  abortTrackRequest();
+  loadMoreController.cleanup();
+});
+
 watch(
   () => playlistTracks.value.length,
   () => {
@@ -341,6 +351,8 @@ async function loadPlaylistDetail(id) {
   const loadToken = ++playlistLoadToken;
   const startedAt = Date.now();
 
+  abortDetailRequest();
+  abortTrackRequest();
   loadMoreController.cleanup();
   remotePlaylist.value = null;
   remoteTracks.value = [];
@@ -348,6 +360,8 @@ async function loadPlaylistDetail(id) {
   resetTrackLoadingState();
 
   isLoading.value = true;
+  const controller = new AbortController();
+  detailController = controller;
 
   try {
     const meta = getPlaylistRequestMeta(id);
@@ -361,9 +375,11 @@ async function loadPlaylistDetail(id) {
       trackLimit: PLAYLIST_INITIAL_TRACK_LIMIT,
       listid: meta.listid,
       fallbackPlaylist: meta.fallbackPlaylist,
+    }, {
+      signal: controller.signal,
     });
 
-    if (loadToken !== playlistLoadToken) {
+    if (loadToken !== playlistLoadToken || controller.signal.aborted) {
       return;
     }
 
@@ -376,7 +392,7 @@ async function loadPlaylistDetail(id) {
       await loadMoreTracks({ force: true, token: loadToken });
     }
   } catch (error) {
-    if (loadToken !== playlistLoadToken) {
+    if (isAbortError(error) || loadToken !== playlistLoadToken) {
       return;
     }
 
@@ -385,12 +401,16 @@ async function loadPlaylistDetail(id) {
   } finally {
     await waitForMinimumDelay(startedAt, SKELETON_MIN_MS);
 
-    if (loadToken === playlistLoadToken) {
+    if (loadToken === playlistLoadToken && !controller.signal.aborted) {
       isLoading.value = false;
       nextTick(() => {
         updateVirtualRange();
         loadMoreController.setup();
       });
+    }
+
+    if (detailController === controller) {
+      detailController = null;
     }
   }
 }
@@ -465,6 +485,8 @@ async function runLoadMoreTracks({ force = false, token = playlistLoadToken } = 
     return null;
   }
 
+  const controller = new AbortController();
+  trackController = controller;
   trackLoading.value = true;
   trackError.value = '';
 
@@ -474,9 +496,11 @@ async function runLoadMoreTracks({ force = false, token = playlistLoadToken } = 
       listid: meta.listid,
       limit: PLAYLIST_TRACK_PAGE_SIZE,
       offset: remoteTracks.value.length,
+    }, {
+      signal: controller.signal,
     });
 
-    if (token !== playlistLoadToken) {
+    if (token !== playlistLoadToken || controller.signal.aborted || String(route.params.id ?? '') !== id) {
       return null;
     }
 
@@ -490,6 +514,10 @@ async function runLoadMoreTracks({ force = false, token = playlistLoadToken } = 
 
     return data;
   } catch (error) {
+    if (isAbortError(error) || token !== playlistLoadToken) {
+      return null;
+    }
+
     if (token === playlistLoadToken) {
       console.warn('Failed to load playlist tracks:', error);
       trackError.value = '歌曲加载失败';
@@ -498,8 +526,12 @@ async function runLoadMoreTracks({ force = false, token = playlistLoadToken } = 
 
     return null;
   } finally {
-    if (token === playlistLoadToken) {
+    if (token === playlistLoadToken && !controller.signal.aborted) {
       trackLoading.value = false;
+    }
+
+    if (trackController === controller) {
+      trackController = null;
     }
   }
 }
@@ -522,39 +554,18 @@ async function playAllPlaylistTracks() {
 async function loadAllRemainingTracks() {
   await activeTrackRequest;
 
-  const id = String(route.params.id ?? '');
   const meta = playlistRequestMeta.value;
-  const total = Number(playlist.value.trackCount) || 0;
+  const token = playlistLoadToken;
 
-  if (trackHasMore.value && meta.remote && total > remoteTracks.value.length) {
-    trackLoading.value = true;
-    trackError.value = '';
-
-    try {
-      const data = await getPlaylistTracksData({
-        id: meta.remoteId,
-        listid: meta.listid,
-        limit: total,
-        offset: 0,
-      });
-
-      remoteTracks.value = getUniqueTracks(data.tracks);
-      syncTrackHasMore();
-      return;
-    } catch (error) {
-      console.warn('Failed to load full playlist tracks:', error);
-      trackError.value = '歌曲加载失败';
-      syncTrackHasMore();
-    } finally {
-      trackLoading.value = false;
-    }
+  if (!meta.remote) {
+    return;
   }
 
-  while (trackHasMore.value && !trackError.value) {
+  while (token === playlistLoadToken && trackHasMore.value && !trackError.value) {
     const loadedCount = remoteTracks.value.length;
-    await loadMoreTracks({ force: true });
+    const data = await loadMoreTracks({ force: true, token });
 
-    if (remoteTracks.value.length <= loadedCount) {
+    if (!data || remoteTracks.value.length <= loadedCount) {
       break;
     }
   }
@@ -588,6 +599,26 @@ function resetTrackLoadingState() {
   trackHasMore.value = false;
   playAllLoading.value = false;
   activeTrackRequest = null;
+}
+
+function abortDetailRequest() {
+  if (!detailController) {
+    return;
+  }
+
+  detailController.abort();
+  detailController = null;
+}
+
+function abortTrackRequest() {
+  if (!trackController) {
+    return;
+  }
+
+  trackController.abort();
+  trackController = null;
+  activeTrackRequest = null;
+  trackLoading.value = false;
 }
 
 function syncTrackHasMore(apiHasMore = false) {

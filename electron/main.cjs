@@ -81,8 +81,8 @@ async function createMainWindow() {
     height: 820,
     minWidth: 960,
     minHeight: 640,
-    title: 'Mappic Music',
-    backgroundColor: '#101011',
+    title: '澜音',
+    backgroundColor: '#0b0d11',
     autoHideMenuBar: true,
     show: !isFirstScreenSmoke,
     webPreferences: {

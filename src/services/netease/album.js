@@ -8,14 +8,15 @@ import {
 } from '../../api/modules/netease'
 import { COVER_TYPES } from '../../config/app'
 import { normalizeAudioQualities } from '../../utils/audioQuality'
+import { isAbortError } from '../../utils/request'
 import { isVipSong, normalizeSongAccess } from '../../utils/songAccess'
 
-export async function getAlbumsDiscoveryData({ area = 'ALL', limit = 36, offset = 0 } = {}) {
+export async function getAlbumsDiscoveryData({ area = 'ALL', limit = 36, offset = 0 } = {}, options = {}) {
   const shouldLoadFeatured = offset <= 0
   const [newAlbumResponse, topResponse] = await Promise.all([
-    getNewAlbums({ type: getAlbumAreaType(area), limit, offset }).catch(() => ({})),
+    getNewAlbums({ type: getAlbumAreaType(area), limit, offset }, options).catch(toOptionalAlbumResponse),
     shouldLoadFeatured
-      ? getTopAlbums({ limit: 16, offset: 0 }).catch(() => ({}))
+      ? getTopAlbums({ limit: 16, offset: 0 }, options).catch(toOptionalAlbumResponse)
       : Promise.resolve({})
   ])
   const albums = newAlbumResponse.albums ?? []
@@ -29,15 +30,15 @@ export async function getAlbumsDiscoveryData({ area = 'ALL', limit = 36, offset 
   }
 }
 
-export async function getAlbumDetailData(id) {
+export async function getAlbumDetailData(id, options = {}) {
   const [infoResponse, response, dynamicResponse, songsResponse] = await Promise.all([
     getAlbumInfo({
       album_id: id,
       fields: 'trans_param,special_tag,authors,album_name,publish_date,cover,intro,publish_company,type,album_id,language,category,author_name,sizable_cover'
-    }).catch(() => ({})),
-    getAlbumDetail({ id }),
-    getAlbumDynamic({ id }).catch(() => ({})),
-    getAlbumSongs({ id, limit: 100, offset: 0 }).catch(() => ({}))
+    }, options).catch(toOptionalAlbumResponse),
+    getAlbumDetail({ id }, options),
+    getAlbumDynamic({ id }, options).catch(toOptionalAlbumResponse),
+    getAlbumSongs({ id, limit: 100, offset: 0 }, options).catch(toOptionalAlbumResponse)
   ])
   const album = mergeAlbumSources(response.album, infoResponse.album)
 
@@ -59,6 +60,14 @@ export async function getAlbumDetailData(id) {
     album: mapAlbumDetail(normalizedAlbum, dynamicResponse),
     tracks: songs.map(mapPlaylistTrack)
   }
+}
+
+function toOptionalAlbumResponse(error) {
+  if (isAbortError(error)) {
+    throw error
+  }
+
+  return {}
 }
 
 function getTopAlbumList(response = {}) {

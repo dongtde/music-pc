@@ -1,5 +1,5 @@
-const APP_CACHE = 'mappic-music-app-v1'
-const RUNTIME_CACHE = 'mappic-music-runtime-v1'
+const APP_CACHE = 'lanyin-music-app-v1'
+const RUNTIME_CACHE = 'lanyin-music-runtime-v1'
 const CACHE_NAMES = [APP_CACHE, RUNTIME_CACHE]
 
 const CORE_ASSETS = [

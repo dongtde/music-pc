@@ -62,6 +62,17 @@ function firstObject(...values) {
   return values.find((value) => value && typeof value === 'object' && !Array.isArray(value)) ?? {}
 }
 
+function firstDefined(...values) {
+  return values.find((value) => value !== undefined && value !== null && value !== '')
+}
+
+function cleanText(value = '') {
+  return String(value ?? '')
+    .replace(/<\/?em>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .trim()
+}
+
 function normalizeKugouImage(url, size = 480) {
   if (typeof url !== 'string') {
     return ''
@@ -90,11 +101,53 @@ function normalizeKugouImage(url, size = 480) {
 
 function toLoginProfileResponse(response = {}) {
   const data = response.data ?? response
-  const user = firstObject(data.user, data.profile, data)
-  const userId = user.userid ?? user.user_id ?? user.id ?? data.userid ?? data.user_id ?? response.userid ?? ''
+  const user = getLoginUserObject(response)
+  const userId = firstDefined(
+    user.userid,
+    user.user_id,
+    user.userId,
+    user.uid,
+    user.id,
+    data.userid,
+    data.user_id,
+    data.userId,
+    response.userid,
+    response.user_id,
+    response.params?.userid
+  )
   const nickname = user.nickname ?? user.username ?? user.user_name ?? data.nickname ?? '酷狗用户'
+  const resolvedNickname = cleanText(firstDefined(
+    user.nickname,
+    user.nick_name,
+    user.nickName,
+    user.NickName,
+    user.username,
+    user.user_name,
+    user.userName,
+    user.name,
+    user.Name,
+    data.nickname,
+    data.nick_name,
+    data.username,
+    data.user_name,
+    response.nickname
+  )) || nickname
   const avatarUrl = normalizeKugouImage(
-    user.pic || user.avatar || user.avatarUrl || user.user_pic || data.pic,
+    firstDefined(
+      user.pic,
+      user.avatar,
+      user.avatarUrl,
+      user.avatar_url,
+      user.user_pic,
+      user.userPic,
+      user.headimg,
+      user.head_img,
+      user.imgurl,
+      data.pic,
+      data.avatar,
+      data.avatarUrl,
+      response.pic
+    ),
     240
   )
   const token = data.token ?? user.token ?? response.token ?? ''
@@ -110,26 +163,96 @@ function toLoginProfileResponse(response = {}) {
     cookie,
     account: userId ? {
       id: userId,
-      userName: nickname
+      userName: resolvedNickname
     } : null,
     profile: userId ? {
       userId,
-      nickname,
+      nickname: resolvedNickname,
       avatarUrl
     } : null,
     data: {
       ...data,
       account: userId ? {
         id: userId,
-        userName: nickname
+        userName: resolvedNickname
       } : null,
       profile: userId ? {
         userId,
-        nickname,
+        nickname: resolvedNickname,
         avatarUrl
       } : null
     }
   }
+}
+
+function getLoginUserObject(response = {}) {
+  const data = response.data ?? response
+  const direct = firstObject(
+    data.user,
+    data.profile,
+    data.userinfo,
+    data.user_info,
+    data.userInfo,
+    data.info,
+    data.base,
+    response.user,
+    response.profile
+  )
+
+  if (hasUserProfileFields(direct)) {
+    return direct
+  }
+
+  return collectUserProfileObjects(response)[0] ?? firstObject(data.user, data.profile, data)
+}
+
+function collectUserProfileObjects(value, depth = 0, results = []) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || depth > 4) {
+    return results
+  }
+
+  if (hasUserProfileFields(value)) {
+    results.push(value)
+  }
+
+  Object.entries(value).forEach(([key, child]) => {
+    if (!child || typeof child !== 'object') {
+      return
+    }
+
+    if (depth < 2 || /user|profile|info|data|base|result|account/i.test(key)) {
+      collectUserProfileObjects(child, depth + 1, results)
+    }
+  })
+
+  return results
+}
+
+function hasUserProfileFields(value = {}) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+
+  return [
+    value.nickname,
+    value.nick_name,
+    value.nickName,
+    value.NickName,
+    value.username,
+    value.user_name,
+    value.userName,
+    value.name,
+    value.Name,
+    value.pic,
+    value.avatar,
+    value.avatarUrl,
+    value.user_pic,
+    value.userid,
+    value.user_id,
+    value.userId,
+    value.uid,
+    value.id
+  ].some((field) => field !== undefined && field !== null && field !== '')
 }
 
 function toQrKeyResponse(response = {}) {

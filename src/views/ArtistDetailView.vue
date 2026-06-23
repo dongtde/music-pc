@@ -394,7 +394,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   BadgeCheck,
@@ -415,7 +415,9 @@ import {
   getArtistVideosData
 } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
+import { createLruCache } from '../utils/lruCache'
 import { getPlaybackErrorDisplay } from '../utils/playbackError'
+import { isAbortError } from '../utils/request'
 import '../styles/artist.css'
 import '../styles/playlist.css'
 
@@ -424,6 +426,9 @@ const ARTIST_SONG_PAGE_SIZE = 30
 const ARTIST_ALBUM_PAGE_SIZE = 24
 const ARTIST_VIDEO_PAGE_SIZE = 24
 const ARTIST_TAB_SKELETON_MIN_MS = 360
+const ARTIST_FEATURED_PREVIEW_IDLE_TIMEOUT = 1200
+const ARTIST_FEATURED_PREVIEW_FALLBACK_DELAY = 320
+const ARTIST_TAB_CACHE_SIZE = 48
 const TRACK_ROW_HEIGHT = 58
 
 const route = useRoute()
@@ -452,6 +457,21 @@ const artistSongsHasMore = ref(false)
 const artistAlbumsHasMore = ref(false)
 const artistVideosHasMore = ref(false)
 let artistRequestId = 0
+let artistController = null
+const tabRequestIds = {
+  songs: 0,
+  albums: 0,
+  videos: 0,
+  details: 0
+}
+const tabControllers = {
+  songs: null,
+  albums: null,
+  videos: null,
+  details: null
+}
+const artistTabCache = createLruCache(ARTIST_TAB_CACHE_SIZE)
+let featuredPreviewSchedule = null
 
 const tabLoading = reactive({
   songs: false,
@@ -600,7 +620,15 @@ watch(
   { flush: 'post' }
 )
 
+onUnmounted(() => {
+  cancelArtistRequest()
+  cancelFeaturedPreviewSchedule()
+  cancelAllTabRequests()
+})
+
 function resetArtistTabs() {
+  cancelFeaturedPreviewSchedule()
+  cancelAllTabRequests()
   activeTab.value = 'featured'
   artistSongs.value = []
   artistAlbums.value = []
@@ -626,47 +654,313 @@ function resetArtistTabs() {
   })
 }
 
+function cancelArtistRequest() {
+  artistRequestId += 1
+  cancelFeaturedPreviewSchedule()
+
+  if (!artistController) {
+    return
+  }
+
+  artistController.abort()
+  artistController = null
+}
+
+function cancelTabRequest(tab) {
+  tabRequestIds[tab] += 1
+
+  if (tabControllers[tab]) {
+    tabControllers[tab].abort()
+    tabControllers[tab] = null
+  }
+
+  tabLoading[tab] = false
+}
+
+function cancelAllTabRequests() {
+  Object.keys(tabRequestIds).forEach(cancelTabRequest)
+}
+
+function startTabRequest(tab) {
+  cancelTabRequest(tab)
+
+  const requestId = ++tabRequestIds[tab]
+  const controller = new AbortController()
+  tabControllers[tab] = controller
+
+  return { controller, requestId }
+}
+
+function isCurrentArtistRequest(id, requestId, controller) {
+  return (
+    requestId === artistRequestId &&
+    !controller.signal.aborted &&
+    String(route.params.id) === String(id)
+  )
+}
+
+function isCurrentTabRequest(tab, id, requestId, controller) {
+  return (
+    requestId === tabRequestIds[tab] &&
+    !controller.signal.aborted &&
+    String(route.params.id) === String(id)
+  )
+}
+
 async function loadArtistDetail(id) {
-  const requestId = ++artistRequestId
+  cancelArtistRequest()
   remoteArtist.value = null
   remoteTracks.value = []
   errorMessage.value = ''
 
   if (!/^\d+$/.test(String(id ?? ''))) {
     errorMessage.value = '歌手 ID 不正确'
+    isLoading.value = false
     return
   }
 
+  const requestId = ++artistRequestId
+  const controller = new AbortController()
+  artistController = controller
   isLoading.value = true
 
   try {
-    const data = await getArtistDetailData(id)
+    const data = await getArtistDetailData(id, {
+      signal: controller.signal
+    })
 
-    if (requestId !== artistRequestId) {
+    if (!isCurrentArtistRequest(id, requestId, controller)) {
       return
     }
 
     remoteArtist.value = data.artist
     remoteTracks.value = data.tracks
-    loadFeaturedPreviews()
+    nextTick(() => scheduleFeaturedPreviews(id))
   } catch (error) {
-    if (requestId !== artistRequestId) {
+    if (isAbortError(error) || requestId !== artistRequestId) {
       return
     }
 
     console.warn('Failed to load artist detail:', error)
     errorMessage.value = '歌手详情加载失败'
   } finally {
-    if (requestId === artistRequestId) {
+    if (isCurrentArtistRequest(id, requestId, controller)) {
       isLoading.value = false
+    }
+
+    if (artistController === controller) {
+      artistController = null
     }
   }
 }
 
-function loadFeaturedPreviews() {
-  loadArtistAlbums({ reset: true, silent: true })
-  loadArtistVideos({ reset: true, silent: true })
-  loadArtistIntro({ silent: true })
+function scheduleFeaturedPreviews(id) {
+  cancelFeaturedPreviewSchedule()
+
+  const preloadTabs = ['albums', 'videos', 'details']
+  let index = 0
+
+  function preloadNext() {
+    featuredPreviewSchedule = null
+
+    if (String(route.params.id) !== String(id)) {
+      return
+    }
+
+    while (index < preloadTabs.length) {
+      const tab = preloadTabs[index]
+      index += 1
+
+      if (preloadArtistTab(tab, id)) {
+        break
+      }
+    }
+
+    if (index < preloadTabs.length) {
+      featuredPreviewSchedule = requestIdle(preloadNext)
+    }
+  }
+
+  featuredPreviewSchedule = requestIdle(preloadNext)
+}
+
+function preloadArtistTab(tab, id) {
+  if (String(route.params.id) !== String(id) || tabLoaded[tab] || tabLoading[tab]) {
+    return false
+  }
+
+  if (tab === 'albums') {
+    loadArtistAlbums({ reset: true, silent: true })
+    return true
+  }
+
+  if (tab === 'videos') {
+    loadArtistVideos({ reset: true, silent: true })
+    return true
+  }
+
+  if (tab === 'details') {
+    loadArtistIntro({ silent: true })
+    return true
+  }
+
+  return false
+}
+
+function requestIdle(callback) {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  if (typeof window.requestIdleCallback === 'function') {
+    return {
+      type: 'idle',
+      id: window.requestIdleCallback(callback, {
+        timeout: ARTIST_FEATURED_PREVIEW_IDLE_TIMEOUT
+      })
+    }
+  }
+
+  return {
+    type: 'timeout',
+    id: window.setTimeout(callback, ARTIST_FEATURED_PREVIEW_FALLBACK_DELAY)
+  }
+}
+
+function cancelFeaturedPreviewSchedule() {
+  if (!featuredPreviewSchedule || typeof window === 'undefined') {
+    featuredPreviewSchedule = null
+    return
+  }
+
+  if (featuredPreviewSchedule.type === 'idle' && typeof window.cancelIdleCallback === 'function') {
+    window.cancelIdleCallback(featuredPreviewSchedule.id)
+  } else {
+    window.clearTimeout(featuredPreviewSchedule.id)
+  }
+
+  featuredPreviewSchedule = null
+}
+
+function getArtistTabCacheKey(tab, id, filter = '') {
+  return ['artist-tab', tab, String(id ?? ''), String(filter ?? '')].join(':')
+}
+
+function restoreArtistTabCache(tab, id, options = {}) {
+  if (!/^\d+$/.test(String(id ?? ''))) {
+    return false
+  }
+
+  if (tab === 'songs') {
+    const cached = artistTabCache.get(getArtistTabCacheKey(tab, id, options.order || 'hot'))
+
+    if (!cached) {
+      return false
+    }
+
+    artistSongs.value = Array.isArray(cached.tracks) ? cached.tracks.slice() : []
+    artistSongTotal.value = Number(cached.total) || artistSongs.value.length
+    artistSongsHasMore.value = Boolean(cached.hasMore)
+    tabLoaded.songs = true
+    tabLoading.songs = false
+    tabErrors.songs = ''
+    nextTick(updateArtistSongsVirtualRange)
+    return true
+  }
+
+  if (tab === 'albums') {
+    const cached = artistTabCache.get(getArtistTabCacheKey(tab, id))
+
+    if (!cached) {
+      return false
+    }
+
+    artistAlbums.value = Array.isArray(cached.albums) ? cached.albums.slice() : []
+    artistAlbumsHasMore.value = Boolean(cached.hasMore)
+    tabLoaded.albums = true
+    tabLoading.albums = false
+    tabErrors.albums = ''
+    return true
+  }
+
+  if (tab === 'videos') {
+    const cached = artistTabCache.get(getArtistTabCacheKey(tab, id))
+
+    if (!cached) {
+      return false
+    }
+
+    artistVideos.value = Array.isArray(cached.videos) ? cached.videos.slice() : []
+    artistVideosCursor.value = cached.cursor ?? 0
+    artistVideosHasMore.value = Boolean(cached.hasMore)
+    tabLoaded.videos = true
+    tabLoading.videos = false
+    tabErrors.videos = ''
+    return true
+  }
+
+  if (tab === 'details') {
+    const cached = artistTabCache.get(getArtistTabCacheKey(tab, id))
+
+    if (!cached) {
+      return false
+    }
+
+    artistIntro.value = cloneArtistIntro(cached.intro)
+    tabLoaded.details = true
+    tabLoading.details = false
+    tabErrors.details = ''
+    return true
+  }
+
+  return false
+}
+
+function saveArtistTabCache(tab, id, options = {}) {
+  if (!/^\d+$/.test(String(id ?? ''))) {
+    return
+  }
+
+  if (tab === 'songs') {
+    artistTabCache.set(getArtistTabCacheKey(tab, id, options.order || 'hot'), {
+      tracks: artistSongs.value.slice(),
+      total: artistSongTotal.value,
+      hasMore: artistSongsHasMore.value
+    })
+    return
+  }
+
+  if (tab === 'albums') {
+    artistTabCache.set(getArtistTabCacheKey(tab, id), {
+      albums: artistAlbums.value.slice(),
+      hasMore: artistAlbumsHasMore.value
+    })
+    return
+  }
+
+  if (tab === 'videos') {
+    artistTabCache.set(getArtistTabCacheKey(tab, id), {
+      videos: artistVideos.value.slice(),
+      cursor: artistVideosCursor.value,
+      hasMore: artistVideosHasMore.value
+    })
+    return
+  }
+
+  if (tab === 'details') {
+    artistTabCache.set(getArtistTabCacheKey(tab, id), {
+      intro: cloneArtistIntro(artistIntro.value)
+    })
+  }
+}
+
+function cloneArtistIntro(intro = {}) {
+  return {
+    briefDesc: intro.briefDesc || '',
+    sections: Array.isArray(intro.sections)
+      ? intro.sections.map((section) => ({ ...section }))
+      : []
+  }
 }
 
 function selectArtistTab(tab) {
@@ -697,10 +991,18 @@ async function loadArtistSongs({ reset = false } = {}) {
   const startedAt = Date.now()
   const id = route.params.id
 
-  if (tabLoading.songs || !/^\d+$/.test(String(id ?? ''))) {
+  if (!/^\d+$/.test(String(id ?? '')) || (tabLoading.songs && !reset)) {
     return
   }
 
+  const order = artistSongOrder.value
+
+  if (reset && restoreArtistTabCache('songs', id, { order })) {
+    cancelTabRequest('songs')
+    return
+  }
+
+  const { controller, requestId } = startTabRequest('songs')
   tabLoading.songs = true
   tabErrors.songs = ''
 
@@ -713,26 +1015,43 @@ async function loadArtistSongs({ reset = false } = {}) {
       id,
       limit: ARTIST_SONG_PAGE_SIZE,
       offset,
-      order: artistSongOrder.value
+      order
+    }, {
+      signal: controller.signal
     })
+
+    if (!isCurrentTabRequest('songs', id, requestId, controller) || artistSongOrder.value !== order) {
+      return
+    }
 
     artistSongs.value = reset ? data.tracks : [...artistSongs.value, ...data.tracks]
     artistSongTotal.value = data.total
     artistSongsHasMore.value = data.more
+    saveArtistTabCache('songs', id, { order })
     loaded = true
   } catch (error) {
+    if (isAbortError(error) || !isCurrentTabRequest('songs', id, requestId, controller)) {
+      return
+    }
+
     console.warn('Failed to load artist songs:', error)
     tabErrors.songs = '歌曲加载失败'
   } finally {
-    if (shouldHoldSkeleton) {
+    if (shouldHoldSkeleton && isCurrentTabRequest('songs', id, requestId, controller)) {
       await waitForTabSkeleton(startedAt)
     }
 
-    if (loaded) {
-      tabLoaded.songs = true
+    if (isCurrentTabRequest('songs', id, requestId, controller)) {
+      if (loaded) {
+        tabLoaded.songs = true
+      }
+
+      tabLoading.songs = false
     }
 
-    tabLoading.songs = false
+    if (tabControllers.songs === controller) {
+      tabControllers.songs = null
+    }
   }
 }
 
@@ -740,10 +1059,16 @@ async function loadArtistAlbums({ reset = false, silent = false } = {}) {
   const startedAt = Date.now()
   const id = route.params.id
 
-  if (tabLoading.albums || !/^\d+$/.test(String(id ?? ''))) {
+  if (!/^\d+$/.test(String(id ?? '')) || (tabLoading.albums && !reset)) {
     return
   }
 
+  if (reset && restoreArtistTabCache('albums', id)) {
+    cancelTabRequest('albums')
+    return
+  }
+
+  const { controller, requestId } = startTabRequest('albums')
   tabLoading.albums = true
   tabErrors.albums = ''
 
@@ -756,26 +1081,43 @@ async function loadArtistAlbums({ reset = false, silent = false } = {}) {
       id,
       limit: ARTIST_ALBUM_PAGE_SIZE,
       offset
+    }, {
+      signal: controller.signal
     })
+
+    if (!isCurrentTabRequest('albums', id, requestId, controller)) {
+      return
+    }
 
     artistAlbums.value = reset ? data.albums : [...artistAlbums.value, ...data.albums]
     artistAlbumsHasMore.value = data.more
+    saveArtistTabCache('albums', id)
     loaded = true
   } catch (error) {
+    if (isAbortError(error) || !isCurrentTabRequest('albums', id, requestId, controller)) {
+      return
+    }
+
     console.warn('Failed to load artist albums:', error)
     if (!silent) {
       tabErrors.albums = '专辑加载失败'
     }
   } finally {
-    if (shouldHoldSkeleton) {
+    if (shouldHoldSkeleton && isCurrentTabRequest('albums', id, requestId, controller)) {
       await waitForTabSkeleton(startedAt)
     }
 
-    if (loaded) {
-      tabLoaded.albums = true
+    if (isCurrentTabRequest('albums', id, requestId, controller)) {
+      if (loaded) {
+        tabLoaded.albums = true
+      }
+
+      tabLoading.albums = false
     }
 
-    tabLoading.albums = false
+    if (tabControllers.albums === controller) {
+      tabControllers.albums = null
+    }
   }
 }
 
@@ -783,10 +1125,16 @@ async function loadArtistVideos({ reset = false, silent = false } = {}) {
   const startedAt = Date.now()
   const id = route.params.id
 
-  if (tabLoading.videos || !/^\d+$/.test(String(id ?? ''))) {
+  if (!/^\d+$/.test(String(id ?? '')) || (tabLoading.videos && !reset)) {
     return
   }
 
+  if (reset && restoreArtistTabCache('videos', id)) {
+    cancelTabRequest('videos')
+    return
+  }
+
+  const { controller, requestId } = startTabRequest('videos')
   tabLoading.videos = true
   tabErrors.videos = ''
   const shouldHoldSkeleton = reset || !tabLoaded.videos
@@ -798,27 +1146,44 @@ async function loadArtistVideos({ reset = false, silent = false } = {}) {
       size: ARTIST_VIDEO_PAGE_SIZE,
       cursor: reset ? 0 : artistVideosCursor.value || 0,
       order: 0
+    }, {
+      signal: controller.signal
     })
+
+    if (!isCurrentTabRequest('videos', id, requestId, controller)) {
+      return
+    }
 
     artistVideos.value = reset ? data.videos : [...artistVideos.value, ...data.videos]
     artistVideosCursor.value = data.cursor
     artistVideosHasMore.value = data.more
+    saveArtistTabCache('videos', id)
     loaded = true
   } catch (error) {
+    if (isAbortError(error) || !isCurrentTabRequest('videos', id, requestId, controller)) {
+      return
+    }
+
     console.warn('Failed to load artist videos:', error)
     if (!silent) {
       tabErrors.videos = '视频加载失败'
     }
   } finally {
-    if (shouldHoldSkeleton) {
+    if (shouldHoldSkeleton && isCurrentTabRequest('videos', id, requestId, controller)) {
       await waitForTabSkeleton(startedAt)
     }
 
-    if (loaded) {
-      tabLoaded.videos = true
+    if (isCurrentTabRequest('videos', id, requestId, controller)) {
+      if (loaded) {
+        tabLoaded.videos = true
+      }
+
+      tabLoading.videos = false
     }
 
-    tabLoading.videos = false
+    if (tabControllers.videos === controller) {
+      tabControllers.videos = null
+    }
   }
 }
 
@@ -826,33 +1191,58 @@ async function loadArtistIntro({ silent = false } = {}) {
   const startedAt = Date.now()
   const id = route.params.id
 
-  if (tabLoading.details || !/^\d+$/.test(String(id ?? ''))) {
+  if (!/^\d+$/.test(String(id ?? '')) || (tabLoading.details && silent)) {
     return
   }
 
+  if (restoreArtistTabCache('details', id)) {
+    cancelTabRequest('details')
+    return
+  }
+
+  const { controller, requestId } = startTabRequest('details')
   tabLoading.details = true
   tabErrors.details = ''
   const shouldHoldSkeleton = !tabLoaded.details
   let loaded = false
 
   try {
-    artistIntro.value = await getArtistIntroData(id)
+    const data = await getArtistIntroData(id, {
+      signal: controller.signal
+    })
+
+    if (!isCurrentTabRequest('details', id, requestId, controller)) {
+      return
+    }
+
+    artistIntro.value = data
+    saveArtistTabCache('details', id)
     loaded = true
   } catch (error) {
+    if (isAbortError(error) || !isCurrentTabRequest('details', id, requestId, controller)) {
+      return
+    }
+
     console.warn('Failed to load artist intro:', error)
     if (!silent) {
       tabErrors.details = '详情加载失败'
     }
   } finally {
-    if (shouldHoldSkeleton) {
+    if (shouldHoldSkeleton && isCurrentTabRequest('details', id, requestId, controller)) {
       await waitForTabSkeleton(startedAt)
     }
 
-    if (loaded) {
-      tabLoaded.details = true
+    if (isCurrentTabRequest('details', id, requestId, controller)) {
+      if (loaded) {
+        tabLoaded.details = true
+      }
+
+      tabLoading.details = false
     }
 
-    tabLoading.details = false
+    if (tabControllers.details === controller) {
+      tabControllers.details = null
+    }
   }
 }
 
@@ -875,6 +1265,7 @@ function setArtistSongOrder(order) {
 
   artistSongOrder.value = order
   artistSongs.value = []
+  artistSongTotal.value = 0
   artistSongsHasMore.value = false
   tabLoaded.songs = false
   loadArtistSongs({ reset: true })

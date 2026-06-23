@@ -80,16 +80,16 @@ import {
   getLyricCandidate
 } from './shared'
 
-export const getAlbumNewest = (params = {}) => getKugou('/top/album', params).then(toAlbumListResponse)
+export const getAlbumNewest = (params = {}, config = {}) => getKugou('/top/album', params, config).then(toAlbumListResponse)
 
-export const getNewAlbums = (params = {}) => getKugou('/top/album', params).then(toAlbumListResponse)
+export const getNewAlbums = (params = {}, config = {}) => getKugou('/top/album', params, config).then(toAlbumListResponse)
 
-export const getTopAlbums = (params = {}) => getKugou('/top/album', params).then(toAlbumListResponse)
+export const getTopAlbums = (params = {}, config = {}) => getKugou('/top/album', params, config).then(toAlbumListResponse)
 
-export const getAlbumInfo = (params = {}) => getKugou('/album', params).then(toAlbumInfoResponse)
+export const getAlbumInfo = (params = {}, config = {}) => getKugou('/album', params, config).then(toAlbumInfoResponse)
 
-export const getAlbumDetail = (params = {}) => getKugou('/album/detail', params).then(toAlbumDetailResponse)
+export const getAlbumDetail = (params = {}, config = {}) => getKugou('/album/detail', params, config).then(toAlbumDetailResponse)
 
-export const getAlbumSongs = (params = {}) => getKugou('/album/songs', params).then(toSongListResponse)
+export const getAlbumSongs = (params = {}, config = {}) => getKugou('/album/songs', params, config).then(toSongListResponse)
 
-export const getAlbumDynamic = (params = {}) => getKugou('/album/detail', params).then(toAlbumDetailResponse)
+export const getAlbumDynamic = (params = {}, config = {}) => getKugou('/album/detail', params, config).then(toAlbumDetailResponse)
