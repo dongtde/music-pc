@@ -7,8 +7,8 @@
     <button
       class="window-control"
       type="button"
-      title="Minimize"
-      aria-label="Minimize window"
+      title="最小化"
+      aria-label="最小化窗口"
       @click="minimize"
     >
       <Minus :size="16" :stroke-width="2.2" />
@@ -16,8 +16,8 @@
     <button
       class="window-control"
       type="button"
-      :title="isMaximized ? 'Restore' : 'Maximize'"
-      :aria-label="isMaximized ? 'Restore window' : 'Maximize window'"
+      :title="isMaximized ? '还原' : '最大化'"
+      :aria-label="isMaximized ? '还原窗口' : '最大化窗口'"
       @click="toggleMaximize"
     >
       <Minimize2 v-if="isMaximized" :size="15" :stroke-width="2.1" />
@@ -26,8 +26,8 @@
     <button
       class="window-control window-control--close"
       type="button"
-      title="Close"
-      aria-label="Close window"
+      title="关闭"
+      aria-label="关闭窗口"
       @click="closeWindow"
     >
       <X :size="17" :stroke-width="2.1" />

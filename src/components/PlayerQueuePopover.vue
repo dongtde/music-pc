@@ -7,7 +7,7 @@
       :class="{ active: open }"
       @click="$emit('toggle')"
     >
-      <ListMusic :size="18" />
+      <ListMusic :size="19" />
     </button>
     <Transition :name="transitionName">
       <div v-if="open" class="player-popover queue-popover">

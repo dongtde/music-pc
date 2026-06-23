@@ -9,13 +9,11 @@
     :class="{ active: open, locked }"
     @click="$emit('toggle')"
   >
-    <Captions :size="18" />
+    <span class="desktop-lyrics-button__icon" aria-hidden="true">&#35789;</span>
   </button>
 </template>
 
 <script setup>
-import { Captions } from 'lucide-vue-next'
-
 defineProps({
   available: {
     type: Boolean,
@@ -37,3 +35,23 @@ defineProps({
 
 defineEmits(['toggle'])
 </script>
+
+<style scoped>
+.desktop-lyrics-button__icon {
+  display: grid;
+  width: 19px;
+  height: 19px;
+  place-items: center;
+  border: 1.7px solid currentColor;
+  border-radius: 5px;
+  color: inherit;
+  font-family:
+    'Microsoft YaHei',
+    'PingFang SC',
+    'Noto Sans CJK SC',
+    sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+</style>

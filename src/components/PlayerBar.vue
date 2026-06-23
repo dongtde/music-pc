@@ -96,7 +96,7 @@
         @toggle="toggleVisualizerMenu"
         @select="selectVisualizerMode"
       />
-      <button class="icon-button" type="button" aria-label="麦克风"><Mic2 :size="17" /></button>
+      <button class="icon-button" type="button" aria-label="麦克风"><Mic2 :size="19" /></button>
       <PlayerQualityPopover
         :open="qualityMenuOpen"
         :button-label="qualityButtonLabel"

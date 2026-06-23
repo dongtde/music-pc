@@ -39,10 +39,10 @@ export function useDesktopLyricsBridge(options = {}) {
   const loading = ref(false)
   const buttonLabel = computed(() => {
     if (windowOpen.value && locked.value) {
-      return 'Unlock desktop lyrics'
+      return '解锁桌面歌词'
     }
 
-    return windowOpen.value ? 'Close desktop lyrics' : 'Desktop lyrics'
+    return windowOpen.value ? '关闭桌面歌词' : '桌面歌词'
   })
 
   let lyricRequestId = 0

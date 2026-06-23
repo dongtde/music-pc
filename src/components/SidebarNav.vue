@@ -1,6 +1,6 @@
 <template>
   <aside class="sidebar" :class="{ 'sidebar--compact': compact }">
-    <div class="profile-card">
+    <div class="profile-card" :class="{ 'profile-card--text-centered': !showVipButton }">
       <button class="profile" type="button" @click="auth.openLoginModal">
         <span class="profile-avatar" aria-hidden="true">
           <img

@@ -1,8 +1,8 @@
 <template>
   <header class="topbar">
     <div class="history-actions">
-      <button type="button" aria-label="后退" @click="router.back()"><ChevronLeft :size="20" /></button>
-      <button type="button" aria-label="前进" @click="router.forward()"><ChevronRight :size="20" /></button>
+      <button type="button" title="后退" aria-label="后退" @click="router.back()"><ChevronLeft :size="20" /></button>
+      <button type="button" title="前进" aria-label="前进" @click="router.forward()"><ChevronRight :size="20" /></button>
     </div>
 
     <div
@@ -196,17 +196,18 @@
       :class="{ 'topbar__spacer--search-active': searchExpanded }"
       @pointerdown="handleTopbarSpacerPointerDown"
     />
-    <button class="icon-button" type="button" aria-label="消息"><Mail :size="18" /></button>
+    <button class="icon-button" type="button" title="消息" aria-label="消息"><Mail :size="18" /></button>
     <button
       class="icon-button"
       type="button"
+      :title="theme.state.mode === 'dark' ? '切换浅色主题' : '切换深色主题'"
       :aria-label="theme.state.mode === 'dark' ? '切换浅色主题' : '切换深色主题'"
       @click="theme.toggleTheme"
     >
       <Sun v-if="theme.state.mode === 'dark'" :size="18" />
       <Moon v-else :size="18" />
     </button>
-    <router-link class="icon-button" to="/settings" aria-label="设置">
+    <router-link class="icon-button" to="/settings" title="设置" aria-label="设置">
       <Settings :size="18" />
     </router-link>
     <WindowControls class="topbar__window-controls" />

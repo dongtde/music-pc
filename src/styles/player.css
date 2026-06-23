@@ -362,15 +362,15 @@
 
 .quality-button__badge {
   display: inline-flex;
-  height: 14px;
-  min-width: 20px;
+  height: 18px;
+  min-width: 24px;
   align-items: center;
   justify-content: center;
-  padding: 0 4px;
-  border: 1px solid rgba(78, 168, 255, 0.58);
-  border-radius: 4px;
+  padding: 0 5px;
+  border: 1.5px solid rgba(78, 168, 255, 0.58);
+  border-radius: 5px;
   color: #4ea8ff;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0;
   line-height: 1;
