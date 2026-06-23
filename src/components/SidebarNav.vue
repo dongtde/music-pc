@@ -122,7 +122,7 @@ const creatingPlaylist = ref(false)
 const displayName = auth.displayName
 const avatarUrl = auth.avatarUrl
 const icons = { CloudDownload, Compass, Heart, History, House, Music2, Radio, RadioTower, Search, Users, Video }
-const endTimeLabel = '\u5230\u671f'
+const endTimeLabel = '到期'
 const showVipButton = computed(() => auth.state.isLoggedIn && !auth.isGuest.value)
 const showUserPlaylistGroups = computed(() => auth.state.isLoggedIn && !auth.isGuest.value)
 const vipButtonText = computed(() => {
@@ -134,7 +134,7 @@ const vipButtonText = computed(() => {
     return '检测中'
   }
 
-  return activeSvip.value ? 'SVIP\u5df2\u5f00\u901a' : '\u5f00\u901aSVIP'
+  return activeSvip.value ? 'SVIP已开通' : '开通SVIP'
 })
 const vipButtonDisabled = computed(() => auth.state.vip.loading || auth.state.vip.claiming)
 const busiVipList = computed(() => {
@@ -249,7 +249,7 @@ async function handleGroupAction(group) {
 
   if (!auth.state.isLoggedIn || auth.isGuest.value) {
     auth.openLoginModal()
-    message.info('\u8bf7\u5148\u767b\u5f55\u9177\u72d7\u8d26\u53f7')
+    message.info('请先登录酷狗账号')
     return
   }
 
@@ -270,13 +270,13 @@ async function handleGroupAction(group) {
 
     const data = await syncRemotePlaylists(auth.userId.value)
     if (data) {
-      message.success('\u6b4c\u5355\u5df2\u521b\u5efa')
+      message.success('歌单已创建')
     } else {
-      message.warning('\u6b4c\u5355\u5df2\u521b\u5efa\uff0c\u5217\u8868\u5237\u65b0\u5931\u8d25')
+      message.warning('歌单已创建，列表刷新失败')
     }
   } catch (error) {
     console.warn('Failed to create user playlist:', error)
-    message.error(error?.message || '\u6b4c\u5355\u521b\u5efa\u5931\u8d25')
+    message.error(error?.message || '歌单创建失败')
   } finally {
     creatingPlaylist.value = false
   }

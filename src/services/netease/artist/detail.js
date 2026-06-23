@@ -98,7 +98,7 @@ export async function getArtistIntroData(id) {
     briefDesc: artist.briefDesc || detail.intro || response.briefDesc || '',
     sections: sections.map((section, index) => ({
       id: `${section.title || section.ti || 'intro'}-${index}`,
-      title: section.title || section.ti || '\u8be6\u60c5',
+      title: section.title || section.ti || '详情',
       text: section.content || section.txt || ''
     })).filter((section) => section.text)
   }

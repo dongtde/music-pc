@@ -58,7 +58,7 @@ export function mapRadioCard(raw = {}, index = 0) {
   const source = raw.baseInfo ?? raw.radio ?? raw.djRadio ?? raw
   const id = source.fmid ?? source.fm_id ?? source.fmId ?? source.id ?? source.radioId ?? source.rid ?? raw.resourceId
   const title = cleanRadioTitle(
-    source.fmname ?? source.fm_name ?? source.name ?? source.title ?? raw.uiElement?.mainTitle?.title ?? '\u672a\u547d\u540d\u7535\u53f0'
+    source.fmname ?? source.fm_name ?? source.name ?? source.title ?? raw.uiElement?.mainTitle?.title ?? '未命名电台'
   )
   const fmtype = Number(source.fmtype ?? source.fm_type ?? raw.fmtype ?? 2) || 2
   const category = source.classname ?? source.categoryName ?? source.category ?? source.sectionTitle ?? raw.categoryName ?? ''
@@ -99,10 +99,10 @@ export function mapRadioCard(raw = {}, index = 0) {
     title,
     name: title,
     description: description || getRadioDescription(title, category),
-    creator: '\u9177\u72d7\u7535\u53f0',
+    creator: '酷狗电台',
     creatorAvatarUrl: coverUrl,
-    category: category || '\u7535\u53f0',
-    primaryCategory: category || '\u7535\u53f0',
+    category: category || '电台',
+    primaryCategory: category || '电台',
     subCategory: source.parentName || '',
     coverUrl,
     bannerUrl,
@@ -110,12 +110,12 @@ export function mapRadioCard(raw = {}, index = 0) {
     subCount: 0,
     playCount: heat,
     heat,
-    playCountLabel: heat ? `${formatPlayCount(heat)} \u70ed\u5ea6` : 'FM',
+    playCountLabel: heat ? `${formatPlayCount(heat)} 热度` : 'FM',
     subCountLabel: '',
     programCountLabel: '',
     lastProgramName: previewTracks[0]?.name || '',
-    score: source.isnew === '1' || source.isnew === 1 ? '\u65b0' : '',
-    tag: category || '\u7535\u53f0',
+    score: source.isnew === '1' || source.isnew === 1 ? '新' : '',
+    tag: category || '电台',
     subed: false,
     type: coverType(index || Number(id) || 0),
     to: id ? `/podcast/${id}` : '',
@@ -149,7 +149,7 @@ export function mapRadioSongTrack(song = {}, index = 0, radio = {}) {
     artistId: artists[0]?.id ?? song.author_id ?? '',
     artistIds: getArtistIds(artists),
     artist: artistName,
-    album: radio.title || radio.name || album.name || '\u9177\u72d7\u7535\u53f0',
+    album: radio.title || radio.name || album.name || '酷狗电台',
     albumId: album.id ?? song.album_id ?? '',
     rank: String(index + 1).padStart(2, '0'),
     type: coverType(index || Number(id) || 0),
@@ -157,7 +157,7 @@ export function mapRadioSongTrack(song = {}, index = 0, radio = {}) {
     duration: formatRadioDuration(duration),
     coverUrl,
     thumbnailUrl: normalizeKugouMediaUrl(coverUrl, 96),
-    source: radio.title ? `\u7535\u53f0 \u00b7 ${radio.title}` : '\u9177\u72d7\u7535\u53f0',
+    source: radio.title ? `电台 · ${radio.title}` : '酷狗电台',
     category: radio.category || '',
     vip: isVipSong(song),
     hasVideo: Boolean(song.mv || song.mvhash),
@@ -168,9 +168,9 @@ export function mapRadioSongTrack(song = {}, index = 0, radio = {}) {
 }
 
 export function getRadioDescription(title = '', category = '') {
-  const prefix = category ? `${category}\u91cc\u7684` : ''
+  const prefix = category ? `${category}里的` : ''
 
-  return `${prefix}${title}\uff0c\u6309\u9177\u72d7\u7535\u53f0\u5b9e\u65f6\u6b4c\u5355\u8fde\u7eed\u64ad\u653e\u3002`
+  return `${prefix}${title}，按酷狗电台实时歌单连续播放。`
 }
 
 export function getRadioPreviewSongs(source = {}) {

@@ -2,11 +2,11 @@ import { COVER_TYPES } from '../../../config/app'
 import { normalizeAudioQualities } from '../../../utils/audioQuality'
 import { normalizeSongAccess } from '../../../utils/songAccess'
 
-export const UNKNOWN_SONG = '\u672a\u547d\u540d\u6b4c\u66f2'
-export const UNKNOWN_ARTIST = '\u672a\u77e5\u6b4c\u624b'
-export const UNKNOWN_ALBUM = '\u672a\u77e5\u4e13\u8f91'
-export const RADIO_CREATOR = '\u9177\u72d7\u7535\u53f0'
-export const RADIO_CATEGORY = '\u7535\u53f0'
+export const UNKNOWN_SONG = '未命名歌曲'
+export const UNKNOWN_ARTIST = '未知歌手'
+export const UNKNOWN_ALBUM = '未知专辑'
+export const RADIO_CREATOR = '酷狗电台'
+export const RADIO_CATEGORY = '电台'
 
 export function uniqueSongs(songs = []) {
   const seenIds = new Set()
@@ -75,7 +75,7 @@ export function normalizeKugouMediaUrl(url, size = 480) {
 }
 
 export function cleanRadioTitle(value) {
-  return String(value ?? '').replace(/^(\u64ad\u5ba2|\u7535\u53f0|FM)[:\uff1a]\s*/i, '').trim()
+  return String(value ?? '').replace(/^(播客|电台|FM)[:：]\s*/i, '').trim()
 }
 
 export function parseCountText(value) {
@@ -87,7 +87,7 @@ export function parseCountText(value) {
     return 0
   }
 
-  const match = value.match(/([\d.]+)\s*(\u4ebf|\u4e07)?/)
+  const match = value.match(/([\d.]+)\s*(亿|万)?/)
 
   if (!match) {
     return 0
@@ -99,11 +99,11 @@ export function parseCountText(value) {
     return 0
   }
 
-  if (match[2] === '\u4ebf') {
+  if (match[2] === '亿') {
     return Math.round(number * 100000000)
   }
 
-  if (match[2] === '\u4e07') {
+  if (match[2] === '万') {
     return Math.round(number * 10000)
   }
 
@@ -112,25 +112,25 @@ export function parseCountText(value) {
 
 export function getSatiCategoryName(tag) {
   const names = {
-    RCMD: '\u70ed\u95e8',
-    sleep: '\u52a9\u7720',
-    meditation: '\u51a5\u60f3',
-    starGoodNight: '\u660e\u661f\u54c4\u7761',
-    lightmusic: '\u8f7b\u97f3\u4e50',
-    goodnightStory: '\u665a\u5b89\u6545\u4e8b',
-    dokodemo: '\u4efb\u610f\u95e8',
-    cloudStudyRoom: '\u4e91\u4e0a\u81ea\u4e60\u5ba4',
-    relax: '\u89e3\u538b',
-    naturalMusic: '\u7a7a\u7075\u4e50\u5668'
+    RCMD: '热门',
+    sleep: '助眠',
+    meditation: '冥想',
+    starGoodNight: '明星哄睡',
+    lightmusic: '轻音乐',
+    goodnightStory: '晚安故事',
+    dokodemo: '任意门',
+    cloudStudyRoom: '云上自习室',
+    relax: '解压',
+    naturalMusic: '空灵乐器'
   }
 
-  return names[tag] || '\u58f0\u97f3\u8d44\u6e90'
+  return names[tag] || '声音资源'
 }
 
 export function getRadioDescription(title = '', category = '') {
-  const prefix = category ? `${category}\u91cc\u7684` : ''
+  const prefix = category ? `${category}里的` : ''
 
-  return `${prefix}${title}\uff0c\u6309\u9177\u72d7\u7535\u53f0\u5b9e\u65f6\u6b4c\u5355\u8fde\u7eed\u64ad\u653e\u3002`
+  return `${prefix}${title}，按酷狗电台实时歌单连续播放。`
 }
 
 export function getRadioPreviewSongs(source = {}) {
@@ -214,11 +214,11 @@ export function formatDuration(duration = 0) {
 
 export function formatPlayCount(count = 0) {
   if (count >= 100000000) {
-    return `${trimNumber(count / 100000000)}\u4ebf`
+    return `${trimNumber(count / 100000000)}亿`
   }
 
   if (count >= 10000) {
-    return `${trimNumber(count / 10000)}\u4e07`
+    return `${trimNumber(count / 10000)}万`
   }
 
   return String(count)

@@ -39,7 +39,7 @@ export function mapRadioCard(raw = {}, index = 0) {
   const source = raw.baseInfo ?? raw.radio ?? raw.djRadio ?? raw
   const id = source.fmid ?? source.fm_id ?? source.fmId ?? source.id ?? source.radioId ?? source.rid ?? raw.resourceId
   const title = cleanRadioTitle(
-    source.fmname ?? source.fm_name ?? source.name ?? source.title ?? raw.uiElement?.mainTitle?.title ?? '\u672a\u547d\u540d\u7535\u53f0'
+    source.fmname ?? source.fm_name ?? source.name ?? source.title ?? raw.uiElement?.mainTitle?.title ?? '未命名电台'
   )
   const fmtype = Number(source.fmtype ?? source.fm_type ?? raw.fmtype ?? 2) || 2
   const category = source.classname ?? source.categoryName ?? source.category ?? source.sectionTitle ?? raw.categoryName ?? ''
@@ -91,11 +91,11 @@ export function mapRadioCard(raw = {}, index = 0) {
     subCount: 0,
     playCount: heat,
     heat,
-    playCountLabel: heat ? `${formatPlayCount(heat)} \u70ed\u5ea6` : 'FM',
+    playCountLabel: heat ? `${formatPlayCount(heat)} 热度` : 'FM',
     subCountLabel: '',
     programCountLabel: '',
     lastProgramName: previewTracks[0]?.name || '',
-    score: source.isnew === '1' || source.isnew === 1 ? '\u65b0' : '',
+    score: source.isnew === '1' || source.isnew === 1 ? '新' : '',
     tag: category || RADIO_CATEGORY,
     subed: false,
     type: coverType(index || Number(id) || 0),
@@ -112,7 +112,7 @@ export function mapRadioDetail(raw = {}, total = 0) {
     ...card,
     description: card.description || getRadioDescription(card.title, card.category),
     programCount: total,
-    programCountLabel: total ? `${total}+ \u9996\u6b4c\u66f2` : '',
+    programCountLabel: total ? `${total}+ 首歌曲` : '',
     commentCount: 0,
     shareCount: 0,
     likedCount: 0,
@@ -158,7 +158,7 @@ export function mapRadioSongTrack(song = {}, index = 0, radio = {}) {
     duration: formatRadioDuration(duration),
     coverUrl,
     thumbnailUrl: normalizeKugouMediaUrl(coverUrl, 96),
-    source: radio.title ? `\u7535\u53f0 \u00b7 ${radio.title}` : RADIO_CREATOR,
+    source: radio.title ? `电台 · ${radio.title}` : RADIO_CREATOR,
     category: radio.category || '',
     vip: isVipSong(song),
     hasVideo: Boolean(song.mv || song.mvhash),
@@ -174,15 +174,15 @@ export function mapSatiResourceTrack(item = {}, index = 0) {
   return {
     id,
     programId: item.djProgramId ?? '',
-    name: item.name || '\u52a9\u7720\u58f0\u97f3',
-    artist: '\u52a9\u7720\u89e3\u538b',
+    name: item.name || '助眠声音',
+    artist: '助眠解压',
     album: getSatiCategoryName(item.category),
     rank: String(index + 1).padStart(2, '0'),
     type: coverType(index || Number(id) || 0),
     time: '--:--',
     duration: '--:--',
     coverUrl: resizeNeteaseImage(item.pic, 240),
-    source: '\u52a9\u7720\u89e3\u538b',
+    source: '助眠解压',
     satiId: item.id,
     category: item.category
   }
@@ -194,9 +194,9 @@ export function mapDifmTrack(item = {}, index = 0) {
 
   return {
     id,
-    name: song.name ?? item.name ?? 'DIFM \u58f0\u97f3',
+    name: song.name ?? item.name ?? 'DIFM 声音',
     artist: getArtistNames(song.ar ?? song.artists ?? []) || song.artist || item.artistName || item.artist || 'DIFM',
-    album: item.channelName || item.styleName || 'DIFM \u7535\u53f0',
+    album: item.channelName || item.styleName || 'DIFM 电台',
     rank: String(index + 1).padStart(2, '0'),
     type: coverType(index || Number(id) || 0),
     time: formatRadioDuration(song.dt ?? song.duration ?? item.duration),
@@ -211,8 +211,8 @@ export function mapBroadcastChannel(item = {}, index = 0) {
 
   return {
     id,
-    title: item.name ?? item.channelName ?? '\u5e7f\u64ad\u7535\u53f0',
-    name: item.name ?? item.channelName ?? '\u5e7f\u64ad\u7535\u53f0',
+    title: item.name ?? item.channelName ?? '广播电台',
+    name: item.name ?? item.channelName ?? '广播电台',
     description: item.desc ?? item.description ?? item.programName ?? '',
     coverUrl: resizeNeteaseImage(item.picUrl ?? item.coverUrl ?? item.logoUrl, 360),
     category: item.categoryName ?? item.category ?? '',

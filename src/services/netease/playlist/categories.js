@@ -3,7 +3,7 @@ import { firstArrayValue } from './shared'
 
 export const PLAYLIST_DEFAULT_CATEGORY = {
   id: 0,
-  name: '\u5168\u90e8'
+  name: '全部'
 }
 
 let playlistCategoryMetaPromise = null
@@ -27,7 +27,7 @@ export function mapPlaylistCategoryMeta(hotResponse = {}, catResponse = {}) {
     : fallbackTags.length
       ? [{
           id: 'playlist-tags',
-          name: '\u5168\u90e8\u5206\u7c7b',
+          name: '全部分类',
           tags: fallbackTags
         }]
       : []
@@ -94,7 +94,7 @@ export function normalizePlaylistCategoryOption(category) {
 export function normalizePlaylistCategoryId(category) {
   const value = String(category ?? '').trim()
 
-  if (!value || value === '\u5168\u90e8' || value === '\u63a8\u8350') {
+  if (!value || value === '全部' || value === '推荐') {
     return 0
   }
 
@@ -130,7 +130,7 @@ export function mapPlaylistCategoryGroups(response = {}) {
           group.class_name ||
           group.name ||
           group.title ||
-          `\u5206\u7c7b ${groupIndex + 1}`,
+          `分类 ${groupIndex + 1}`,
         tags
       }
     })

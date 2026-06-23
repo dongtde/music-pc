@@ -54,8 +54,8 @@ export function mapVideoMv(mv = {}, index = 0) {
 
   return {
     id,
-    title: mv.name || mv.title || '\u672a\u547d\u540d MV',
-    name: mv.name || mv.title || '\u672a\u547d\u540d MV',
+    title: mv.name || mv.title || '未命名 MV',
+    name: mv.name || mv.title || '未命名 MV',
     artist: artistName,
     artistId: mv.artistId ?? mv.artist?.id ?? artists[0]?.id ?? '',
     desc: mv.copywriter || mv.briefDesc || mv.desc || mv.description || '',

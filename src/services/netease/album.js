@@ -114,7 +114,7 @@ function mergePlainObject(current, next) {
 function mapAlbumCard(album = {}, index = 0) {
   const artist = getAlbumArtist(album)
   const songCount = album.size ?? album.songCount ?? 0
-  const typeName = album.type || album.subType || '\u4e13\u8f91'
+  const typeName = album.type || album.subType || '专辑'
   const publishTime = formatAlbumDate(album.publishTime)
 
   return {
@@ -122,8 +122,8 @@ function mapAlbumCard(album = {}, index = 0) {
     title: album.name,
     artist,
     artistId: album.artist?.id ?? album.artists?.[0]?.id ?? '',
-    desc: [artist, publishTime, songCount ? `${songCount} \u9996\u6b4c` : '', typeName].filter(Boolean).join(' \u00b7 '),
-    listeners: album.playCount ? `${formatPlayCount(album.playCount)} \u64ad\u653e` : songCount ? `${songCount} \u9996\u6b4c` : typeName,
+    desc: [artist, publishTime, songCount ? `${songCount} 首歌` : '', typeName].filter(Boolean).join(' · '),
+    listeners: album.playCount ? `${formatPlayCount(album.playCount)} 播放` : songCount ? `${songCount} 首歌` : typeName,
     type: coverType(index),
     typeName,
     coverUrl: resizeNeteaseImage(album.picUrl ?? album.blurPicUrl, 360),
@@ -134,16 +134,16 @@ function mapAlbumCard(album = {}, index = 0) {
 }
 
 function getAlbumArtist(album = {}) {
-  return getArtistNames(album.artists) || album.artist?.name || '\u672a\u77e5\u6b4c\u624b'
+  return getArtistNames(album.artists) || album.artist?.name || '未知歌手'
 }
 
 function mapAlbumDetail(album = {}, dynamic = {}) {
-  const artist = getArtistNames(album.artists) || album.artist?.name || '\u672a\u77e5\u6b4c\u624b'
+  const artist = getArtistNames(album.artists) || album.artist?.name || '未知歌手'
 
   return {
     id: album.id,
     title: album.name,
-    description: album.description || album.briefDesc || `${artist} \u7684\u4e13\u8f91`,
+    description: album.description || album.briefDesc || `${artist} 的专辑`,
     artist,
     artistId: album.artist?.id ?? '',
     publishTime: formatDate(album.publishTime),
@@ -170,8 +170,8 @@ function mapPlaylistTrack(song = {}, index = 0) {
     name: song.name,
     artistId: artistIds[0] ?? '',
     artistIds,
-    artist: artists.map((artist) => artist.name).filter(Boolean).join(' / ') || '\u672a\u77e5\u6b4c\u624b',
-    album: album.name || '\u672a\u77e5\u4e13\u8f91',
+    artist: artists.map((artist) => artist.name).filter(Boolean).join(' / ') || '未知歌手',
+    album: album.name || '未知专辑',
     rank: String(index + 1).padStart(2, '0'),
     albumId: album.id ?? '',
     type: coverType(index),
@@ -245,11 +245,11 @@ function formatDuration(duration = 0) {
 
 function formatPlayCount(count = 0) {
   if (count >= 100000000) {
-    return `${trimNumber(count / 100000000)}\u4ebf`
+    return `${trimNumber(count / 100000000)}亿`
   }
 
   if (count >= 10000) {
-    return `${trimNumber(count / 10000)}\u4e07`
+    return `${trimNumber(count / 10000)}万`
   }
 
   return String(count)
@@ -261,19 +261,19 @@ function trimNumber(number) {
 
 function formatDate(value) {
   if (!value) {
-    return '\u6700\u8fd1\u66f4\u65b0'
+    return '最近更新'
   }
 
   const date = new Date(value)
 
   if (Number.isNaN(date.getTime())) {
-    return '\u6700\u8fd1\u66f4\u65b0'
+    return '最近更新'
   }
 
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
 
-  return `${date.getFullYear()}-${month}-${day} \u66f4\u65b0`
+  return `${date.getFullYear()}-${month}-${day} 更新`
 }
 
 function formatAlbumDate(value) {

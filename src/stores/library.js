@@ -498,7 +498,7 @@ function createPlaylistId(title = 'playlist') {
   const slug = String(title)
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-')
+    .replace(/[^a-z0-9一-龥]+/g, '-')
     .replace(/^-+|-+$/g, '')
 
   return `${slug || 'playlist'}-${Date.now().toString(36)}`

@@ -62,11 +62,11 @@ export function formatDuration(duration = 0) {
 
 export function formatPlayCount(count = 0) {
   if (count >= 100000000) {
-    return `${trimNumber(count / 100000000)}\u4ebf`
+    return `${trimNumber(count / 100000000)}亿`
   }
 
   if (count >= 10000) {
-    return `${trimNumber(count / 10000)}\u4e07`
+    return `${trimNumber(count / 10000)}万`
   }
 
   return String(count)
@@ -99,19 +99,19 @@ export function formatPlainDate(value) {
 
 export function formatDate(value) {
   if (!value) {
-    return '\u6700\u8fd1\u66f4\u65b0'
+    return '最近更新'
   }
 
   const date = new Date(value)
 
   if (Number.isNaN(date.getTime())) {
-    return '\u6700\u8fd1\u66f4\u65b0'
+    return '最近更新'
   }
 
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
 
-  return `${date.getFullYear()}-${month}-${day} \u66f4\u65b0`
+  return `${date.getFullYear()}-${month}-${day} 更新`
 }
 
 export function formatAlbumDate(value) {

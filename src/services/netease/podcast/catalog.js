@@ -79,7 +79,7 @@ export function getRadioClassGroups(response = {}) {
 
     return {
       id: group.classid ?? group.id ?? `class-${groupIndex + 1}`,
-      name: group.classname ?? group.name ?? `\u7535\u53f0\u5206\u7c7b ${groupIndex + 1}`,
+      name: group.classname ?? group.name ?? `电台分类 ${groupIndex + 1}`,
       count: group.class_count ?? radios.length,
       sort: Number(group.sort_app ?? group.sort ?? groupIndex),
       radios
@@ -91,7 +91,7 @@ export function getRadioLibraryGroups(response = {}) {
   const groups = asArray(response.data ?? response.list ?? response.items)
 
   return groups.map((group, groupIndex) => {
-    const title = group.time_fm_cn || group.title || group.name || `\u4e50\u5e93\u7535\u53f0 ${groupIndex + 1}`
+    const title = group.time_fm_cn || group.title || group.name || `乐库电台 ${groupIndex + 1}`
     const description = group.rcm_text || group.description || ''
     const channels = asArray(group.fm_list ?? group.fmlist ?? group.radios ?? group.list)
       .map((item, index) => mapRadioCard({

@@ -9,7 +9,7 @@ export async function getPodcastHomeData() {
     const categories = catalog.classGroups.map((group) => ({
       id: group.id,
       name: group.name,
-      description: `${group.radios.length} \u4e2a\u7535\u53f0`,
+      description: `${group.radios.length} 个电台`,
       radios: group.radios
     }))
     const firstCategory = categories[0]
@@ -100,8 +100,8 @@ export async function getPodcastRankData({ type = 'hot', limit = 18, offset = 0 
     hot: catalog.recommendRadios,
     new: sortByAddTime(catalog.allRadios),
     library: catalog.libraryRadios,
-    classic: catalog.classGroups.find((group) => /\u4e3b\u9898|\u7ecf\u5178|\u5e74\u4ee3/.test(group.name))?.radios ?? catalog.classRadios,
-    scene: catalog.classGroups.find((group) => /\u573a\u666f|\u5fc3\u60c5|\u8fd0\u52a8|\u751f\u6d3b/.test(group.name))?.radios ?? catalog.libraryRadios,
+    classic: catalog.classGroups.find((group) => /主题|经典|年代/.test(group.name))?.radios ?? catalog.classRadios,
+    scene: catalog.classGroups.find((group) => /场景|心情|运动|生活/.test(group.name))?.radios ?? catalog.libraryRadios,
     heat: sortByHeat(catalog.allRadios)
   }
   const radios = uniqueRadioCards(sources[type] ?? sources.hot)

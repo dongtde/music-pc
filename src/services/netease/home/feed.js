@@ -18,7 +18,7 @@ export async function getMusicFeedData({ limit = 80 } = {}) {
       .map((song) => ({ ...song, feedSource: 'new' }))
     const toplists = toplistResponse.list ?? []
     const feedToplists = [
-      ...toplists.filter((item) => /\u70ed\u6b4c|\u65b0\u6b4c|\u539f\u521b|\u98d9\u5347/.test(item.name || '')),
+      ...toplists.filter((item) => /热歌|新歌|原创|飙升/.test(item.name || '')),
       ...toplists
     ].filter(Boolean)
     const seenToplistIds = new Set()

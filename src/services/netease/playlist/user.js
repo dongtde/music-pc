@@ -234,7 +234,7 @@ function mapRemoteUserPlaylist(playlist = {}, { collected = false } = {}) {
     id,
     globalCollectionId: globalCollectionId || '',
     listid: listid || '',
-    title: playlist.name || playlist.title || playlist.specialname || playlist.listname || '\u672a\u547d\u540d\u6b4c\u5355',
+    title: playlist.name || playlist.title || playlist.specialname || playlist.listname || '未命名歌单',
     description: playlist.description || playlist.copywriter || playlist.desc || playlist.intro || '',
     trackIds: [],
     remote: true,

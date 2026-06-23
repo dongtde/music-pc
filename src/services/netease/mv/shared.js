@@ -1,10 +1,10 @@
 import { COVER_TYPES } from '../../../config/app'
 
-export const MV_DEFAULT_AREA = '\u5168\u90e8'
-export const MV_DEFAULT_TYPE = '\u5168\u90e8'
-export const MV_DEFAULT_ORDER = '\u4e0a\u5347\u6700\u5feb'
-export const UNKNOWN_ARTIST = '\u672a\u77e5\u827a\u4eba'
-export const UNKNOWN_MV = '\u672a\u547d\u540d MV'
+export const MV_DEFAULT_AREA = '全部'
+export const MV_DEFAULT_TYPE = '全部'
+export const MV_DEFAULT_ORDER = '上升最快'
+export const UNKNOWN_ARTIST = '未知艺人'
+export const UNKNOWN_MV = '未命名 MV'
 
 export function getArtistNames(artists = []) {
   return artists.map((artist) => artist.name).filter(Boolean).join(' / ')
@@ -42,11 +42,11 @@ export function formatDuration(duration = 0) {
 
 export function formatPlayCount(count = 0) {
   if (count >= 100000000) {
-    return `${trimNumber(count / 100000000)}\u4ebf`
+    return `${trimNumber(count / 100000000)}亿`
   }
 
   if (count >= 10000) {
-    return `${trimNumber(count / 10000)}\u4e07`
+    return `${trimNumber(count / 10000)}万`
   }
 
   return String(count)

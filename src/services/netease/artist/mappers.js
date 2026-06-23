@@ -15,14 +15,14 @@ import {
 export function mapArtist(artist = {}, index = 0) {
   const details = [
     artist.alias?.length ? artist.alias.join(' / ') : '',
-    artist.musicSize ? `${artist.musicSize} \u9996\u6b4c` : '',
-    artist.albumSize ? `${artist.albumSize} \u5f20\u4e13\u8f91` : ''
+    artist.musicSize ? `${artist.musicSize} 首歌` : '',
+    artist.albumSize ? `${artist.albumSize} 张专辑` : ''
   ].filter(Boolean)
 
   return {
     id: artist.id,
     name: artist.name,
-    tag: details.join(' \u00b7 '),
+    tag: details.join(' · '),
     details,
     coverUrl: resizeNeteaseImage(artist.img1v1Url ?? artist.picUrl, 240),
     followers: formatPlayCount(artist.fansCount ?? artist.followeds ?? artist.accountId ?? 0),
@@ -52,12 +52,12 @@ export function mapArtistDetail(artist = {}, detail = {}, fallbackArtist = {}) {
       .slice(0, 4)
       .map((item) => item.expertIdentiyName)
   ].filter(Boolean)
-  const description = artist.briefDesc || fallbackArtist.briefDesc || '\u8fd9\u4f4d\u6b4c\u624b\u6682\u65f6\u6ca1\u6709\u7b80\u4ecb\u3002'
+  const description = artist.briefDesc || fallbackArtist.briefDesc || '这位歌手暂时没有简介。'
   const rank = artist.rank?.rank ?? detail.rank?.rank ?? 0
 
   return {
     id: artist.id ?? fallbackArtist.id,
-    name: artist.name ?? fallbackArtist.name ?? '\u6b4c\u624b\u8be6\u60c5',
+    name: artist.name ?? fallbackArtist.name ?? '歌手详情',
     aliases,
     identity: artist.identifyTag || detail.identify?.imageDesc || identities.join(' / '),
     identities: [...new Set(identities)].slice(0, 6),
@@ -85,7 +85,7 @@ export function getArtistDynamicVideoCount(videoNum = []) {
 export function mapAlbumCard(album = {}, index = 0) {
   const artist = getAlbumArtist(album)
   const songCount = album.size ?? album.songCount ?? 0
-  const typeName = album.type || album.subType || '\u4e13\u8f91'
+  const typeName = album.type || album.subType || '专辑'
   const publishTime = formatAlbumDate(album.publishTime)
 
   return {
@@ -93,8 +93,8 @@ export function mapAlbumCard(album = {}, index = 0) {
     title: album.name,
     artist,
     artistId: album.artist?.id ?? album.artists?.[0]?.id ?? '',
-    desc: [artist, publishTime, songCount ? `${songCount} \u9996\u6b4c` : '', typeName].filter(Boolean).join(' \u00b7 '),
-    listeners: album.playCount ? `${formatPlayCount(album.playCount)} \u64ad\u653e` : songCount ? `${songCount} \u9996\u6b4c` : typeName,
+    desc: [artist, publishTime, songCount ? `${songCount} 首歌` : '', typeName].filter(Boolean).join(' · '),
+    listeners: album.playCount ? `${formatPlayCount(album.playCount)} 播放` : songCount ? `${songCount} 首歌` : typeName,
     type: coverType(index),
     typeName,
     coverUrl: resizeNeteaseImage(album.picUrl ?? album.blurPicUrl, 360),
@@ -105,7 +105,7 @@ export function mapAlbumCard(album = {}, index = 0) {
 }
 
 export function getAlbumArtist(album = {}) {
-  return getArtistNames(album.artists) || album.artist?.name || '\u672a\u77e5\u6b4c\u624b'
+  return getArtistNames(album.artists) || album.artist?.name || '未知歌手'
 }
 
 export function mapPlaylistTrack(song = {}, index = 0) {
@@ -120,8 +120,8 @@ export function mapPlaylistTrack(song = {}, index = 0) {
     name: song.name,
     artistId: artistIds[0] ?? '',
     artistIds,
-    artist: artists.map((artist) => artist.name).filter(Boolean).join(' / ') || '\u672a\u77e5\u6b4c\u624b',
-    album: album.name || '\u672a\u77e5\u4e13\u8f91',
+    artist: artists.map((artist) => artist.name).filter(Boolean).join(' / ') || '未知歌手',
+    album: album.name || '未知专辑',
     rank: String(index + 1).padStart(2, '0'),
     albumId: album.id ?? '',
     type: coverType(index),
@@ -144,7 +144,7 @@ export function mapArtistVideo(record = {}, index = 0) {
 
   return {
     id,
-    title: record.name || record.title || base.text || base.originalTitle || ext.song?.name || '\u89c6\u9891',
+    title: record.name || record.title || base.text || base.originalTitle || ext.song?.name || '视频',
     description: record.desc || base.desc || '',
     artist: record.artistName || ext.artistName || getArtistNames(artists),
     coverUrl: resizeNeteaseImage(record.cover || record.coverUrl || base.coverUrl, 480),
