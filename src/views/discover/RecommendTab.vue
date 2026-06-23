@@ -1,5 +1,9 @@
 <template>
-  <section class="discover-page recommend-page">
+  <section
+    ref="recommendPage"
+    class="discover-page recommend-page"
+    :style="playlistCarouselStyle"
+  >
     <section
       v-if="isHomeLoading"
       class="home-skeleton"
@@ -357,7 +361,15 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import {
+  computed,
+  nextTick,
+  onActivated,
+  onDeactivated,
+  onMounted,
+  onUnmounted,
+  ref
+} from 'vue';
 import { useRouter } from 'vue-router';
 import { useMessage } from 'naive-ui';
 import {
@@ -385,7 +397,11 @@ const RECOMMENDED_SINGLE_DISPLAY_LIMIT = 12;
 const HERO_SLIDES_PER_PAGE = 2;
 const RECOMMEND_CAROUSEL_ROWS = 2;
 const LATEST_CAROUSEL_ROWS = 1;
-const PLAYLIST_CAROUSEL_SMALL_QUERY = '(max-width: 1400px)';
+const PLAYLIST_CAROUSEL_COMPACT_WIDTH = 1180;
+const PLAYLIST_CAROUSEL_COMPACT_COLUMNS = 5;
+const PLAYLIST_CAROUSEL_WIDE_COLUMNS = 6;
+const PLAYLIST_CAROUSEL_COMPACT_GAP = 16;
+const PLAYLIST_CAROUSEL_WIDE_GAP = 22;
 
 const player = usePlayerStore();
 const router = useRouter();
@@ -403,8 +419,24 @@ const visibleRecommendedSingles = computed(() =>
 );
 const homeRecommendedMvs = ref(recommendedMvs);
 const homeRecommendedRadios = ref(recommendedRadios);
+const recommendPage = ref(null);
 const isHomeLoading = ref(true);
 const playlistCarouselColumns = ref(6);
+const playlistCarouselGap = computed(() =>
+  playlistCarouselColumns.value >= PLAYLIST_CAROUSEL_WIDE_COLUMNS
+    ? PLAYLIST_CAROUSEL_WIDE_GAP
+    : PLAYLIST_CAROUSEL_COMPACT_GAP
+);
+const playlistCarouselStyle = computed(() => {
+  const columns = playlistCarouselColumns.value;
+  const gap = playlistCarouselGap.value;
+  const gapOffset = (gap * (columns - 1)) / columns;
+
+  return {
+    '--recommend-carousel-column-width': `calc(${(100 / columns).toFixed(4)}% - ${gapOffset.toFixed(3)}px)`,
+    '--recommend-carousel-column-gap': `${gap}px`
+  };
+});
 const visibleRecommendedRadioLimit = computed(() => playlistCarouselColumns.value);
 const visibleRecommendedRadios = computed(() =>
   homeRecommendedRadios.value.slice(0, visibleRecommendedRadioLimit.value)
@@ -480,7 +512,9 @@ const latestSkeletonCarouselNeeded = computed(
       .length > 1
 );
 let heroTimer;
-let playlistCarouselMediaQuery;
+let playlistCarouselResizeObserver;
+let playlistCarouselResizeFrame = 0;
+let isRecommendTabActive = false;
 
 function chunkItems(items, size) {
   const sourceItems = items.filter(Boolean);
@@ -523,7 +557,7 @@ function prevHeroSlide() {
 function startHeroAutoplay() {
   stopHeroAutoplay();
 
-  if (heroLastIndex.value <= 0) {
+  if (!isRecommendTabActive || heroLastIndex.value <= 0) {
     return;
   }
 
@@ -718,26 +752,65 @@ function syncPlaylistCarouselScrollPositions(smooth = false) {
   });
 }
 
-function syncPlaylistCarouselColumns(event) {
-  const matches =
-    event?.matches ??
-    playlistCarouselMediaQuery?.matches ??
-    window.matchMedia(PLAYLIST_CAROUSEL_SMALL_QUERY).matches;
+function syncPlaylistCarouselColumns(width = getPlaylistCarouselContainerWidth()) {
+  const nextColumns = width < PLAYLIST_CAROUSEL_COMPACT_WIDTH
+    ? PLAYLIST_CAROUSEL_COMPACT_COLUMNS
+    : PLAYLIST_CAROUSEL_WIDE_COLUMNS;
 
-  playlistCarouselColumns.value = matches ? 5 : 6;
+  if (playlistCarouselColumns.value === nextColumns) {
+    syncPlaylistCarouselScrollPositions();
+    return;
+  }
+
+  playlistCarouselColumns.value = nextColumns;
   clampPlaylistCarouselPages();
   syncPlaylistCarouselScrollPositions();
 }
 
 function setupPlaylistCarouselColumns() {
-  playlistCarouselMediaQuery = window.matchMedia(PLAYLIST_CAROUSEL_SMALL_QUERY);
   syncPlaylistCarouselColumns();
-  playlistCarouselMediaQuery.addEventListener('change', syncPlaylistCarouselColumns);
+
+  if (typeof ResizeObserver === 'undefined' || !recommendPage.value) {
+    window.addEventListener('resize', handlePlaylistCarouselResize);
+    return;
+  }
+
+  playlistCarouselResizeObserver = new ResizeObserver((entries) => {
+    const width = entries[0]?.contentRect?.width ?? getPlaylistCarouselContainerWidth();
+
+    schedulePlaylistCarouselColumnSync(width);
+  });
+  playlistCarouselResizeObserver.observe(recommendPage.value);
 }
 
 function teardownPlaylistCarouselColumns() {
-  playlistCarouselMediaQuery?.removeEventListener('change', syncPlaylistCarouselColumns);
-  playlistCarouselMediaQuery = undefined;
+  playlistCarouselResizeObserver?.disconnect();
+  playlistCarouselResizeObserver = undefined;
+  window.removeEventListener('resize', handlePlaylistCarouselResize);
+
+  if (playlistCarouselResizeFrame) {
+    window.cancelAnimationFrame(playlistCarouselResizeFrame);
+    playlistCarouselResizeFrame = 0;
+  }
+}
+
+function getPlaylistCarouselContainerWidth() {
+  return recommendPage.value?.clientWidth || window.innerWidth || PLAYLIST_CAROUSEL_COMPACT_WIDTH;
+}
+
+function handlePlaylistCarouselResize() {
+  schedulePlaylistCarouselColumnSync();
+}
+
+function schedulePlaylistCarouselColumnSync(width = getPlaylistCarouselContainerWidth()) {
+  if (playlistCarouselResizeFrame) {
+    window.cancelAnimationFrame(playlistCarouselResizeFrame);
+  }
+
+  playlistCarouselResizeFrame = window.requestAnimationFrame(() => {
+    playlistCarouselResizeFrame = 0;
+    syncPlaylistCarouselColumns(width);
+  });
 }
 
 async function loadHomeData() {
@@ -799,13 +872,31 @@ function playRecommendedSong(song) {
   player.playTrack(song);
 }
 
-onMounted(() => {
-  setupPlaylistCarouselColumns();
+function activateRecommendTab() {
+  isRecommendTabActive = true;
   startHeroAutoplay();
+  syncPlaylistCarouselScrollPositions();
+}
+
+function deactivateRecommendTab() {
+  isRecommendTabActive = false;
+  stopHeroAutoplay();
+}
+
+onMounted(() => {
+  isRecommendTabActive = true;
+  setupPlaylistCarouselColumns();
+  activateRecommendTab();
   loadHomeData();
 });
+onActivated(() => {
+  activateRecommendTab();
+});
+onDeactivated(() => {
+  deactivateRecommendTab();
+});
 onUnmounted(() => {
-  stopHeroAutoplay();
+  deactivateRecommendTab();
   teardownPlaylistCarouselColumns();
 });
 </script>

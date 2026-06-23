@@ -20,6 +20,13 @@ contextBridge.exposeInMainWorld('mappicDesktop', {
     chrome: process.versions.chrome,
     node: process.versions.node,
   },
+  windowControls: {
+    minimize: () => ipcRenderer.send('main-window:minimize'),
+    toggleMaximize: () => ipcRenderer.send('main-window:toggle-maximize'),
+    close: () => ipcRenderer.send('main-window:close'),
+    getState: () => ipcRenderer.invoke('main-window:get-state'),
+    onState: (listener) => createSubscription('main-window:state', listener),
+  },
   desktopLyrics: {
     show: () => ipcRenderer.invoke('desktop-lyrics:show'),
     hide: () => ipcRenderer.invoke('desktop-lyrics:hide'),

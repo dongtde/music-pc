@@ -71,7 +71,7 @@
 | 已完成 | P0 | 路由表拆分 | 已新增 `src/router/routes.js` 导出路由表，`src/router/index.js` 只负责创建 router，便于 smoke 脚本复用和后续路由治理 |
 | 待处理 | P1 | 路由 chunk 命名 | 用 `defineAsyncComponent` 或动态 import 注释保持页面 chunk 可读，便于 bundle 分析 |
 | 待处理 | P1 | 页面预取 | 鼠标悬停侧边栏或首页卡片时预加载目标页 chunk，尤其 `playlist`、`artist`、`album` |
-| 待处理 | P2 | 404 路由 | 增加 fallback 页面，避免非法路径空白 |
+| 已完成 | P2 | 404 路由 | 已新增 catch-all `not-found` 路由和 `NotFoundView.vue`，非法路径不再空白，并纳入 `smoke:routes` |
 
 ### 3.2 状态和缓存
 
@@ -81,7 +81,7 @@
 | --- | --- | --- | --- |
 | 已完成 | P0 | 缓存上限 | 已新增 `src/utils/lruCache.js`，并限制 `cacheStore`、歌词、封面取色、MV 播放、MV 评论、排行榜曲目缓存容量；服务层 TTL 逻辑保持不变 |
 | 部分完成 | P1 | 请求取消 | 搜索建议、顶部搜索结果、搜索详情结果、电台详情/节目分页、发现歌手筛选、发现歌单分类、专辑地区筛选、歌单详情/曲目分页、专辑详情、歌手详情/tab 分页、MV 首屏/筛选/播放详情/清晰度已接入 `AbortController`，旧请求会真正取消；FM、Podcast 等仍待继续推广 |
-| 待处理 | P1 | 状态持久化节流 | `playerSnapshot` 已按秒节流，资料库 `persist()` 可继续加入防抖，批量导入本地文件时减少 localStorage 写入 |
+| 已完成 | P1 | 状态持久化节流 | `playerSnapshot` 已按秒节流；资料库 `persist()` 已加入 350ms 防抖，并在 pagehide/beforeunload/visibility hidden 时立即 flush，批量导入本地文件时减少 localStorage 写入 |
 | 已完成 | P1 | 最近播放/喜欢列表 | 已新增 `src/composables/useVirtualRows.js`，并接入 `LibraryView.vue` 的本地/最近/喜欢歌曲列表，避免大量歌曲一次性渲染 |
 | 部分完成 | P2 | 统一错误模型 | 播放器链路已新增 `src/utils/playbackError.js`，统一成 `code/userMessage/action/recoverable/details`；全站 API 错误模型仍待继续推广 |
 | 已完成 | P2 | 账号/VIP 状态 | 已将 `auth.js` 中登录/QR API 适配拆到 `src/services/auth/login.js`，Cookie/session/请求身份构造拆到 `src/services/auth/session.js`，VIP 领取与状态解析拆到 `src/services/auth/vip.js`；`auth.js` 保留状态流转和 UI 行为协调 |
@@ -125,9 +125,9 @@
 | --- | --- | --- |
 | P0（部分完成） | 页面保活 | 已完成：视频 feed 只 hydration 当前/相邻范围内的重内容，保留轻量 slide 作为滚动占位；`npm run smoke:fps` 验证 home-video hydrated 小窗口通过。待处理：离开首页时继续审计视频释放和弹幕定时器 |
 | P1 | 音乐 feed 渲染 | 现有 `SLIDE_HYDRATE_RADIUS = 2` 已做局部渲染，建议把图片、歌词、弹幕、进度条也按 active/adjacent 分层挂载 |
-| P1 | 封面取色 | `sampleCoverTint` 对每张封面异步取色，建议加入队列、并发 1-2、失败缓存、跨页面共享 |
-| P1 | 弹幕 | 首页音乐和 MV 都用评论做弹幕，`HOME_DANMAKU_COMMENT_LIMIT = 80` 偏大；首屏先拉 20-30 条，接近耗尽再补 |
-| P1 | 键盘事件 | `useHomeMusicFeed` 与 `useHomeVideoFeed` 都绑定全局空格键，切 tab 和 KeepAlive 时必须保证只有 active feed 监听 |
+| P1（已完成） | 封面取色 | `sampleCoverTint` 已加入跨页面 LRU 成功缓存、失败缓存、同 URL pending 复用和 2 并发队列，调用端 API 保持不变 |
+| P1（已完成） | 弹幕 | 首页音乐和首页 MV 弹幕评论首批已从 80 降到 30，同时可见弹幕池从 48 降到 36，保留接近耗尽时自动补下一页 |
+| P1（已完成） | 键盘事件 | `useHomeMusicFeed` 与 `useHomeVideoFeed` 已按 active 状态绑定/解绑全局空格键监听，并加重复绑定 guard；切 tab 和 KeepAlive 激活时只保留当前 feed 监听 |
 | P1 | 自动播放 | 滚动后 `autoPlayAfterGesture` 自动播放应记录用户手势来源，避免路由返回后意外播放 |
 | P2 | 代码复用 | 音乐 feed 和 MV feed 的 drag/snap/scroll 逻辑可抽 `useVerticalSnapFeed` |
 | P2 | 评论/弹幕复用 | `useHomeSongEngagement`、`useHomeMvEngagement` 与播放器弹幕逻辑收敛为 `useDanmakuComments` |
@@ -148,7 +148,7 @@
 | P1 | tab 生命周期 | 每个 tab 是否保活需要明确。推荐页可保活；歌单、歌手、专辑筛选页可缓存最后查询；排行榜可缓存 |
 | P1 | tab 路由 | `latest` 显示为专辑且指向 `AlbumsTab`，同时存在 `LatestTab.vue` 但未使用；明确保留或删除 |
 | P2 | 异步组件状态 | `defineAsyncComponent` 增加加载/错误占位，慢网时避免空白 |
-| P2 | tab 预加载 | 进入发现页后 idle 预加载常用 tab：playlists、charts |
+| P2（已完成） | tab 预加载 | `DiscoverView` 进入后会在 idle 时间预加载 playlists/charts tab chunk，失败时允许下次重试 |
 
 #### 4.2.1 推荐 tab `/discover/recommend`
 
@@ -156,10 +156,10 @@
 
 | 优先级 | 功能 | 具体优化 |
 | --- | --- | --- |
-| P1 | 首页聚合接口 | `getHomeDiscoverData` 同时拉 banner、playlist、newsong、mv、radio；建议超时分级，单区块失败不影响整页 |
-| P1 | 轮播 | `heroTimer` 只在组件卸载清理；若 tab 被 KeepAlive 隐藏需在 deactivated 暂停 |
-| P1 | 歌单轮播 | `matchMedia` 只按 1400px 切 5/6 列，建议 ResizeObserver 基于容器宽度 |
-| P1 | 播放推荐歌单 | `PlaylistCard` 点击播放会再拉详情，建议 hover 或 idle 预取热门歌单 tracks |
+| P1（已完成） | 首页聚合接口 | `getHomeDiscoverData` 已改为 banner、playlist、newsong、mv、radio 分区缓存和分区超时降级；单区块慢/失败时先返回空数据，后台成功后写入分区缓存 |
+| P1（已完成） | 轮播 | `heroTimer` 已在 RecommendTab activated 时恢复、deactivated/unmounted 时暂停，避免 KeepAlive 隐藏后继续后台轮播 |
+| P1（已完成） | 歌单轮播 | 推荐页歌单轮播已改为 `ResizeObserver` 观察页面容器宽度，并通过 CSS 变量统一轨道列宽与 JS 翻页列数 |
+| P1（已完成） | 播放推荐歌单 | `PlaylistCard` 已在 hover/focus 时预取歌单 tracks，并与点击播放共享同一个 pending 请求，预取失败静默降级 |
 | P2 | 骨架屏 | 当前骨架很完整，建议与真实卡片尺寸完全一致，降低 CLS |
 | P2 | 图片 | banner/歌单/MV 封面统一接入尺寸参数和占位色 |
 
@@ -231,9 +231,9 @@
 | --- | --- | --- |
 | P1 | 组件拆分 | 将 overview/rank/library/radio 拆为 4 个子组件，保留共享 composable |
 | P1 | 首页加载 | `loadHome()` 一次拉完整电台首页数据，建议分区加载：showcase、rank、category、library |
-| P1 | 分类自动加载 | 当前 `IntersectionObserver` root 为 `.view`，可复用 `useLoadMoreTrigger` 并加入取消逻辑 |
+| P1（已完成） | 分类自动加载 | 已复用 `useLoadMoreTrigger` 管理分类 sentinel，切分类/离开页面会清理触发器并用 requestId + AbortController 忽略旧响应 |
 | P1 | `KeepAlive` key | `App.vue` 通过 `getRouteViewKey` 保持 podcast tabs 同实例，这很好；拆分后仍需保留 tab 状态 |
-| P2 | rank 切换 | `loadRank` 需要缓存每个 rankType，避免反复切换重复请求 |
+| P2（已完成） | rank 切换 | `loadRank` 已加页面级 LRU 8 条缓存，首页 hot 榜也会写入缓存，切换榜单不重复请求/计算 |
 | P2 | 列表密度 | `PodcastCard` 内联 defineComponent，可抽独立组件，便于懒加载图片和统一样式 |
 
 ### 4.4 电台详情 `/podcast/:id`
@@ -529,7 +529,7 @@
 
 ### 阶段二：高收益性能优化
 
-1. 首页和 MV：限制 DOM、弹幕首批数据、视频释放、封面取色队列。
+1. 首页和 MV：限制 DOM、视频释放；封面取色队列和弹幕首批降载已完成。
 2. 歌单/资料库/专辑/歌手歌曲：统一虚拟列表。
 3. 搜索：抽 `useSearch`，请求取消，详情页分页。
 4. 发现页：各 tab 请求分区降级，轮播/定时器在 KeepAlive 下正确暂停。
@@ -555,14 +555,14 @@
 | 页面/功能 | P0 | P1 | P2 | P3 |
 | --- | --- | --- | --- | --- |
 | 路由 | 已完成：搜索、FM 可达；KeepAlive 白名单 | chunk 预加载 | 404 | - |
-| 首页 | 已完成：局部缓存上限、视频 feed hydration 小窗口、首页 FPS smoke；待处理：视频释放 | 弹幕降载、封面取色队列 | 抽 snap feed | 低性能模式 |
-| 发现推荐 | - | 分区接口降级、轮播暂停 | 组件拆分 | - |
+| 首页 | 已完成：局部缓存上限、视频 feed hydration 小窗口、封面取色队列、弹幕降载、首页 FPS smoke；待处理：视频释放 | - | 抽 snap feed | 低性能模式 |
+| 发现推荐 | - | 已完成：分区接口降级、轮播暂停、歌单轮播容器宽度治理 | 组件拆分 | - |
 | 发现歌单 | - | 已完成：首屏减量、分页取消 | 已完成：分类缓存 | - |
 | 排行榜 | - | 已完成：缓存上限、榜单详情预取 | 已完成：类型统一 | - |
 | 歌手列表 | - | 已完成：请求取消；待处理：长列表治理 | 已完成：tab/filter 缓存 | - |
 | 专辑列表 | - | 已完成：首屏减量、滚动加载、地区请求取消 | 已完成：地区缓存；待处理：hover meta 延迟 | - |
 | 最新音乐 | 是否启用 | API 化 | 复用 SongListRow | - |
-| 电台首页/榜单/乐库 | - | 拆子组件、分区加载 | rank 缓存 | - |
+| 电台首页/榜单/乐库 | - | 已完成：分类自动加载治理；待处理：拆子组件、分区加载 | 已完成：rank 缓存 | - |
 | 电台详情 | - | 已完成：节目虚拟化、自动加载、路由切换取消 | 播放全部策略 | 评论/订阅完善 |
 | MV/视频 | 已完成：离开释放视频 | 已完成：请求取消、无限加载治理、视频地址复用、弹幕降载、列表窗口化；待处理：组件拆分 | 已完成：控制条节流、错误恢复 | 已完成：下一条预取 |
 | 私人 FM | 已完成：路由启用 | 批量请求治理、队列补水 | 撤销不想听 | - |

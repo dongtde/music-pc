@@ -1,10 +1,19 @@
 import { COVER_TINT_FALLBACKS, DEFAULT_COVER_TINT_RGB } from './homeConstants'
+import { createLruCache } from '../../utils/lruCache'
 export {
   createLyricPlaceholder,
   findCurrentLyricIndex,
   isNeteaseTrackId
 } from '../../utils/lyrics'
 export { formatTime, parseDuration } from '../../utils/time'
+
+const COVER_TINT_CONCURRENCY = 2
+const COVER_TINT_CACHE_SIZE = 80
+const coverTintSampleCache = createLruCache(COVER_TINT_CACHE_SIZE)
+const coverTintFailureCache = createLruCache(COVER_TINT_CACHE_SIZE)
+const coverTintPending = new Map()
+const coverTintQueue = []
+let coverTintActiveCount = 0
 
 export function prepareQueue(songs) {
   return songs.map((song, index) => {
@@ -117,7 +126,71 @@ export function getFallbackCoverTintRgb(type) {
 }
 
 export function sampleCoverTint(coverUrl) {
+  const cacheKey = normalizeCoverTintUrl(coverUrl)
+
+  if (!cacheKey) {
+    return Promise.reject(new Error('Cover URL unavailable'))
+  }
+
+  const cachedTint = coverTintSampleCache.get(cacheKey)
+
+  if (cachedTint) {
+    return Promise.resolve(cachedTint)
+  }
+
+  if (coverTintFailureCache.has(cacheKey)) {
+    return Promise.reject(new Error('Cover tint sampling failed previously'))
+  }
+
+  const pendingTint = coverTintPending.get(cacheKey)
+
+  if (pendingTint) {
+    return pendingTint
+  }
+
+  const tintPromise = new Promise((resolve, reject) => {
+    coverTintQueue.push({
+      coverUrl: cacheKey,
+      resolve,
+      reject
+    })
+    processCoverTintQueue()
+  })
+
+  coverTintPending.set(cacheKey, tintPromise)
+  return tintPromise
+}
+
+function processCoverTintQueue() {
+  while (coverTintActiveCount < COVER_TINT_CONCURRENCY && coverTintQueue.length) {
+    const job = coverTintQueue.shift()
+    coverTintActiveCount += 1
+
+    sampleCoverTintNow(job.coverUrl)
+      .then((tintRgb) => {
+        coverTintSampleCache.set(job.coverUrl, tintRgb)
+        coverTintFailureCache.delete(job.coverUrl)
+        job.resolve(tintRgb)
+      })
+      .catch((error) => {
+        coverTintFailureCache.set(job.coverUrl, true)
+        job.reject(error)
+      })
+      .finally(() => {
+        coverTintPending.delete(job.coverUrl)
+        coverTintActiveCount -= 1
+        processCoverTintQueue()
+      })
+  }
+}
+
+function sampleCoverTintNow(coverUrl) {
   return new Promise((resolve, reject) => {
+    if (typeof Image === 'undefined' || typeof document === 'undefined') {
+      reject(new Error('Cover tint sampling is unavailable'))
+      return
+    }
+
     const image = new Image()
 
     image.crossOrigin = 'anonymous'
@@ -144,6 +217,10 @@ export function sampleCoverTint(coverUrl) {
     image.onerror = reject
     image.src = coverUrl
   })
+}
+
+function normalizeCoverTintUrl(coverUrl) {
+  return typeof coverUrl === 'string' ? coverUrl.trim() : ''
 }
 
 export function resizeNeteaseCover(url, size) {

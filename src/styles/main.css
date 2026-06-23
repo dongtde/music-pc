@@ -168,6 +168,7 @@ button {
 }
 
 .app-shell {
+  position: relative;
   display: grid;
   grid-template-columns: 236px 1fr;
   grid-template-rows: 1fr 0px;
@@ -644,6 +645,22 @@ button {
   transition:
     background-color var(--layout-duration-fast) ease,
     border-color var(--layout-duration-fast) ease;
+}
+
+.app-shell--desktop .topbar {
+  padding-right: 14px;
+  -webkit-app-region: drag;
+}
+
+.app-shell--desktop .topbar :is(button, a, input, textarea, select),
+.app-shell--desktop .topbar .top-search,
+.app-shell--desktop .topbar .search-panel,
+.app-shell--desktop .topbar .window-controls {
+  -webkit-app-region: no-drag;
+}
+
+.app-shell--desktop .topbar .topbar__spacer--search-active {
+  -webkit-app-region: no-drag;
 }
 
 .app-shell--immersive .topbar {
@@ -1143,6 +1160,11 @@ button {
 
 .topbar__spacer {
   flex: 1;
+  align-self: stretch;
+}
+
+.topbar__window-controls {
+  margin-left: 2px;
 }
 
 .icon-button {
@@ -1158,6 +1180,82 @@ button {
 .history-actions button:hover {
   background: var(--control-bg-hover);
   color: var(--text-strong);
+}
+
+.window-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+  -webkit-app-region: no-drag;
+}
+
+.window-control {
+  display: grid;
+  width: 38px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-soft);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.window-control:hover {
+  color: var(--text-strong);
+  background: var(--control-bg-hover);
+}
+
+.window-control:active {
+  transform: translateY(1px);
+}
+
+.window-control--close:hover {
+  color: #ffffff;
+  background: #e94b5f;
+}
+
+.window-controls--floating {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 45;
+  height: 36px;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(8, 8, 9, 0.36);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(16px);
+}
+
+.window-controls--floating .window-control {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.window-controls--floating .window-control:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.window-controls--floating .window-control--close:hover {
+  background: #e94b5f;
+}
+
+.app-window-drag-strip {
+  position: absolute;
+  top: 0;
+  right: 132px;
+  left: 76px;
+  z-index: 44;
+  height: 14px;
+  -webkit-app-region: drag;
 }
 
 .divider {

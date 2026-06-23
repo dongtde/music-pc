@@ -1,8 +1,8 @@
-const { app, BrowserWindow, net, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, net, protocol } = require('electron');
 const path = require('node:path');
 const { createDesktopLyricsManager } = require('./desktopLyricsWindow.cjs');
 const { createAppProtocolRegistrar } = require('./protocolProxy.cjs');
-const { openExternalUrl } = require('./windowUtils.cjs');
+const { openExternalUrl, sendToWindow } = require('./windowUtils.cjs');
 const {
   captureFirstScreenSmoke,
   captureFpsSmoke,
@@ -28,6 +28,7 @@ const distRoot = path.join(__dirname, '..', 'dist');
 const cookieJarPath = path.join(app.getPath('userData'), 'kugou-proxy-cookies.json');
 
 let mainWindow = null;
+let mainWindowIpcRegistered = false;
 
 if (isAutomationSmoke) {
   app.commandLine.appendSwitch('disable-gpu');
@@ -81,6 +82,7 @@ async function createMainWindow() {
     height: 820,
     minWidth: 960,
     minHeight: 640,
+    frame: false,
     title: '澜音',
     backgroundColor: '#0b0d11',
     autoHideMenuBar: true,
@@ -96,6 +98,7 @@ async function createMainWindow() {
 
   attachNavigationGuards(mainWindow);
   attachDebugLogging(mainWindow);
+  attachWindowStateEvents(mainWindow);
 
   await mainWindow.loadURL(`${APP_PROTOCOL}://app/#/home`);
 
@@ -125,6 +128,90 @@ async function createMainWindow() {
     if (desktopLyrics.isOpen()) {
       desktopLyrics.close();
     }
+  });
+}
+
+function registerMainWindowIpc() {
+  if (mainWindowIpcRegistered) {
+    return;
+  }
+
+  mainWindowIpcRegistered = true;
+
+  ipcMain.on('main-window:minimize', (event) => {
+    const window = getMainWindowFromEvent(event);
+    window?.minimize();
+  });
+
+  ipcMain.on('main-window:toggle-maximize', (event) => {
+    const window = getMainWindowFromEvent(event);
+
+    if (!window) {
+      return;
+    }
+
+    if (window.isMaximized()) {
+      window.unmaximize();
+      return;
+    }
+
+    window.maximize();
+  });
+
+  ipcMain.on('main-window:close', (event) => {
+    const window = getMainWindowFromEvent(event);
+    window?.close();
+  });
+
+  ipcMain.handle('main-window:get-state', (event) => {
+    const window = getMainWindowFromEvent(event);
+    return getMainWindowState(window);
+  });
+}
+
+function getMainWindowFromEvent(event) {
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+
+  if (!senderWindow || senderWindow !== mainWindow) {
+    return null;
+  }
+
+  return senderWindow;
+}
+
+function getMainWindowState(window = mainWindow) {
+  if (!window || window.isDestroyed()) {
+    return {
+      isMaximized: false,
+      isFullScreen: false,
+      platform: process.platform,
+    };
+  }
+
+  return {
+    isMaximized: window.isMaximized(),
+    isFullScreen: window.isFullScreen(),
+    platform: process.platform,
+  };
+}
+
+function sendMainWindowState(window = mainWindow) {
+  sendToWindow(window, 'main-window:state', getMainWindowState(window));
+}
+
+function attachWindowStateEvents(window) {
+  [
+    'maximize',
+    'unmaximize',
+    'enter-full-screen',
+    'leave-full-screen',
+    'restore',
+  ].forEach((eventName) => {
+    window.on(eventName, () => sendMainWindowState(window));
+  });
+
+  window.webContents.on('did-finish-load', () => {
+    sendMainWindowState(window);
   });
 }
 
@@ -183,6 +270,7 @@ function attachDebugLogging(window) {
 app.whenReady()
   .then(async () => {
     protocolRegistrar.registerAppProtocol();
+    registerMainWindowIpc();
     desktopLyrics.registerIpc();
     await createMainWindow();
 

@@ -16,12 +16,15 @@
 </template>
 
 <script setup>
-import { computed, defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { discoverTabs } from '../data/music'
 import '../styles/discover.css'
 
+const DISCOVER_IDLE_PREFETCH_TABS = ['playlists', 'charts']
+const prefetchedDiscoverTabs = new Set()
 const route = useRoute()
+let discoverTabPrefetchCancel = null
 
 const displayTabs = computed(() =>
   discoverTabs.map((tab) =>
@@ -31,13 +34,21 @@ const displayTabs = computed(() =>
   )
 )
 
+const tabLoaders = {
+  recommend: () => import('./discover/RecommendTab.vue'),
+  playlists: () => import('./discover/PlaylistsTab.vue'),
+  charts: () => import('./discover/ChartsTab.vue'),
+  artists: () => import('./discover/ArtistsTab.vue'),
+  albums: () => import('./discover/AlbumsTab.vue')
+}
+
 const tabComponents = {
-  recommend: defineAsyncComponent(() => import('./discover/RecommendTab.vue')),
-  playlists: defineAsyncComponent(() => import('./discover/PlaylistsTab.vue')),
-  charts: defineAsyncComponent(() => import('./discover/ChartsTab.vue')),
-  artists: defineAsyncComponent(() => import('./discover/ArtistsTab.vue')),
-  albums: defineAsyncComponent(() => import('./discover/AlbumsTab.vue')),
-  latest: defineAsyncComponent(() => import('./discover/AlbumsTab.vue'))
+  recommend: defineAsyncComponent(tabLoaders.recommend),
+  playlists: defineAsyncComponent(tabLoaders.playlists),
+  charts: defineAsyncComponent(tabLoaders.charts),
+  artists: defineAsyncComponent(tabLoaders.artists),
+  albums: defineAsyncComponent(tabLoaders.albums),
+  latest: defineAsyncComponent(tabLoaders.albums)
 }
 
 const activeTab = computed(() => {
@@ -51,4 +62,48 @@ const activeTab = computed(() => {
 })
 
 const activeTabComponent = computed(() => tabComponents[activeTab.value])
+
+onMounted(() => {
+  scheduleDiscoverTabPrefetch()
+})
+
+onBeforeUnmount(() => {
+  discoverTabPrefetchCancel?.()
+  discoverTabPrefetchCancel = null
+})
+
+function scheduleDiscoverTabPrefetch() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const runPrefetch = () => {
+    discoverTabPrefetchCancel = null
+    DISCOVER_IDLE_PREFETCH_TABS
+      .filter((tab) => tab !== activeTab.value)
+      .forEach(prefetchDiscoverTab)
+  }
+
+  if ('requestIdleCallback' in window) {
+    const id = window.requestIdleCallback(runPrefetch, { timeout: 1800 })
+    discoverTabPrefetchCancel = () => window.cancelIdleCallback(id)
+    return
+  }
+
+  const id = window.setTimeout(runPrefetch, 800)
+  discoverTabPrefetchCancel = () => window.clearTimeout(id)
+}
+
+function prefetchDiscoverTab(tab) {
+  const loader = tabLoaders[tab]
+
+  if (!loader || prefetchedDiscoverTabs.has(tab)) {
+    return
+  }
+
+  prefetchedDiscoverTabs.add(tab)
+  loader().catch(() => {
+    prefetchedDiscoverTabs.delete(tab)
+  })
+}
 </script>

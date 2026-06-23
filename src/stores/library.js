@@ -3,6 +3,9 @@ import { STORAGE_KEYS } from '../config/app'
 import { readJsonStorage, writeJsonStorage } from '../utils/storage'
 
 const LIBRARY_DATA_VERSION = 2
+const LIBRARY_PERSIST_DEBOUNCE_MS = 350
+let persistTimer = 0
+let persistFlushEventsBound = false
 
 const fallbackTracks = [
   {
@@ -373,6 +376,46 @@ function createInitialState() {
 }
 
 function persist() {
+  if (typeof window === 'undefined') {
+    persistNow()
+    return
+  }
+
+  bindPersistFlushEvents()
+  window.clearTimeout(persistTimer)
+  persistTimer = window.setTimeout(() => {
+    persistTimer = 0
+    persistNow()
+  }, LIBRARY_PERSIST_DEBOUNCE_MS)
+}
+
+function flushLibraryPersist() {
+  if (typeof window !== 'undefined') {
+    window.clearTimeout(persistTimer)
+  }
+
+  persistTimer = 0
+  persistNow()
+}
+
+function bindPersistFlushEvents() {
+  if (persistFlushEventsBound || typeof window === 'undefined') {
+    return
+  }
+
+  persistFlushEventsBound = true
+  window.addEventListener('pagehide', flushLibraryPersist)
+  window.addEventListener('beforeunload', flushLibraryPersist)
+  document.addEventListener('visibilitychange', flushLibraryPersistWhenHidden)
+}
+
+function flushLibraryPersistWhenHidden() {
+  if (document.visibilityState === 'hidden' && persistTimer) {
+    flushLibraryPersist()
+  }
+}
+
+function persistNow() {
   writeJsonStorage(STORAGE_KEYS.libraryData, {
     version: LIBRARY_DATA_VERSION,
     localTracks: state.localTracks.map(serializeTrack),

@@ -9,9 +9,20 @@
           'theme-is-switching': theme.state.animating,
           'app-shell--layout-switching': isLayoutSwitching,
           'app-shell--immersive': isImmersiveRoute,
+          'app-shell--desktop': isDesktopApp,
         }"
       >
         <SidebarNav :compact="isImmersiveRoute" />
+        <div
+          v-if="isDesktopApp && isImmersiveRoute"
+          class="app-window-drag-strip"
+          aria-hidden="true"
+        />
+        <WindowControls
+          v-if="isDesktopApp && isImmersiveRoute"
+          floating
+          class="app-window-controls"
+        />
         <section class="main-panel">
           <TopBar :inert="isImmersiveRoute" :aria-hidden="isImmersiveRoute" />
           <div class="route-stage">
@@ -51,6 +62,7 @@ import SidebarNav from './components/SidebarNav.vue';
 import TopBar from './components/TopBar.vue';
 import PlayerBar from './components/PlayerBar.vue';
 import ThemeTransitionOverlay from './components/ThemeTransitionOverlay.vue';
+import WindowControls from './components/WindowControls.vue';
 import { useAuthStore } from './stores/auth';
 import { useThemeStore } from './stores/theme';
 
@@ -66,6 +78,9 @@ const naiveTheme = computed(() =>
 );
 const isDesktopLyricsRoute = computed(() => route.meta.desktopLyrics);
 const isImmersiveRoute = computed(() => route.name === 'home');
+const isDesktopApp = computed(() =>
+  typeof window !== 'undefined' && Boolean(window.mappicDesktop?.windowControls),
+);
 const routeTransitionName = ref('route-soft');
 const isLayoutSwitching = ref(false);
 const PODCAST_TAB_ROUTE_NAMES = new Set([

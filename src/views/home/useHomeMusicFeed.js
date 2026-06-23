@@ -68,6 +68,7 @@ export function useHomeMusicFeed({ active }) {
   let syncedQueue = null
   let feedSnapRequestId = 0
   let recommendationsRequestId = 0
+  let homeViewEffectsBound = false
 
   const lyrics = useHomeLyrics({ player })
   const activeSong = computed(() => recommendationQueue.value[activeIndex.value])
@@ -116,19 +117,29 @@ export function useHomeMusicFeed({ active }) {
 
   watch(active, (enabled) => {
     if (enabled) {
+      bindHomeViewEffects()
+      activateHomeView()
       stabilizeMusicFeedAfterSectionSwitch()
+      return
     }
+
+    unbindHomeViewEffects()
   })
 
   onMounted(() => {
-    activateHomeView()
-    bindHomeViewEffects()
+    if (active.value) {
+      activateHomeView()
+      bindHomeViewEffects()
+    }
+
     loadRecommendations()
   })
 
   onActivated(() => {
-    activateHomeView()
-    bindHomeViewEffects()
+    if (active.value) {
+      activateHomeView()
+      bindHomeViewEffects()
+    }
   })
 
   onDeactivated(() => {
@@ -145,6 +156,12 @@ export function useHomeMusicFeed({ active }) {
   })
 
   function bindHomeViewEffects() {
+    if (homeViewEffectsBound) {
+      return
+    }
+
+    homeViewEffectsBound = true
+
     if (!removeTrackEndedListener) {
       removeTrackEndedListener = player.onTrackEnded(handleTrackEnded)
     }
@@ -153,6 +170,11 @@ export function useHomeMusicFeed({ active }) {
   }
 
   function unbindHomeViewEffects() {
+    if (!homeViewEffectsBound && !removeTrackEndedListener) {
+      return
+    }
+
+    homeViewEffectsBound = false
     window.removeEventListener('keydown', handleGlobalPlaybackKeydown)
     removeTrackEndedListener?.()
     removeTrackEndedListener = null

@@ -25,11 +25,11 @@ const router = createRouter({
 const routeCases = [
   { path: '/', redirect: '/home' },
   { path: '/home', name: 'home' },
-  { path: '/search', name: 'search' },
-  { path: '/search/周杰伦', name: 'search-detail', params: { keyword: '周杰伦' } },
+  { path: '/search', redirect: '/home' },
+  { path: '/search/周杰伦', redirect: '/home' },
   { path: '/discover', name: 'discover' },
   { path: '/discover/charts', name: 'discover', params: { tab: 'charts' } },
-  { path: '/fm', name: 'fm' },
+  { path: '/fm', redirect: '/home' },
   { path: '/podcast', name: 'podcast' },
   { path: '/podcast/rank', name: 'podcast-rank' },
   { path: '/podcast/sleep', name: 'podcast-sleep' },
@@ -42,15 +42,13 @@ const routeCases = [
   { path: '/album/123', name: 'album', params: { id: '123' } },
   { path: '/artist/123', name: 'artist', params: { id: '123' } },
   { path: '/settings', name: 'settings' },
-  { path: '/desktop-lyrics', name: 'desktop-lyrics' }
+  { path: '/desktop-lyrics', name: 'desktop-lyrics' },
+  { path: '/missing-route', name: 'not-found', params: { pathMatch: ['missing-route'] } }
 ]
 
 const requiredNames = [
   'home',
-  'search',
-  'search-detail',
   'discover',
-  'fm',
   'podcast',
   'podcast-rank',
   'podcast-sleep',
@@ -62,7 +60,8 @@ const requiredNames = [
   'album',
   'artist',
   'settings',
-  'desktop-lyrics'
+  'desktop-lyrics',
+  'not-found'
 ]
 
 const checks = [

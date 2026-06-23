@@ -499,13 +499,16 @@ import {
   RefreshCw
 } from 'lucide-vue-next'
 import SongListRow from '../components/SongListRow.vue'
+import { useLoadMoreTrigger } from '../composables/useLoadMoreTrigger'
 import {
   getPodcastCategoryData,
   getPodcastHomeData,
   getPodcastRankData
 } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
+import { createLruCache } from '../utils/lruCache'
 import { getPlaybackErrorDisplay } from '../utils/playbackError'
+import { isAbortError } from '../utils/request'
 import '../styles/podcast.css'
 
 const RANK_LABELS = {
@@ -518,6 +521,9 @@ const RANK_LABELS = {
 }
 
 const PODCAST_SKELETON_MIN_MS = 420
+const PODCAST_CATEGORY_PAGE_SIZE = 18
+const PODCAST_RANK_LIMIT = 12
+const podcastRankCache = createLruCache(8)
 
 const PODCAST_PAGES = [
   {
@@ -597,8 +603,8 @@ const rankLoading = ref(false)
 const libraryGroups = ref([])
 const broadcastChannels = ref([])
 const toArray = (value) => (Array.isArray(value) ? value : [])
-let categoryObserver = null
 let categoryRequestId = 0
+let categoryRequestController = null
 
 const activePage = computed(() =>
   PODCAST_PAGES.find((page) => page.name === route.name) ?? PODCAST_PAGES[0]
@@ -631,20 +637,36 @@ const rankLabel = computed(() => RANK_LABELS[rankType.value] || '热门推荐')
 const rankPodcastItems = computed(() => toArray(rankPodcasts.value))
 const libraryGroupItems = computed(() => toArray(libraryGroups.value))
 const broadcastChannelItems = computed(() => toArray(broadcastChannels.value))
+const categoryLoadMoreController = useLoadMoreTrigger({
+  trigger: categoryLoadSentinel,
+  canLoad: () =>
+    isOverviewPage.value &&
+    homeLoaded.value &&
+    !loading.value &&
+    !categoryLoading.value &&
+    categoryMore.value &&
+    !categoryError.value,
+  loadMore: () => loadCategoryMore(),
+  getRoot: (element) => element?.closest?.('.view') ?? null,
+  rootMargin: '360px 0px 360px',
+  scrollThreshold: 360,
+  threshold: 0
+})
 
 onMounted(() => {
   loadHome()
 })
 
 onBeforeUnmount(() => {
-  disconnectCategoryLoadObserver()
+  categoryLoadMoreController.cleanup()
+  cancelCategoryRequest()
 })
 
 watch([isOverviewPage, homeLoaded], () => {
   if (isOverviewPage.value && homeLoaded.value) {
-    nextTick(setupCategoryLoadObserver)
+    nextTick(categoryLoadMoreController.setup)
   } else {
-    disconnectCategoryLoadObserver()
+    categoryLoadMoreController.cleanup()
   }
 })
 
@@ -667,10 +689,11 @@ async function loadHome() {
     categoryError.value = null
     programToplist.value = data.programToplist.length ? data.programToplist : data.today
     rankPodcasts.value = Array.isArray(data.hot) ? data.hot : []
+    cachePodcastRank(rankType.value, rankPodcasts.value)
     libraryGroups.value = toArray(data.yuekuGroups || data.difm)
     broadcastChannels.value = toArray(data.broadcastChannels)
     homeLoaded.value = true
-    nextTick(setupCategoryLoadObserver)
+    nextTick(categoryLoadMoreController.setup)
   } catch (error) {
     console.warn('Failed to load radios:', error)
     errorMessage.value = error?.message || '电台加载失败'
@@ -714,9 +737,8 @@ async function selectCategory(item) {
   }
 
   activeCategoryId.value = item.id
-  disconnectCategoryLoadObserver()
-  categoryRequestId += 1
-  categoryLoading.value = false
+  categoryLoadMoreController.cleanup()
+  cancelCategoryRequest()
   categoryError.value = null
   categoryPodcasts.value = item.radios?.length ? item.radios : []
   categoryOffset.value = categoryPodcasts.value.length
@@ -725,7 +747,7 @@ async function selectCategory(item) {
   if (!categoryPodcasts.value.length) {
     await loadCategory({ reset: true })
   } else {
-    nextTick(setupCategoryLoadObserver)
+    nextTick(categoryLoadMoreController.setup)
   }
 }
 
@@ -735,7 +757,8 @@ async function loadCategory({ reset = false } = {}) {
   }
 
   if (reset) {
-    disconnectCategoryLoadObserver()
+    categoryLoadMoreController.cleanup()
+    cancelCategoryRequest()
     categoryOffset.value = 0
     categoryMore.value = true
   }
@@ -743,17 +766,25 @@ async function loadCategory({ reset = false } = {}) {
   categoryError.value = null
   categoryLoading.value = true
   const requestId = ++categoryRequestId
+  const controller = new AbortController()
+  categoryRequestController = controller
   const cateId = activeCategoryId.value
 
   try {
     const offset = reset ? 0 : categoryOffset.value
     const data = await getPodcastCategoryData({
       cateId,
-      limit: 18,
+      limit: PODCAST_CATEGORY_PAGE_SIZE,
       offset
+    }, {
+      signal: controller.signal
     })
 
-    if (requestId !== categoryRequestId || String(cateId) !== String(activeCategoryId.value)) {
+    if (
+      requestId !== categoryRequestId ||
+      controller.signal.aborted ||
+      String(cateId) !== String(activeCategoryId.value)
+    ) {
       return
     }
 
@@ -761,7 +792,7 @@ async function loadCategory({ reset = false } = {}) {
     categoryOffset.value = reset ? data.items.length : offset + data.items.length
     categoryMore.value = Boolean(data.more && data.items.length)
   } catch (error) {
-    if (requestId !== categoryRequestId) {
+    if (isAbortError(error) || requestId !== categoryRequestId) {
       return
     }
 
@@ -769,42 +800,26 @@ async function loadCategory({ reset = false } = {}) {
     categoryError.value = error
     message.error(error?.message || '分类电台加载失败')
   } finally {
-    if (requestId === categoryRequestId) {
+    if (requestId === categoryRequestId && !controller.signal.aborted) {
       categoryLoading.value = false
-      nextTick(setupCategoryLoadObserver)
+      nextTick(categoryLoadMoreController.setup)
+    }
+
+    if (categoryRequestController === controller) {
+      categoryRequestController = null
     }
   }
 }
 
-function setupCategoryLoadObserver() {
-  disconnectCategoryLoadObserver()
+function cancelCategoryRequest() {
+  categoryRequestId += 1
 
-  if (!isOverviewPage.value || !homeLoaded.value || !categoryLoadSentinel.value || typeof IntersectionObserver === 'undefined') {
-    return
+  if (categoryRequestController) {
+    categoryRequestController.abort()
+    categoryRequestController = null
   }
 
-  const scrollRoot = categoryLoadSentinel.value.closest('.view')
-  categoryObserver = new IntersectionObserver(handleCategoryLoadIntersect, {
-    root: scrollRoot,
-    rootMargin: '360px 0px 360px',
-    threshold: 0
-  })
-  categoryObserver.observe(categoryLoadSentinel.value)
-}
-
-function handleCategoryLoadIntersect(entries) {
-  if (entries.some((entry) => entry.isIntersecting)) {
-    loadCategoryMore()
-  }
-}
-
-function disconnectCategoryLoadObserver() {
-  if (!categoryObserver) {
-    return
-  }
-
-  categoryObserver.disconnect()
-  categoryObserver = null
+  categoryLoading.value = false
 }
 
 async function loadRank() {
@@ -812,17 +827,34 @@ async function loadRank() {
     return
   }
 
+  const rankCacheKey = getPodcastRankCacheKey(rankType.value)
+  const cachedItems = podcastRankCache.get(rankCacheKey)
+
+  if (cachedItems) {
+    rankPodcasts.value = cachedItems
+    return
+  }
+
   rankLoading.value = true
 
   try {
-    const data = await getPodcastRankData({ type: rankType.value, limit: 12, offset: 0 })
+    const data = await getPodcastRankData({ type: rankType.value, limit: PODCAST_RANK_LIMIT, offset: 0 })
     rankPodcasts.value = Array.isArray(data.items) ? data.items : []
+    cachePodcastRank(rankType.value, rankPodcasts.value)
   } catch (error) {
     console.warn('Failed to load radio rank:', error)
     message.error(error?.message || '电台榜单加载失败')
   } finally {
     rankLoading.value = false
   }
+}
+
+function cachePodcastRank(type, items = []) {
+  podcastRankCache.set(getPodcastRankCacheKey(type), [...items])
+}
+
+function getPodcastRankCacheKey(type) {
+  return `${type || 'hot'}:${PODCAST_RANK_LIMIT}:0`
 }
 
 async function playProgram(track, queue) {

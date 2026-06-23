@@ -10,15 +10,11 @@ export const routes = [
   },
   {
     path: '/search',
-    name: 'search',
-    component: () => import('../views/SearchView.vue'),
-    meta: { title: '搜索音乐', icon: 'Search' }
+    redirect: '/home'
   },
   {
     path: '/search/:keyword',
-    name: 'search-detail',
-    component: () => import('../views/SearchDetailView.vue'),
-    meta: { title: '搜索结果', icon: 'Search' }
+    redirect: '/home'
   },
   {
     path: '/discover/:tab?',
@@ -28,9 +24,7 @@ export const routes = [
   },
   {
     path: '/fm',
-    name: 'fm',
-    component: () => import('../views/FMView.vue'),
-    meta: { title: '私人 FM', icon: 'Radio' }
+    redirect: '/home'
   },
   {
     path: '/podcast',
@@ -110,5 +104,11 @@ export const routes = [
     name: 'desktop-lyrics',
     component: () => import('../views/DesktopLyricsView.vue'),
     meta: { title: '桌面歌词', desktopLyrics: true }
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'not-found',
+    component: () => import('../views/NotFoundView.vue'),
+    meta: { title: '页面不存在' }
   }
 ]

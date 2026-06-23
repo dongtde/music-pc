@@ -191,7 +191,11 @@
       </Transition>
     </div>
 
-    <div class="topbar__spacer" />
+    <div
+      class="topbar__spacer"
+      :class="{ 'topbar__spacer--search-active': searchExpanded }"
+      @pointerdown="handleTopbarSpacerPointerDown"
+    />
     <button class="icon-button" type="button" aria-label="消息"><Mail :size="18" /></button>
     <button
       class="icon-button"
@@ -205,6 +209,7 @@
     <router-link class="icon-button" to="/settings" aria-label="设置">
       <Settings :size="18" />
     </router-link>
+    <WindowControls class="topbar__window-controls" />
   </header>
 </template>
 
@@ -231,6 +236,7 @@ import {
 } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import SongListRow from './SongListRow.vue'
+import WindowControls from './WindowControls.vue'
 import {
   formatSearchScore,
   useSearchBoot,
@@ -607,6 +613,18 @@ function handleOutsideClick(event) {
 
   if (searchWrap.value?.contains(target)) {
     return
+  }
+
+  closeSearchPanel()
+}
+
+function handleTopbarSpacerPointerDown(event) {
+  if (event.button !== 0) {
+    return
+  }
+
+  if (document.activeElement instanceof HTMLElement) {
+    document.activeElement.blur()
   }
 
   closeSearchPanel()

@@ -67,6 +67,7 @@ export function useHomeVideoFeed({ active }) {
   let mvPlaybackRequestId = 0
   let mvQueueLoaded = false
   let mvSnapRequestId = 0
+  let videoFeedEffectsBound = false
 
   const activeMv = computed(() => mvQueue.value[activeMvIndex.value])
   const activeMvId = computed(() => String(activeMv.value?.id ?? ''))
@@ -83,13 +84,14 @@ export function useHomeVideoFeed({ active }) {
 
   watch(active, async (enabled) => {
     if (enabled) {
+      bindVideoFeedEffects()
       await loadHomeMvs()
       await snapMvToActiveIndex('auto')
       loadActiveMvPlayback(activeMv.value?.id)
       return
     }
 
-    pauseHomeMv()
+    unbindVideoFeedEffects()
   })
 
   watch(
@@ -108,17 +110,15 @@ export function useHomeVideoFeed({ active }) {
   )
 
   onMounted(() => {
-    bindVideoFeedEffects()
-
     if (active.value) {
+      bindVideoFeedEffects()
       activateVideoFeed()
     }
   })
 
   onActivated(() => {
-    bindVideoFeedEffects()
-
     if (active.value) {
+      bindVideoFeedEffects()
       activateVideoFeed()
     }
   })
@@ -135,10 +135,21 @@ export function useHomeVideoFeed({ active }) {
   })
 
   function bindVideoFeedEffects() {
+    if (videoFeedEffectsBound) {
+      return
+    }
+
+    videoFeedEffectsBound = true
     window.addEventListener('keydown', handleGlobalVideoKeydown)
   }
 
   function unbindVideoFeedEffects() {
+    if (!videoFeedEffectsBound) {
+      pauseHomeMv()
+      return
+    }
+
+    videoFeedEffectsBound = false
     window.removeEventListener('keydown', handleGlobalVideoKeydown)
     pauseHomeMv()
   }

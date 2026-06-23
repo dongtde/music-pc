@@ -1,5 +1,10 @@
 <template>
-  <article class="playlist-card" :class="{ 'is-playing': playingPlaylist }">
+  <article
+    class="playlist-card"
+    :class="{ 'is-playing': playingPlaylist }"
+    @mouseenter="prefetchPlaylistTracks"
+    @focusin="prefetchPlaylistTracks"
+  >
     <div class="playlist-card__cover-wrap">
       <router-link class="playlist-card__cover-link" :to="playlistLink" :aria-label="playlist.title">
         <div
@@ -65,6 +70,7 @@ const message = useMessage()
 const player = usePlayerStore()
 const playingPlaylist = ref(false)
 const cachedTracks = ref(null)
+let playlistTracksRequest = null
 const playlistLink = computed(() => `/playlist/${props.playlist.id}`)
 
 async function playPlaylist() {
@@ -104,6 +110,29 @@ async function resolvePlaylistTracks(playlistId) {
     return cachedTracks.value
   }
 
+  if (playlistTracksRequest) {
+    return playlistTracksRequest
+  }
+
+  playlistTracksRequest = loadPlaylistTracks(playlistId)
+    .finally(() => {
+      playlistTracksRequest = null
+    })
+
+  return playlistTracksRequest
+}
+
+function prefetchPlaylistTracks() {
+  const playlistId = String(props.playlist?.id ?? '')
+
+  if (!playlistId || cachedTracks.value || playlistTracksRequest) {
+    return
+  }
+
+  resolvePlaylistTracks(playlistId).catch(() => {})
+}
+
+async function loadPlaylistTracks(playlistId) {
   const detail = await getPlaylistDetailData(playlistId, {
     listid: props.playlist.listid,
     fallbackPlaylist: props.playlist
