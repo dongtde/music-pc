@@ -1,5 +1,5 @@
 <template>
-  <div class="view search-detail">
+  <div ref="pageRoot" class="view search-detail" @scroll.passive="scheduleSearchRangeUpdate">
     <section class="search-detail__head">
       <div>
         <span class="tag">Search result</span>
@@ -56,12 +56,23 @@
         没有找到相关歌曲
       </div>
 
-      <SongListRow
-        v-for="item in displayItems"
-        :key="`song-${item.id}`"
-        :track="item"
-        @play="playSearchSong"
-      />
+      <div
+        ref="searchTrackVirtualList"
+        class="playlist-virtual-list"
+        :style="{ height: `${searchVirtualTotalHeight}px` }"
+      >
+        <div
+          class="playlist-virtual-window"
+          :style="{ transform: `translateY(${searchVirtualOffsetY}px)` }"
+        >
+          <SongListRow
+            v-for="item in visibleSearchSongItems"
+            :key="`song-${item.id}`"
+            :track="item"
+            @play="playSearchSong"
+          />
+        </div>
+      </div>
     </section>
 
     <section v-else class="search-detail__grid">
@@ -108,7 +119,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Disc3,
@@ -121,13 +132,18 @@ import {
 } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import SongListRow from '../components/SongListRow.vue'
+import { useSearchHistory } from '../composables/useSearch'
+import { useVirtualRows } from '../composables/useVirtualRows'
 import { getSearchResultData } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
 import { formatCompactCount } from '../utils/number'
 import { getPlaybackErrorDisplay } from '../utils/playbackError'
+import { isAbortError } from '../utils/request'
+import '../styles/playlist.css'
 import '../styles/search.css'
 
 const SEARCH_PAGE_SIZE = 30
+const TRACK_ROW_HEIGHT = 58
 const searchTabs = [
   { label: '单曲', type: 1, icon: Music },
   { label: '歌手', type: 100, icon: User },
@@ -142,6 +158,8 @@ const router = useRouter()
 const player = usePlayerStore()
 const message = useMessage()
 
+const pageRoot = ref(null)
+const searchTrackVirtualList = ref(null)
 const searchInput = ref('')
 const activeSearchType = ref(normalizeSearchType(route.query.type))
 const searchResults = ref([])
@@ -149,6 +167,8 @@ const resultTotal = ref(0)
 const resultLoading = ref(false)
 const resultError = ref('')
 let resultRequestId = 0
+let resultController = null
+const { rememberSearchHistory } = useSearchHistory()
 
 const keyword = computed(() => String(route.params.keyword ?? route.query.keyword ?? '').trim())
 const activeTabIcon = computed(() =>
@@ -160,6 +180,17 @@ const displayItems = computed(() =>
     rank: activeSearchType.value === 1 ? String(index + 1).padStart(2, '0') : item.rank
   }))
 )
+const {
+  offsetY: searchVirtualOffsetY,
+  scheduleRangeUpdate: scheduleSearchRangeUpdate,
+  totalHeight: searchVirtualTotalHeight,
+  updateRange: updateSearchVirtualRange,
+  visibleItems: visibleSearchSongItems
+} = useVirtualRows(displayItems, {
+  root: pageRoot,
+  list: searchTrackVirtualList,
+  rowHeight: TRACK_ROW_HEIGHT
+})
 const resultSummary = computed(() => {
   if (!keyword.value) {
     return '输入关键词开始搜索'
@@ -200,9 +231,14 @@ watch(
     }
 
     activeSearchType.value = nextType
+    nextTick(updateSearchVirtualRange)
     loadResults({ reset: true })
   }
 )
+
+onUnmounted(() => {
+  cancelResultRequest()
+})
 
 function submitSearch(value = searchInput.value) {
   const query = String(value ?? '').trim()
@@ -212,6 +248,7 @@ function submitSearch(value = searchInput.value) {
     return
   }
 
+  rememberSearchHistory(query)
   router.push({
     name: 'search-detail',
     params: { keyword: query },
@@ -238,15 +275,23 @@ function loadMoreResults() {
 }
 
 async function loadResults({ reset = true } = {}) {
+  if (resultLoading.value && !reset) {
+    return
+  }
+
   if (!keyword.value) {
+    cancelResultRequest()
     searchResults.value = []
     resultTotal.value = 0
     resultError.value = ''
     return
   }
 
+  cancelResultRequest()
   const requestId = ++resultRequestId
+  const controller = new AbortController()
   const offset = reset ? 0 : searchResults.value.length
+  resultController = controller
   resultLoading.value = true
   resultError.value = ''
 
@@ -256,9 +301,11 @@ async function loadResults({ reset = true } = {}) {
       type: activeSearchType.value,
       limit: SEARCH_PAGE_SIZE,
       offset
+    }, {
+      signal: controller.signal
     })
 
-    if (requestId !== resultRequestId) {
+    if (requestId !== resultRequestId || controller.signal.aborted) {
       return
     }
 
@@ -266,6 +313,10 @@ async function loadResults({ reset = true } = {}) {
     searchResults.value = uniqueItems(nextItems)
     resultTotal.value = data.total || searchResults.value.length
   } catch (error) {
+    if (isAbortError(error)) {
+      return
+    }
+
     if (requestId !== resultRequestId) {
       return
     }
@@ -274,10 +325,26 @@ async function loadResults({ reset = true } = {}) {
     resultError.value = '搜索失败，请稍后再试'
     message.error(resultError.value)
   } finally {
-    if (requestId === resultRequestId) {
+    if (resultController === controller) {
+      resultController = null
+    }
+
+    if (requestId === resultRequestId && !controller.signal.aborted) {
       resultLoading.value = false
     }
   }
+}
+
+function cancelResultRequest() {
+  resultRequestId += 1
+
+  if (!resultController) {
+    return
+  }
+
+  resultController.abort()
+  resultController = null
+  resultLoading.value = false
 }
 
 function uniqueItems(items = []) {

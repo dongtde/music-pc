@@ -25,6 +25,7 @@ const neteaseApiTarget =
   process.env.NETEASE_API_TARGET || 'https://music-api.xcj.pw';
 const preloadPath = path.join(__dirname, 'preload.cjs');
 const distRoot = path.join(__dirname, '..', 'dist');
+const cookieJarPath = path.join(app.getPath('userData'), 'kugou-proxy-cookies.json');
 
 let mainWindow = null;
 
@@ -64,6 +65,7 @@ const protocolRegistrar = createAppProtocolRegistrar({
   kugouApiTarget,
   neteaseApiTarget,
   distRoot,
+  cookieJarPath,
 });
 
 const desktopLyrics = createDesktopLyricsManager({

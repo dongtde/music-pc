@@ -1,5 +1,5 @@
 <template>
-  <div class="view artist-detail">
+  <div ref="pageRoot" class="view artist-detail" @scroll.passive="scheduleArtistSongsRangeUpdate">
     <section
       v-if="isLoading"
       class="artist-detail-skeleton"
@@ -224,12 +224,23 @@
               </header>
 
               <template v-if="tabLoaded.songs || !tabLoading.songs">
-                <SongListRow
-                  v-for="track in artistSongs"
-                  :key="track.id"
-                  :track="track"
-                  @play="playSongTrack"
-                />
+                <div
+                  ref="artistSongsVirtualList"
+                  class="playlist-virtual-list"
+                  :style="{ height: `${artistSongsVirtualTotalHeight}px` }"
+                >
+                  <div
+                    class="playlist-virtual-window"
+                    :style="{ transform: `translateY(${artistSongsVirtualOffsetY}px)` }"
+                  >
+                    <SongListRow
+                      v-for="track in visibleArtistSongs"
+                      :key="track.id"
+                      :track="track"
+                      @play="playSongTrack"
+                    />
+                  </div>
+                </div>
               </template>
             </section>
 
@@ -395,6 +406,7 @@ import { useMessage } from 'naive-ui'
 import ArtistVideoCard from '../components/ArtistVideoCard.vue'
 import SongListRow from '../components/SongListRow.vue'
 import { useLoadMoreTrigger } from '../composables/useLoadMoreTrigger'
+import { useVirtualRows } from '../composables/useVirtualRows'
 import {
   getArtistAlbumsData,
   getArtistDetailData,
@@ -405,17 +417,20 @@ import {
 import { usePlayerStore } from '../stores/player'
 import { getPlaybackErrorDisplay } from '../utils/playbackError'
 import '../styles/artist.css'
+import '../styles/playlist.css'
 
 const ARTIST_DETAIL_TRACK_SKELETON_COUNT = 10
 const ARTIST_SONG_PAGE_SIZE = 30
 const ARTIST_ALBUM_PAGE_SIZE = 24
 const ARTIST_VIDEO_PAGE_SIZE = 24
 const ARTIST_TAB_SKELETON_MIN_MS = 360
+const TRACK_ROW_HEIGHT = 58
 
 const route = useRoute()
 const player = usePlayerStore()
 const message = useMessage()
 
+const pageRoot = ref(null)
 const remoteArtist = ref(null)
 const remoteTracks = ref([])
 const artistSongs = ref([])
@@ -432,6 +447,7 @@ const isLoading = ref(false)
 const errorMessage = ref('')
 const activeTab = ref('featured')
 const loadMoreTrigger = ref(null)
+const artistSongsVirtualList = ref(null)
 const artistSongsHasMore = ref(false)
 const artistAlbumsHasMore = ref(false)
 const artistVideosHasMore = ref(false)
@@ -490,6 +506,23 @@ const artistTracks = computed(() =>
     rank: String(index + 1).padStart(2, '0')
   }))
 )
+const rankedArtistSongs = computed(() =>
+  artistSongs.value.map((track, index) => ({
+    ...track,
+    rank: String(index + 1).padStart(2, '0')
+  }))
+)
+const {
+  offsetY: artistSongsVirtualOffsetY,
+  scheduleRangeUpdate: scheduleArtistSongsRangeUpdate,
+  totalHeight: artistSongsVirtualTotalHeight,
+  updateRange: updateArtistSongsVirtualRange,
+  visibleItems: visibleArtistSongs
+} = useVirtualRows(rankedArtistSongs, {
+  root: pageRoot,
+  list: artistSongsVirtualList,
+  rowHeight: TRACK_ROW_HEIGHT
+})
 
 const featuredAlbums = computed(() => artistAlbums.value.slice(0, 6))
 const featuredVideos = computed(() => artistVideos.value.slice(0, 6))
@@ -562,6 +595,7 @@ watch(
   ],
   () => {
     nextTick(loadMoreController.setup)
+    nextTick(updateArtistSongsVirtualRange)
   },
   { flush: 'post' }
 )
@@ -869,7 +903,7 @@ function playFeaturedTrack(track) {
 }
 
 function playSongTrack(track) {
-  playArtistTrack(track, artistSongs.value, { type: 'artist-songs', id: route.params.id })
+  playArtistTrack(track, rankedArtistSongs.value, { type: 'artist-songs', id: route.params.id })
 }
 
 async function playArtistTrack(track, queue, source) {

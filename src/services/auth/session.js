@@ -62,11 +62,15 @@ export function clearStoredSession() {
 export function buildAuthRequestParams(source = {}, params = {}) {
   const cookieValues = mergeKugouAuth(source.auth, source.cookie)
   const fallbackUserId = source.profile?.userId || source.account?.id || ''
+  const cookie = toKugouAuthCookie(cookieValues)
   const requestParams = {
     ...params,
     token: params.token ?? cookieValues.token,
     userid: params.userid ?? cookieValues.userid ?? fallbackUserId,
-    dfid: params.dfid ?? cookieValues.dfid
+    dfid: params.dfid ?? cookieValues.dfid,
+    vip_type: params.vip_type ?? cookieValues.vipType,
+    vip_token: params.vip_token ?? cookieValues.vipToken,
+    cookie: params.cookie ?? cookie
   }
 
   Object.keys(requestParams).forEach((key) => {

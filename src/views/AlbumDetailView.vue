@@ -1,5 +1,5 @@
 <template>
-  <div class="view album-detail">
+  <div ref="pageRoot" class="view album-detail" @scroll.passive="scheduleAlbumRangeUpdate">
     <section class="album-hero">
       <div class="album-cover" :class="`album-cover--${album.type}`">
         <img
@@ -77,12 +77,23 @@
         <span>时长</span>
       </header>
 
-      <SongListRow
-        v-for="track in albumTracks"
-        :key="track.id"
-        :track="track"
-        @play="playAlbumTrack"
-      />
+      <div
+        ref="trackVirtualList"
+        class="playlist-virtual-list"
+        :style="{ height: `${albumVirtualTotalHeight}px` }"
+      >
+        <div
+          class="playlist-virtual-window"
+          :style="{ transform: `translateY(${albumVirtualOffsetY}px)` }"
+        >
+          <SongListRow
+            v-for="track in visibleAlbumTracks"
+            :key="track.id"
+            :track="track"
+            @play="playAlbumTrack"
+          />
+        </div>
+      </div>
     </section>
 
     <CommentModal
@@ -101,7 +112,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   Heart,
@@ -118,12 +129,18 @@ import {
 } from '../services/netease'
 import { usePaginatedComments } from '../composables/usePaginatedComments'
 import { useQueuePlayback } from '../composables/useQueuePlayback'
+import { useVirtualRows } from '../composables/useVirtualRows'
 import { formatCompactCount } from '../utils/number'
 import '../styles/album.css'
+import '../styles/playlist.css'
+
+const TRACK_ROW_HEIGHT = 58
 
 const route = useRoute()
 const message = useMessage()
 
+const pageRoot = ref(null)
+const trackVirtualList = ref(null)
 const remoteAlbum = ref(null)
 const remoteTracks = ref([])
 const isLoading = ref(false)
@@ -152,6 +169,17 @@ const albumTracks = computed(() =>
     rank: String(index + 1).padStart(2, '0')
   }))
 )
+const {
+  offsetY: albumVirtualOffsetY,
+  scheduleRangeUpdate: scheduleAlbumRangeUpdate,
+  totalHeight: albumVirtualTotalHeight,
+  updateRange: updateAlbumVirtualRange,
+  visibleItems: visibleAlbumTracks
+} = useVirtualRows(albumTracks, {
+  root: pageRoot,
+  list: trackVirtualList,
+  rowHeight: TRACK_ROW_HEIGHT
+})
 
 const commentState = usePaginatedComments({
   resourceId: computed(() => route.params.id),
@@ -210,6 +238,7 @@ async function loadAlbumDetail(id) {
     const data = await getAlbumDetailData(id)
     remoteAlbum.value = data.album
     remoteTracks.value = data.tracks
+    nextTick(updateAlbumVirtualRange)
   } catch (error) {
     console.warn('Failed to load album detail:', error)
     errorMessage.value = '专辑详情加载失败'

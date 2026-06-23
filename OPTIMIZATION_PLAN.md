@@ -80,9 +80,9 @@
 | 状态 | 优先级 | 项 | 方案 |
 | --- | --- | --- | --- |
 | 已完成 | P0 | 缓存上限 | 已新增 `src/utils/lruCache.js`，并限制 `cacheStore`、歌词、封面取色、MV 播放、MV 评论、排行榜曲目缓存容量；服务层 TTL 逻辑保持不变 |
-| 待处理 | P1 | 请求取消 | 为搜索建议、详情页切换、MV/歌单分页等加入 `AbortController`，替代仅 requestId 忽略结果 |
+| 部分完成 | P1 | 请求取消 | 搜索建议、顶部搜索结果、搜索详情结果、电台详情和电台节目分页已接入 `AbortController`，旧请求会真正取消；MV/歌单等仍待继续推广 |
 | 待处理 | P1 | 状态持久化节流 | `playerSnapshot` 已按秒节流，资料库 `persist()` 可继续加入防抖，批量导入本地文件时减少 localStorage 写入 |
-| 待处理 | P1 | 最近播放/喜欢列表 | 对 80 条以上列表增加虚拟化或分页展示，`LibraryView.vue` 当前直接渲染全部 |
+| 已完成 | P1 | 最近播放/喜欢列表 | 已新增 `src/composables/useVirtualRows.js`，并接入 `LibraryView.vue` 的本地/最近/喜欢歌曲列表，避免大量歌曲一次性渲染 |
 | 部分完成 | P2 | 统一错误模型 | 播放器链路已新增 `src/utils/playbackError.js`，统一成 `code/userMessage/action/recoverable/details`；全站 API 错误模型仍待继续推广 |
 | 已完成 | P2 | 账号/VIP 状态 | 已将 `auth.js` 中登录/QR API 适配拆到 `src/services/auth/login.js`，Cookie/session/请求身份构造拆到 `src/services/auth/session.js`，VIP 领取与状态解析拆到 `src/services/auth/vip.js`；`auth.js` 保留状态流转和 UI 行为协调 |
 
@@ -239,9 +239,9 @@
 
 | 优先级 | 功能 | 具体优化 |
 | --- | --- | --- |
-| P1 | 节目列表 | `PROGRAM_LIMIT = 40`，继续加载后会直接渲染所有节目；超过 100 条应虚拟化 |
-| P1 | 自动加载 | 当前手动“加载更多”，可接 `useLoadMoreTrigger`，但保留按钮作为 fallback |
-| P1 | 路由切换 | `loadDetail()` 切换 id 时用 requestId 或 AbortController，避免旧数据覆盖 |
+| P1（已完成） | 节目列表 | 已接入 `useVirtualRows`，继续加载后只渲染可见节目和缓冲行，播放队列仍使用完整已加载列表 |
+| P1（已完成） | 自动加载 | 已复用 `useLoadMoreTrigger`，靠近底部自动加载下一页，同时保留“加载更多”按钮作为 fallback |
+| P1（已完成） | 路由切换 | `loadDetail()` 和节目分页已接入 `AbortController` + requestId，切换电台或卸载页面会取消旧请求并忽略过期响应 |
 | P2 | 播放全部 | `playAll()` 只播放第一首并设置当前已加载队列，若 total 较大可提示“先播放已加载节目” |
 | P2 | 评论/订阅 | 服务层已有节目评论/订阅 API，详情页可按需补完整功能 |
 
@@ -286,10 +286,10 @@
 
 | 优先级 | 功能 | 具体优化 |
 | --- | --- | --- |
-| P1 | 虚拟列表复用 | 当前虚拟逻辑只在歌单详情内实现，抽为 `useVirtualRows`，复用到资料库、搜索歌曲、专辑、歌手歌曲 |
+| P1（已完成） | 虚拟列表复用 | 已抽 `src/composables/useVirtualRows.js`，并复用到 `PlaylistDetailView.vue`、`LibraryView.vue`、`AlbumDetailView.vue`、`ArtistDetailView.vue` 歌曲 tab、`SearchDetailView.vue` 歌曲结果和 `PodcastDetailView.vue` 电台节目 |
 | P1 | 播放全部 | `loadAllRemainingTracks()` 可能一次拉 total 全量，超大歌单风险高；改为边播边补队列或分批拉取 |
 | P1 | 路由切换取消 | 已有 token，进一步接 AbortController 取消网络和避免 `activeTrackRequest` 悬挂 |
-| P1 | 行高假设 | `TRACK_ROW_HEIGHT = 58` 必须与 CSS 锁定一致，增加视觉回归检查 |
+| P1（已完成） | 行高假设 | 已将 `SongListRow.vue` 普通行锁定为 58px、compact 行锁定为 52px，虚拟列表行高假设与 CSS 一致；后续可补视觉回归 |
 | P2 | 本地歌单 | 本地歌单没有远程评论和封面，增加本地封面生成/首曲封面 |
 | P2 | 评论 | 已用 `usePaginatedComments`，可统一滚动加载和错误重试 |
 
@@ -299,7 +299,7 @@
 
 | 优先级 | 功能 | 具体优化 |
 | --- | --- | --- |
-| P1 | 歌曲列表 | 当前专辑曲目直接渲染所有 `SongListRow`，大专辑/合集应复用虚拟列表 |
+| P1（已完成） | 歌曲列表 | 专辑曲目已接入 `useVirtualRows`，大专辑/合集只渲染可见行和缓冲行 |
 | P1 | 请求取消 | `loadAlbumDetail` 切换路由时取消旧请求 |
 | P2 | 评论加载 | 当前进入页面立即 `commentState.load`，可改为打开评论弹窗时加载，减少首屏接口 |
 | P2 | 封面 | hero 封面首屏应 `loading="eager"` + `fetchpriority="high"`，详情曲目封面 lazy |
@@ -315,7 +315,7 @@
 | --- | --- | --- |
 | P1 | 组件拆分 | 拆 `ArtistHero`、`ArtistSongsTab`、`ArtistAlbumsTab`、`ArtistVideosTab`、`ArtistIntroTab` |
 | P1 | 精选预加载 | `loadFeaturedPreviews()` 同时拉专辑、视频、简介；改 idle/低优先级，先保证热门歌曲可见 |
-| P1 | 歌曲列表 | `artistSongs` 超过 100 首后需要虚拟化 |
+| P1（已完成） | 歌曲列表 | `artistSongs` 已接入 `useVirtualRows`；精选热门歌曲数量较小，保留直接渲染 |
 | P1 | 分页取消 | 歌手 id 或排序切换时取消旧 tab 请求，避免混入旧结果 |
 | P2 | tab 缓存 | 每个 tab 数据按 artistId + filter 缓存，切回无需重拉 |
 | P2 | loading 最短时间 | `ARTIST_TAB_SKELETON_MIN_MS` 可按网络实际耗时动态，不强制慢设备等待 |
@@ -328,7 +328,7 @@
 
 | 优先级 | 功能 | 具体优化 |
 | --- | --- | --- |
-| P1 | 列表虚拟化 | 本地/最近/喜欢歌曲都直接渲染所有行，导入大量本地文件时会卡；复用歌单虚拟列表 |
+| P1（已完成） | 列表虚拟化 | 本地/最近/喜欢歌曲已复用 `useVirtualRows`，只渲染可见行和缓冲行 |
 | P1 | 本地文件对象 URL | `URL.createObjectURL(file)` 后持久化时丢弃 URL，刷新后本地文件无法播放；需要 File System Access 或明确提示重新导入 |
 | P1 | 下载同步 | `getDownloadedSongsData({ limit: 100 })` 只同步 100 首；增加分页同步与进度 |
 | P2 | localStorage 容量 | 大量本地 tracks 写入 localStorage 可能超限；迁移 IndexedDB |
@@ -344,8 +344,8 @@
 | 状态 | 优先级 | 功能 | 具体优化 |
 | --- | --- | --- | --- |
 | 已完成 | P0 | 路由接入 | 已补 `/search`、`/search/:keyword`，现有 `router.push({ name: 'search' })` 和 `search-detail` 目标可解析 |
-| 待处理 | P1 | 搜索逻辑复用 | `SearchView.vue`、`SearchDetailView.vue`、`TopBar.vue` 都有搜索建议/历史/结果逻辑，抽 `useSearch` |
-| 待处理 | P1 | 请求取消 | 建议接口 debounce 后仍可能旧请求返回，加入 AbortController |
+| 部分完成 | P1 | 搜索逻辑复用 | 已新增 `src/composables/useSearch.js`，复用搜索启动数据、历史记录、建议请求和热度格式化；完整结果分页逻辑仍保留在详情页 |
+| 已完成 | P1 | 请求取消 | 搜索建议、顶部浮层结果、搜索详情结果已通过 `AbortController` 取消旧请求，服务层/API 已打通 `signal` |
 | 待处理 | P1 | 结果分页 | `SearchDetailView` 有手动加载更多，TopBar 只查第一页；明确浮层只预览，完整结果进详情页 |
 | 待处理 | P2 | 历史存储 | 三处都读写同一个 `STORAGE_KEYS.searchHistory`，统一 API |
 | 待处理 | P2 | 空状态 | 搜索失败、无结果、默认词缺失统一视觉和文案 |
@@ -494,7 +494,7 @@
 | 优先级 | composable | 覆盖场景 |
 | --- | --- | --- |
 | P1 | `useRequestResource` | loading/error/requestId/AbortController/cache/retry |
-| P1 | `useVirtualRows` | 歌单、资料库、搜索歌曲、专辑曲目、歌手歌曲、电台节目 |
+| P1（已完成） | `useVirtualRows` | 已抽通用虚拟行 composable，并接入歌单详情、资料库、专辑曲目、歌手歌曲、搜索歌曲结果和电台节目 |
 | P1 | `useVerticalSnapFeed` | 首页音乐 feed、首页 MV feed |
 | P1 | `usePaginatedResource` | 评论、歌单、歌手、专辑、MV、电台分页 |
 | P2 | `useSearch` | TopBar、SearchView、SearchDetailView |
@@ -559,14 +559,14 @@
 | 专辑列表 | - | 首屏减量、滚动加载 | hover meta 延迟 | - |
 | 最新音乐 | 是否启用 | API 化 | 复用 SongListRow | - |
 | 电台首页/榜单/乐库 | - | 拆子组件、分区加载 | rank 缓存 | - |
-| 电台详情 | - | 节目虚拟化、自动加载 | 播放全部策略 | 评论/订阅完善 |
+| 电台详情 | - | 已完成：节目虚拟化、自动加载、路由切换取消 | 播放全部策略 | 评论/订阅完善 |
 | MV/视频 | 离开释放视频 | 组件拆分、弹幕降载、列表窗口化 | 控制条节流 | 下一条预取 |
 | 私人 FM | 已完成：路由启用 | 批量请求治理、队列补水 | 撤销不想听 | - |
-| 歌单详情 | - | 虚拟列表复用、播放全部分批 | 本地封面 | - |
-| 专辑详情 | - | 曲目虚拟化、评论懒加载 | tooltip 适配 | - |
-| 歌手详情 | - | tab 拆分、请求取消、歌曲虚拟化 | tab 缓存 | - |
-| 资料库 | - | 虚拟化、object URL 策略 | IndexedDB | ID3 元数据 |
-| 搜索 | 已完成：路由补齐 | 抽 `useSearch`、请求取消 | 统一空状态 | - |
+| 歌单详情 | - | 已完成：虚拟列表复用；待处理：播放全部分批 | 本地封面 | - |
+| 专辑详情 | - | 已完成：曲目虚拟化；待处理：评论懒加载 | tooltip 适配 | - |
+| 歌手详情 | - | 已完成：歌曲虚拟化；待处理：tab 拆分、请求取消 | tab 缓存 | - |
+| 资料库 | - | 已完成：本地/最近/喜欢歌曲虚拟化；待处理：object URL 策略 | IndexedDB | ID3 元数据 |
+| 搜索 | 已完成：路由补齐 | 部分完成：已抽 `useSearch` 复用启动数据/历史/建议，搜索建议和结果请求已接 `AbortController`，搜索详情歌曲结果已接 `useVirtualRows` | 统一空状态、非歌曲网格虚拟化 | - |
 | 设置 | - | reduced motion、VIP 复用 | 分组重构 | 导入导出 |
 | 桌面歌词 | IPC 频率审计 | 窗口置顶优化、歌词缓存 | 位置持久化 | - |
 | 播放器 | 部分完成：左侧歌曲摘要、模式、传输控制、音量、进度、弹幕按钮、桌面歌词按钮、队列、音质、视觉效果、歌曲动作组件化，桌面歌词桥接、进度条歌词预览、全屏弹幕评论流、当前歌曲评论弹窗/统计已抽 composable，统一歌词服务、URL 缓存、队列来源/版本治理、音量统一、播放模式 store 化、评论数 stale 缓存、错误模型、播放 smoke 已完成 | 真实浏览器播放 smoke | 可恢复错误提示 | - |

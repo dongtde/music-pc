@@ -79,23 +79,42 @@ import {
   normalizeLyricKeyword,
   getLyricCandidate
 } from './shared'
+import { isAbortError } from '../../../utils/request'
 
-export const getSearchDefault = (params = {}) => getKugou('/search/default', params, { noCookie: true })
+export const getSearchDefault = (params = {}, config = {}) =>
+  getKugou('/search/default', params, {
+    ...config,
+    noCookie: config.noCookie ?? true
+  })
 
-export const getSearchHotDetail = (params = {}) => getKugou('/search/hot', params).then(toHotSearchResponse)
+export const getSearchHotDetail = (params = {}, config = {}) =>
+  getKugou('/search/hot', params, config).then(toHotSearchResponse)
 
-export const getSearchSuggestPc = (params = {}) => getKugou('/search/suggest', params).then(toSuggestResponse)
+export const getSearchSuggestPc = (params = {}, config = {}) =>
+  getKugou('/search/suggest', params, config).then(toSuggestResponse)
 
-export const getSearchMultiMatch = (params = {}) =>
-  getKugou('/search/complex', params)
+export const getSearchMultiMatch = (params = {}, config = {}) =>
+  getKugou('/search/complex', params, config)
     .then((response) => toSearchResponse(response, 1))
-    .catch(() => emptySearchResponse(1))
+    .catch((error) => {
+      if (isAbortError(error)) {
+        throw error
+      }
 
-export const getCloudSearch = (params = {}) => {
+      return emptySearchResponse(1)
+    })
+
+export const getCloudSearch = (params = {}, config = {}) => {
   const searchType = normalizeSearchType(params.type)
   const path = searchType === 'talent' ? '/search/complex' : '/search'
 
-  return getKugou(path, params)
+  return getKugou(path, params, config)
     .then((response) => toSearchResponse(response, params.type))
-    .catch(() => emptySearchResponse(params.type))
+    .catch((error) => {
+      if (isAbortError(error)) {
+        throw error
+      }
+
+      return emptySearchResponse(params.type)
+    })
 }

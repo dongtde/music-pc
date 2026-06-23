@@ -1,7 +1,18 @@
 import { STORAGE_KEYS } from '../config/app'
 import { readJsonStorage, readStorage, writeJsonStorage, writeStorage } from './storage'
 
-const AUTH_COOKIE_KEYS = ['token', 'userid', 'dfid']
+const AUTH_COOKIE_FIELDS = [
+  { key: 'token', cookieName: 'token' },
+  { key: 'userid', cookieName: 'userid' },
+  { key: 'dfid', cookieName: 'dfid' },
+  { key: 'vipType', cookieName: 'vip_type' },
+  { key: 'vipToken', cookieName: 'vip_token' },
+  { key: 'kgMid', cookieName: 'kg_mid' },
+  { key: 'kgDfid', cookieName: 'kg_dfid' },
+  { key: 'apiPlatform', cookieName: 'KUGOU_API_PLATFORM' }
+]
+const AUTH_COOKIE_NAMES = AUTH_COOKIE_FIELDS.map((field) => field.cookieName)
+const AUTH_FIELD_KEYS = new Set(AUTH_COOKIE_FIELDS.map((field) => field.key))
 const BROWSER_COOKIE_WRITE_PATHS = ['/api']
 const BROWSER_COOKIE_CLEAR_PATHS = ['/', '/api', '/netease-api']
 const BROWSER_COOKIE_MAX_AGE = 180 * 24 * 60 * 60
@@ -44,16 +55,24 @@ export function parseCookieString(cookie = '') {
 export function normalizeKugouAuth(source = {}) {
   const values = typeof source === 'string' ? parseCookieString(source) : source || {}
   const vipType = normalizeInteger(values.vipType ?? values.vip_type)
+  const extraCookies = normalizeExtraCookies(values)
 
-  return {
+  const normalized = {
     token: cleanString(values.token),
     userid: cleanString(values.userid ?? values.userId ?? values.uid),
     dfid: cleanString(values.dfid ?? values.kg_dfid),
     vipType,
     vipToken: cleanString(values.vipToken ?? values.vip_token),
     kgMid: cleanString(values.kgMid ?? values.kg_mid),
-    kgDfid: cleanString(values.kgDfid ?? values.kg_dfid)
+    kgDfid: cleanString(values.kgDfid ?? values.kg_dfid),
+    apiPlatform: cleanString(values.apiPlatform ?? values.KUGOU_API_PLATFORM)
   }
+
+  if (Object.keys(extraCookies).length) {
+    normalized.extraCookies = extraCookies
+  }
+
+  return normalized
 }
 
 export function mergeKugouAuth(...sources) {
@@ -61,6 +80,14 @@ export function mergeKugouAuth(...sources) {
     const auth = normalizeKugouAuth(source)
 
     Object.entries(auth).forEach(([key, value]) => {
+      if (key === 'extraCookies') {
+        merged.extraCookies = {
+          ...(merged.extraCookies ?? {}),
+          ...value
+        }
+        return
+      }
+
       if (value !== undefined && value !== null && value !== '') {
         merged[key] = value
       }
@@ -72,14 +99,34 @@ export function mergeKugouAuth(...sources) {
 
 export function hasKugouAuth(auth = {}) {
   const normalized = normalizeKugouAuth(auth)
-  return Boolean(normalized.token || normalized.userid || normalized.dfid)
+  return Boolean(
+    normalized.token ||
+      normalized.userid ||
+      normalized.dfid ||
+      normalized.vipToken ||
+      Object.keys(normalized.extraCookies ?? {}).length
+  )
 }
 
 export function toKugouAuthCookie(auth = {}) {
   const normalized = normalizeKugouAuth(auth)
+  const cookies = new Map()
 
-  return AUTH_COOKIE_KEYS
-    .map((key) => [key, normalized[key]])
+  Object.entries(normalized.extraCookies ?? {}).forEach(([name, value]) => {
+    if (name && value !== undefined && value !== null && value !== '') {
+      cookies.set(name, cleanCookieValue(value))
+    }
+  })
+
+  AUTH_COOKIE_FIELDS.forEach(({ key, cookieName }) => {
+    const value = normalized[key]
+
+    if (value !== undefined && value !== null && value !== '') {
+      cookies.set(cookieName, cleanCookieValue(value))
+    }
+  })
+
+  return Array.from(cookies.entries())
     .filter(([, value]) => value !== undefined && value !== null && value !== '')
     .map(([key, value]) => `${key}=${value}`)
     .join(';')
@@ -126,8 +173,12 @@ export function writeKugouBrowserCookies(auth = {}) {
   const normalized = normalizeKugouAuth(auth)
   clearKugouBrowserAuthCookies()
 
-  AUTH_COOKIE_KEYS.forEach((key) => {
-    writeBrowserCookie(key, normalized[key])
+  AUTH_COOKIE_FIELDS.forEach(({ key, cookieName }) => {
+    writeBrowserCookie(cookieName, normalized[key])
+  })
+
+  Object.entries(normalized.extraCookies ?? {}).forEach(([name, value]) => {
+    writeBrowserCookie(name, value)
   })
 }
 
@@ -136,7 +187,7 @@ export function clearKugouBrowserCookies() {
     return
   }
 
-  const names = new Set(AUTH_COOKIE_KEYS)
+  const names = new Set(AUTH_COOKIE_NAMES)
 
   if (document.cookie) {
     document.cookie
@@ -150,7 +201,7 @@ export function clearKugouBrowserCookies() {
 }
 
 function clearKugouBrowserAuthCookies() {
-  AUTH_COOKIE_KEYS.forEach(expireBrowserCookie)
+  AUTH_COOKIE_NAMES.forEach(expireBrowserCookie)
 }
 
 function cleanString(value) {
@@ -184,6 +235,50 @@ function writeBrowserCookie(name, value) {
   BROWSER_COOKIE_WRITE_PATHS.forEach((path) => {
     document.cookie = `${name}=${cookieValue}; Max-Age=${BROWSER_COOKIE_MAX_AGE}; path=${path}; SameSite=Lax`
   })
+}
+
+function normalizeExtraCookies(values = {}) {
+  const fromStoredExtra = values.extraCookies && typeof values.extraCookies === 'object'
+    ? values.extraCookies
+    : {}
+  const cookies = cleanCookieMap(fromStoredExtra)
+
+  Object.entries(values).forEach(([name, value]) => {
+    if (!shouldPreserveCookie(name) || AUTH_FIELD_KEYS.has(name)) {
+      return
+    }
+
+    const cookieValue = cleanCookieValue(value)
+
+    if (cookieValue) {
+      cookies[name] = cookieValue
+    }
+  })
+
+  return cookies
+}
+
+function cleanCookieMap(source = {}) {
+  return Object.entries(source).reduce((cookies, [name, value]) => {
+    const cookieName = cleanString(name)
+    const cookieValue = cleanCookieValue(value)
+
+    if (cookieName && cookieValue) {
+      cookies[cookieName] = cookieValue
+    }
+
+    return cookies
+  }, {})
+}
+
+function shouldPreserveCookie(name = '') {
+  const cookieName = cleanString(name)
+
+  if (!cookieName || AUTH_COOKIE_NAMES.includes(cookieName) || cookieName === 'extraCookies') {
+    return false
+  }
+
+  return BROWSER_COOKIE_NAME_PATTERNS.some((pattern) => pattern.test(cookieName))
 }
 
 function cleanCookieValue(value) {

@@ -254,10 +254,14 @@ export function isSearchPath(path = '') {
 
 export function withStoredKugouAuthParams(params = {}) {
   const auth = readStoredKugouAuth()
+  const cookie = toKugouAuthCookie(auth)
   const authParams = {
     token: auth.token,
     userid: auth.userid,
-    dfid: auth.dfid
+    dfid: auth.dfid,
+    vip_type: auth.vipType,
+    vip_token: auth.vipToken,
+    cookie
   }
 
   return {

@@ -6,12 +6,19 @@ import {
 } from '../../api/modules/netease'
 import { CACHE_TTL } from '../../config/app'
 import { normalizeAudioQualities } from '../../utils/audioQuality'
+import { isAbortError } from '../../utils/request'
 import { isVipSong, normalizeSongAccess } from '../../utils/songAccess'
 import { cacheKey, getCachedData } from '../cache'
 
-export async function getSearchBootData() {
+export async function getSearchBootData(options = {}) {
   return getCachedData('search-boot', CACHE_TTL.searchBoot, async () => {
-    const hotResponse = await getSearchHotDetail().catch(() => ({}))
+    const hotResponse = await getSearchHotDetail({}, options).catch((error) => {
+      if (isAbortError(error)) {
+        throw error
+      }
+
+      return {}
+    })
     const hotKeywords = (hotResponse.data ?? []).map(mapHotKeyword)
 
     return {
@@ -21,7 +28,7 @@ export async function getSearchBootData() {
   })
 }
 
-export async function getSearchSuggestData(keyword) {
+export async function getSearchSuggestData(keyword, options = {}) {
   const query = String(keyword ?? '').trim()
 
   if (!query) {
@@ -36,8 +43,20 @@ export async function getSearchSuggestData(keyword) {
   }
 
   const [suggestResponse, matchResponse] = await Promise.all([
-    getSearchSuggestPc({ keyword: query }).catch(() => ({})),
-    getSearchMultiMatch({ keywords: query }).catch(() => ({}))
+    getSearchSuggestPc({ keyword: query }, options).catch((error) => {
+      if (isAbortError(error)) {
+        throw error
+      }
+
+      return {}
+    }),
+    getSearchMultiMatch({ keywords: query }, options).catch((error) => {
+      if (isAbortError(error)) {
+        throw error
+      }
+
+      return {}
+    })
   ])
   const legacyResult = suggestResponse.result ?? {}
   const enhancedResult = suggestResponse.data ?? {}
@@ -52,7 +71,7 @@ export async function getSearchSuggestData(keyword) {
   }
 }
 
-export async function getSearchResultData({ keyword, type = 1, limit = 20, offset = 0 }) {
+export async function getSearchResultData({ keyword, type = 1, limit = 20, offset = 0 }, options = {}) {
   const query = String(keyword ?? '').trim()
 
   if (!query) {
@@ -68,7 +87,7 @@ export async function getSearchResultData({ keyword, type = 1, limit = 20, offse
     type,
     limit,
     offset
-  })
+  }, options)
   const result = response.result ?? {}
 
   return {

@@ -1,5 +1,5 @@
 <template>
-  <div class="view podcast-detail-view">
+  <div ref="pageRoot" class="view podcast-detail-view" @scroll.passive="scheduleProgramRangeUpdate">
     <section
       v-if="loading && !podcast"
       class="podcast-detail-skeleton"
@@ -114,12 +114,23 @@
               <span>时长</span>
             </header>
             <div class="podcast-detail-programs">
-              <SongListRow
-                v-for="track in rankedPrograms"
-                :key="track.programId || track.id"
-                :track="track"
-                @play="playProgram(track)"
-              />
+              <div
+                ref="programVirtualList"
+                class="playlist-virtual-list"
+                :style="{ height: `${programVirtualTotalHeight}px` }"
+              >
+                <div
+                  class="playlist-virtual-window"
+                  :style="{ transform: `translateY(${programVirtualOffsetY}px)` }"
+                >
+                  <SongListRow
+                    v-for="track in visiblePrograms"
+                    :key="track.programId || track.id"
+                    :track="track"
+                    @play="playProgram(track)"
+                  />
+                </div>
+              </div>
             </div>
           </section>
 
@@ -127,6 +138,7 @@
 
           <button
             v-if="more"
+            ref="programLoadMoreTrigger"
             class="podcast-load-more"
             type="button"
             :disabled="programLoading"
@@ -146,7 +158,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import {
@@ -158,19 +170,27 @@ import {
   RefreshCw,
 } from 'lucide-vue-next'
 import SongListRow from '../components/SongListRow.vue'
+import { useLoadMoreTrigger } from '../composables/useLoadMoreTrigger'
+import { useVirtualRows } from '../composables/useVirtualRows'
 import {
   getPodcastDetailData,
   getPodcastProgramsData
 } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
 import { getPlaybackErrorDisplay } from '../utils/playbackError'
+import { isAbortError } from '../utils/request'
 import '../styles/podcast.css'
+import '../styles/playlist.css'
 
 const PROGRAM_LIMIT = 40
+const PROGRAM_ROW_HEIGHT = 58
 
 const route = useRoute()
 const player = usePlayerStore()
 const message = useMessage()
+const pageRoot = ref(null)
+const programVirtualList = ref(null)
+const programLoadMoreTrigger = ref(null)
 const podcast = ref(null)
 const programs = ref([])
 const total = ref(0)
@@ -179,6 +199,10 @@ const more = ref(false)
 const loading = ref(false)
 const programLoading = ref(false)
 const errorMessage = ref('')
+let detailRequestId = 0
+let detailController = null
+let programRequestId = 0
+let programController = null
 
 const rankedPrograms = computed(() =>
   programs.value.map((track, index) => ({
@@ -186,9 +210,37 @@ const rankedPrograms = computed(() =>
     rank: String(index + 1).padStart(2, '0')
   }))
 )
+const {
+  offsetY: programVirtualOffsetY,
+  scheduleRangeUpdate: scheduleProgramRangeUpdate,
+  totalHeight: programVirtualTotalHeight,
+  updateRange: updateProgramVirtualRange,
+  visibleItems: visiblePrograms
+} = useVirtualRows(rankedPrograms, {
+  root: pageRoot,
+  list: programVirtualList,
+  rowHeight: PROGRAM_ROW_HEIGHT
+})
+const loadMoreController = useLoadMoreTrigger({
+  trigger: programLoadMoreTrigger,
+  canLoad: () =>
+    Boolean(podcast.value) &&
+    more.value &&
+    !loading.value &&
+    !programLoading.value,
+  getRoot: () => pageRoot.value,
+  loadMore: loadMorePrograms,
+  rootMargin: '520px 0px',
+  scrollThreshold: 720
+})
 
 onMounted(() => {
   loadDetail()
+})
+
+onUnmounted(() => {
+  cancelDetailRequest()
+  cancelProgramRequest()
 })
 
 watch(
@@ -205,25 +257,53 @@ async function loadDetail() {
     return
   }
 
+  cancelDetailRequest()
+  cancelProgramRequest()
+  loadMoreController.cleanup()
+  const requestId = ++detailRequestId
+  const controller = new AbortController()
+  detailController = controller
   loading.value = true
   errorMessage.value = ''
   podcast.value = null
   programs.value = []
   offset.value = 0
+  more.value = false
 
   try {
-    const data = await getPodcastDetailData({ id, limit: PROGRAM_LIMIT, offset: 0 })
+    const data = await getPodcastDetailData({ id, limit: PROGRAM_LIMIT, offset: 0 }, {
+      signal: controller.signal
+    })
+
+    if (requestId !== detailRequestId || controller.signal.aborted) {
+      return
+    }
+
     podcast.value = data.podcast
     programs.value = data.programs
     total.value = data.total
     offset.value = data.programs.length
     more.value = data.more
+    nextTick(() => {
+      updateProgramVirtualRange()
+      loadMoreController.setup()
+    })
   } catch (error) {
+    if (isAbortError(error) || requestId !== detailRequestId) {
+      return
+    }
+
     console.warn('Failed to load radio detail:', error)
     errorMessage.value = error?.message || '电台详情加载失败'
     message.error(errorMessage.value)
   } finally {
-    loading.value = false
+    if (requestId === detailRequestId && !controller.signal.aborted) {
+      loading.value = false
+    }
+
+    if (detailController === controller) {
+      detailController = null
+    }
   }
 }
 
@@ -234,6 +314,10 @@ async function loadMorePrograms() {
     return
   }
 
+  cancelProgramRequest()
+  const requestId = ++programRequestId
+  const controller = new AbortController()
+  programController = controller
   programLoading.value = true
 
   try {
@@ -241,16 +325,37 @@ async function loadMorePrograms() {
       id,
       limit: PROGRAM_LIMIT,
       offset: offset.value
+    }, {
+      signal: controller.signal
     })
+
+    if (requestId !== programRequestId || controller.signal.aborted || String(route.params.id) !== String(id)) {
+      return
+    }
+
     programs.value = dedupeTracks([...programs.value, ...data.programs])
     total.value = data.total
     offset.value = programs.value.length
     more.value = data.more
+    nextTick(() => {
+      updateProgramVirtualRange()
+      loadMoreController.setup()
+    })
   } catch (error) {
+    if (isAbortError(error) || requestId !== programRequestId) {
+      return
+    }
+
     console.warn('Failed to load radio songs:', error)
     message.error(error?.message || '歌曲加载失败')
   } finally {
-    programLoading.value = false
+    if (requestId === programRequestId && !controller.signal.aborted) {
+      programLoading.value = false
+    }
+
+    if (programController === controller) {
+      programController = null
+    }
   }
 }
 
@@ -284,5 +389,28 @@ function dedupeTracks(items = []) {
     seenIds.add(id)
     return true
   })
+}
+
+function cancelDetailRequest() {
+  detailRequestId += 1
+
+  if (!detailController) {
+    return
+  }
+
+  detailController.abort()
+  detailController = null
+}
+
+function cancelProgramRequest() {
+  programRequestId += 1
+
+  if (!programController) {
+    return
+  }
+
+  programController.abort()
+  programController = null
+  programLoading.value = false
 }
 </script>

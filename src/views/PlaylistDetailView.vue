@@ -185,7 +185,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { MessageCircle, Pause, Play } from 'lucide-vue-next';
 import { useMessage } from 'naive-ui';
@@ -201,6 +201,7 @@ import { SKELETON_MIN_MS } from '../config/app';
 import { useLoadMoreTrigger } from '../composables/useLoadMoreTrigger';
 import { usePaginatedComments } from '../composables/usePaginatedComments';
 import { useQueuePlayback } from '../composables/useQueuePlayback';
+import { useVirtualRows } from '../composables/useVirtualRows';
 import { useLibraryStore } from '../stores/library';
 import { waitForMinimumDelay } from '../utils/time';
 import '../styles/playlist.css';
@@ -208,7 +209,6 @@ import '../styles/playlist.css';
 const PLAYLIST_INITIAL_TRACK_LIMIT = 60;
 const PLAYLIST_TRACK_PAGE_SIZE = 100;
 const TRACK_ROW_HEIGHT = 58;
-const VIRTUAL_OVERSCAN_ROWS = 8;
 
 const route = useRoute();
 const message = useMessage();
@@ -225,11 +225,8 @@ const trackLoading = ref(false);
 const trackError = ref('');
 const trackHasMore = ref(false);
 const playAllLoading = ref(false);
-const virtualStartIndex = ref(0);
-const virtualEndIndex = ref(0);
 let playlistLoadToken = 0;
 let activeTrackRequest = null;
-let virtualFrame = 0;
 
 const playlist = computed(
   () =>
@@ -255,11 +252,17 @@ const playlistTracks = computed(() =>
     rank: String(index + 1).padStart(2, '0'),
   })),
 );
-const virtualTotalHeight = computed(() => playlistTracks.value.length * TRACK_ROW_HEIGHT);
-const virtualOffsetY = computed(() => virtualStartIndex.value * TRACK_ROW_HEIGHT);
-const visiblePlaylistTracks = computed(() =>
-  playlistTracks.value.slice(virtualStartIndex.value, virtualEndIndex.value),
-);
+const {
+  offsetY: virtualOffsetY,
+  scheduleRangeUpdate: scheduleVirtualRangeUpdate,
+  totalHeight: virtualTotalHeight,
+  updateRange: updateVirtualRange,
+  visibleItems: visiblePlaylistTracks,
+} = useVirtualRows(playlistTracks, {
+  root: pageRoot,
+  list: trackVirtualList,
+  rowHeight: TRACK_ROW_HEIGHT,
+});
 
 const creatorInitial = computed(
   () => playlist.value.creator?.slice(0, 1) || '云',
@@ -308,18 +311,6 @@ const loadMoreController = useLoadMoreTrigger({
   loadMore: loadMoreTracks,
   rootMargin: '520px 0px',
   scrollThreshold: 720,
-});
-
-onMounted(() => {
-  window.addEventListener('resize', scheduleVirtualRangeUpdate, { passive: true });
-  nextTick(updateVirtualRange);
-});
-
-onBeforeUnmount(() => {
-  window.removeEventListener('resize', scheduleVirtualRangeUpdate);
-  if (virtualFrame) {
-    window.cancelAnimationFrame(virtualFrame);
-  }
 });
 
 watch(
@@ -605,53 +596,6 @@ function syncTrackHasMore(apiHasMore = false) {
   trackHasMore.value = total
     ? remoteTracks.value.length < total
     : Boolean(apiHasMore);
-}
-
-function scheduleVirtualRangeUpdate() {
-  if (virtualFrame) {
-    return;
-  }
-
-  virtualFrame = window.requestAnimationFrame(() => {
-    virtualFrame = 0;
-    updateVirtualRange();
-  });
-}
-
-function updateVirtualRange() {
-  const total = playlistTracks.value.length;
-
-  if (!total) {
-    virtualStartIndex.value = 0;
-    virtualEndIndex.value = 0;
-    return;
-  }
-
-  const root = pageRoot.value;
-  const list = trackVirtualList.value;
-
-  if (!root || !list) {
-    virtualStartIndex.value = 0;
-    virtualEndIndex.value = Math.min(total, 40);
-    return;
-  }
-
-  const scrollTop = root.scrollTop;
-  const viewportHeight = root.clientHeight;
-  const listTop = list.offsetTop;
-  const visibleTop = Math.max(0, scrollTop - listTop);
-  const visibleBottom = Math.max(0, scrollTop + viewportHeight - listTop);
-  const nextStart = Math.max(
-    0,
-    Math.floor(visibleTop / TRACK_ROW_HEIGHT) - VIRTUAL_OVERSCAN_ROWS,
-  );
-  const nextEnd = Math.min(
-    total,
-    Math.ceil(visibleBottom / TRACK_ROW_HEIGHT) + VIRTUAL_OVERSCAN_ROWS,
-  );
-
-  virtualStartIndex.value = nextStart;
-  virtualEndIndex.value = Math.max(nextEnd, nextStart + 1);
 }
 
 function loadMoreComments() {

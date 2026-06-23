@@ -200,6 +200,7 @@ function normalizeRouteId(value) {
   position: relative;
   display: grid;
   width: 100%;
+  height: 58px;
   min-height: 58px;
   grid-template-columns: minmax(360px, 1fr) minmax(180px, 320px) 64px;
   gap: 24px;
@@ -493,6 +494,7 @@ function normalizeRouteId(value) {
 }
 
 .song-list-row.is-compact {
+  height: 52px;
   min-height: 52px;
   grid-template-columns: minmax(0, 1fr) 44px;
   gap: 10px;

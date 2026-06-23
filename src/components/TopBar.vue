@@ -231,12 +231,17 @@ import {
 } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import SongListRow from './SongListRow.vue'
-import { STORAGE_KEYS } from '../config/app'
-import { getSearchBootData, getSearchResultData, getSearchSuggestData } from '../services/netease'
+import {
+  formatSearchScore,
+  useSearchBoot,
+  useSearchHistory,
+  useSearchSuggestions
+} from '../composables/useSearch'
+import { getSearchResultData } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
 import { useThemeStore } from '../stores/theme'
 import { getPlaybackErrorDisplay } from '../utils/playbackError'
-import { readJsonStorage, writeJsonStorage } from '../utils/storage'
+import { isAbortError } from '../utils/request'
 
 const SearchGroup = defineComponent({
   name: 'SearchGroup',
@@ -268,7 +273,6 @@ const SearchGroup = defineComponent({
 
 const SEARCH_INPUT_TRANSITION_MS = 320
 const SEARCH_PANEL_LEAVE_MS = 220
-const SEARCH_HISTORY_LIMIT = 8
 
 const searchTabs = [
   { label: '单曲', type: 1, icon: Music },
@@ -287,33 +291,26 @@ const searchWrap = ref(null)
 const searchExpanded = ref(false)
 const searchPanelVisible = ref(false)
 const searchKeyword = ref('')
-const defaultKeyword = ref('')
-const hotKeywords = ref([])
-const searchHistory = ref([])
-const emptySuggestions = () => ({
-  keywordSuggestions: [],
-  matches: [],
-  songs: [],
-  artists: [],
-  albums: [],
-  playlists: []
-})
-const suggestions = ref(emptySuggestions())
-const suggestLoading = ref(false)
 const searchedKeyword = ref('')
 const activeSearchType = ref(1)
 const searchResults = ref([])
 const resultTotal = ref(0)
 const resultLoading = ref(false)
-let suggestTimer = 0
-let suggestRequestId = 0
 let resultRequestId = 0
+let resultController = null
 let searchPanelTimer = 0
 let searchPanelCloseTimer = 0
 let searchPanelLeaving = false
 let searchPointerDownInside = false
 
 const trimmedKeyword = computed(() => searchKeyword.value.trim())
+const { defaultKeyword, hotKeywords, loadSearchBoot } = useSearchBoot({ hotLimit: 10 })
+const {
+  clearSearchHistory,
+  rememberSearchHistory,
+  searchHistory
+} = useSearchHistory()
+const { suggestions, suggestLoading } = useSearchSuggestions(trimmedKeyword)
 const keywordSuggestions = computed(() => suggestions.value.keywordSuggestions.slice(0, 10))
 const suggestMatches = computed(() => suggestions.value.matches.slice(0, 6))
 const hasSuggestions = computed(() =>
@@ -334,97 +331,24 @@ const activeTabIcon = computed(() =>
 )
 
 watch(trimmedKeyword, (keyword) => {
-  window.clearTimeout(suggestTimer)
   searchedKeyword.value = ''
 
   if (!keyword) {
-    suggestions.value = emptySuggestions()
-    suggestLoading.value = false
-    return
+    cancelResultRequest()
   }
-
-  suggestLoading.value = true
-  suggestTimer = window.setTimeout(() => loadSuggestions(keyword), 260)
 })
 
 onMounted(() => {
-  loadSearchHistory()
   loadSearchBoot()
   document.addEventListener('pointerdown', handleOutsideClick)
 })
 
 onUnmounted(() => {
-  window.clearTimeout(suggestTimer)
+  cancelResultRequest()
   window.clearTimeout(searchPanelTimer)
   window.clearTimeout(searchPanelCloseTimer)
   document.removeEventListener('pointerdown', handleOutsideClick)
 })
-
-async function loadSearchBoot() {
-  try {
-    const data = await getSearchBootData()
-    defaultKeyword.value = data.defaultKeyword
-    hotKeywords.value = data.hotKeywords.slice(0, 10)
-  } catch (error) {
-    console.warn('Failed to load search boot data:', error)
-  }
-}
-
-function loadSearchHistory() {
-  const parsed = readJsonStorage(STORAGE_KEYS.searchHistory, [])
-
-  searchHistory.value = Array.isArray(parsed)
-    ? parsed
-      .map((item) => String(item ?? '').trim())
-      .filter(Boolean)
-      .slice(0, SEARCH_HISTORY_LIMIT)
-    : []
-}
-
-function persistSearchHistory(items) {
-  searchHistory.value = items
-
-  if (!writeJsonStorage(STORAGE_KEYS.searchHistory, items)) {
-    console.warn('Failed to persist search history')
-  }
-}
-
-function rememberSearchHistory(keyword) {
-  const query = String(keyword ?? '').trim()
-
-  if (!query) {
-    return
-  }
-
-  const next = [query, ...searchHistory.value.filter((item) => item !== query)].slice(0, SEARCH_HISTORY_LIMIT)
-  persistSearchHistory(next)
-}
-
-function clearSearchHistory() {
-  persistSearchHistory([])
-}
-
-async function loadSuggestions(keyword) {
-  const requestId = ++suggestRequestId
-
-  try {
-    const data = await getSearchSuggestData(keyword)
-
-    if (requestId !== suggestRequestId) {
-      return
-    }
-
-    suggestions.value = data
-  } catch (error) {
-    if (requestId === suggestRequestId) {
-      suggestions.value = emptySuggestions()
-    }
-  } finally {
-    if (requestId === suggestRequestId) {
-      suggestLoading.value = false
-    }
-  }
-}
 
 function openSearchPanel() {
   if (searchPanelVisible.value) {
@@ -521,6 +445,7 @@ function handleSearchFocusOut(event) {
 }
 
 function clearSearch() {
+  cancelResultRequest()
   searchKeyword.value = ''
   searchedKeyword.value = ''
   searchResults.value = []
@@ -563,7 +488,10 @@ async function loadResults() {
     return
   }
 
+  cancelResultRequest()
   const requestId = ++resultRequestId
+  const controller = new AbortController()
+  resultController = controller
   resultLoading.value = true
 
   try {
@@ -571,25 +499,47 @@ async function loadResults() {
       keyword: query,
       type: activeSearchType.value,
       limit: activeSearchType.value === 1 ? 30 : 20
+    }, {
+      signal: controller.signal
     })
 
-    if (requestId !== resultRequestId) {
+    if (requestId !== resultRequestId || controller.signal.aborted) {
       return
     }
 
     searchResults.value = data.items
     resultTotal.value = data.total
   } catch (error) {
+    if (isAbortError(error)) {
+      return
+    }
+
     if (requestId === resultRequestId) {
       searchResults.value = []
       resultTotal.value = 0
       message.error('搜索失败，请稍后再试')
     }
   } finally {
-    if (requestId === resultRequestId) {
+    if (resultController === controller) {
+      resultController = null
+    }
+
+    if (requestId === resultRequestId && !controller.signal.aborted) {
       resultLoading.value = false
     }
   }
+}
+
+function cancelResultRequest() {
+  resultRequestId += 1
+
+  if (!resultController) {
+    return
+  }
+
+  resultController.abort()
+  resultController = null
+  resultLoading.value = false
 }
 
 function handleSuggestionSelect(item) {
@@ -645,15 +595,7 @@ function getResultSubtitle(item) {
 }
 
 function formatScore(score) {
-  if (!score) {
-    return '热门内容'
-  }
-
-  if (score >= 10000) {
-    return `${Math.round(score / 10000)} 万热度`
-  }
-
-  return `${score} 热度`
+  return formatSearchScore(score)
 }
 
 function handleOutsideClick(event) {

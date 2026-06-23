@@ -3,7 +3,7 @@ import { getRadioCatalogData } from './catalog'
 import { mapPodcastProgramTrack, mapRadioCard, mapRadioDetail, mapRadioSongTrack } from './mappers'
 import { getRadioSongPayload, getRadioSongTotal } from './payloads'
 
-export async function getPodcastDetailData({ id, fmtype = 2, limit = 40, offset = 0 } = {}) {
+export async function getPodcastDetailData({ id, fmtype = 2, limit = 40, offset = 0 } = {}, options = {}) {
   const catalog = await getRadioCatalogData()
   const radio = catalog.radiosById.get(String(id)) ?? mapRadioCard({ fmid: id, fmtype })
   const songResponse = await getRadioSongs({
@@ -11,7 +11,7 @@ export async function getPodcastDetailData({ id, fmtype = 2, limit = 40, offset 
     fmtype: radio.fmtype ?? fmtype,
     fmoffset: offset,
     fmsize: limit
-  })
+  }, options)
   const songs = getRadioSongPayload(songResponse)
   const programs = songs.map((song, index) => mapRadioSongTrack(song, index + offset, radio))
   const total = getRadioSongTotal(songResponse, offset, programs.length, limit)
@@ -24,7 +24,7 @@ export async function getPodcastDetailData({ id, fmtype = 2, limit = 40, offset 
   }
 }
 
-export async function getPodcastProgramsData({ id, fmtype = 2, limit = 40, offset = 0 } = {}) {
+export async function getPodcastProgramsData({ id, fmtype = 2, limit = 40, offset = 0 } = {}, options = {}) {
   const catalog = await getRadioCatalogData()
   const radio = catalog.radiosById.get(String(id)) ?? mapRadioCard({ fmid: id, fmtype })
   const response = await getRadioSongs({
@@ -32,7 +32,7 @@ export async function getPodcastProgramsData({ id, fmtype = 2, limit = 40, offse
     fmtype: radio.fmtype ?? fmtype,
     fmoffset: offset,
     fmsize: limit
-  })
+  }, options)
   const programs = getRadioSongPayload(response).map((song, index) => mapRadioSongTrack(song, index + offset, radio))
   const total = getRadioSongTotal(response, offset, programs.length, limit)
 

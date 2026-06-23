@@ -118,7 +118,7 @@ export const getRadioRecommend = (params = {}) => getKugou('/fm/recommend', para
 
 export const getRadioImages = (params = {}) => getKugou('/fm/image', params)
 
-export const getRadioSongs = (params = {}) => getKugou('/fm/songs', params)
+export const getRadioSongs = (params = {}, config = {}) => getKugou('/fm/songs', params, config)
 
 export const updateDjSubscribe = (params = {}) => getKugou('/youth/channel/sub', params)
 

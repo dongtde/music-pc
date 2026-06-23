@@ -1,4 +1,5 @@
 const nodeNet = require('node:net');
+const fs = require('node:fs');
 const path = require('node:path');
 
 function createAppProtocolRegistrar({
@@ -11,11 +12,12 @@ function createAppProtocolRegistrar({
   kugouApiTarget,
   neteaseApiTarget,
   distRoot,
+  cookieJarPath,
   mediaHostAllowList = process.env.MAPPIC_MEDIA_PROXY_ALLOWED_HOSTS || '',
   allowPrivateMediaHosts =
     process.env.MAPPIC_MEDIA_PROXY_ALLOW_PRIVATE === '1',
 } = {}) {
-  const proxyCookieJars = new Map();
+  const proxyCookieJars = loadProxyCookieJars(cookieJarPath);
   const allowedMediaHosts = parseHostAllowList(mediaHostAllowList);
   const resolvedDistRoot = path.resolve(distRoot);
 
@@ -157,6 +159,8 @@ function createAppProtocolRegistrar({
     } else {
       proxyCookieJars.delete(origin);
     }
+
+    saveProxyCookieJars(proxyCookieJars, cookieJarPath);
 
     if (isDebug) {
       console.log(
@@ -374,6 +378,72 @@ function parseCookieHeader(cookie = '') {
     }, new Map());
 }
 
+function loadProxyCookieJars(filePath) {
+  if (!filePath) {
+    return new Map();
+  }
+
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const data = JSON.parse(raw);
+
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      return new Map();
+    }
+
+    return new Map(
+      Object.entries(data)
+        .map(([origin, cookies]) => {
+          if (!isHttpOrigin(origin) || !cookies || typeof cookies !== 'object') {
+            return null;
+          }
+
+          const jar = new Map(
+            Object.entries(cookies)
+              .filter(([name, value]) => name && value !== undefined && value !== null)
+              .map(([name, value]) => [name, String(value)]),
+          );
+
+          return jar.size ? [origin, jar] : null;
+        })
+        .filter(Boolean),
+    );
+  } catch {
+    return new Map();
+  }
+}
+
+function saveProxyCookieJars(cookieJars, filePath) {
+  if (!filePath) {
+    return;
+  }
+
+  try {
+    const data = {};
+
+    cookieJars.forEach((jar, origin) => {
+      if (!isHttpOrigin(origin) || !jar?.size) {
+        return;
+      }
+
+      data[origin] = Object.fromEntries(jar.entries());
+    });
+
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(data), 'utf8');
+  } catch (error) {
+    console.warn('[api:cookies:persist]', error);
+  }
+}
+
+function isHttpOrigin(origin = '') {
+  try {
+    return /^https?:$/.test(new URL(origin).protocol);
+  } catch {
+    return false;
+  }
+}
+
 function isAllowedMediaMethod(method = '') {
   return method === 'GET' || method === 'HEAD';
 }
@@ -534,10 +604,12 @@ module.exports = {
   hostMatchesAllowList,
   isAllowedMediaMethod,
   isLocalOrPrivateHostname,
+  loadProxyCookieJars,
   parseCookieHeader,
   parseHostAllowList,
   pathToFileUrl,
   sanitizeMediaProxyHeaders,
+  saveProxyCookieJars,
   splitSetCookieHeader,
   validateMediaTargetUrl,
 };

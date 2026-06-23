@@ -1,5 +1,5 @@
 <template>
-  <div class="view library-view">
+  <div ref="pageRoot" class="view library-view" @scroll.passive="scheduleLibraryRangeUpdate">
     <section class="library-head">
       <div>
         <span class="library-kicker">{{ activeMeta.kicker }}</span>
@@ -70,12 +70,23 @@
         <span>时长</span>
       </header>
 
-      <SongListRow
-        v-for="track in rankedTracks"
-        :key="track.id"
-        :track="track"
-        @play="playTrack"
-      />
+      <div
+        ref="trackVirtualList"
+        class="playlist-virtual-list"
+        :style="{ height: `${libraryVirtualTotalHeight}px` }"
+      >
+        <div
+          class="playlist-virtual-window"
+          :style="{ transform: `translateY(${libraryVirtualOffsetY}px)` }"
+        >
+          <SongListRow
+            v-for="track in visibleRankedTracks"
+            :key="track.id"
+            :track="track"
+            @play="playTrack"
+          />
+        </div>
+      </div>
     </section>
 
     <section v-else class="library-empty">
@@ -88,23 +99,28 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { CloudDownload, Heart, History, Play, RotateCw, Upload } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import SongListRow from '../components/SongListRow.vue'
 import { useQueuePlayback } from '../composables/useQueuePlayback'
+import { useVirtualRows } from '../composables/useVirtualRows'
 import { useLibraryStore } from '../stores/library'
 import { useAuthStore } from '../stores/auth'
 import { getDownloadedSongsData } from '../services/netease'
 import '../styles/library.css'
 import '../styles/playlist.css'
 
+const TRACK_ROW_HEIGHT = 58
+
 const route = useRoute()
 const message = useMessage()
 const library = useLibraryStore()
 const auth = useAuthStore()
+const pageRoot = ref(null)
 const fileInput = ref(null)
+const trackVirtualList = ref(null)
 const downloadSyncLoading = ref(false)
 
 const viewType = computed(() => String(route.params.type || 'local'))
@@ -126,6 +142,17 @@ const rankedTracks = computed(() =>
     rank: String(index + 1).padStart(2, '0')
   }))
 )
+const {
+  offsetY: libraryVirtualOffsetY,
+  scheduleRangeUpdate: scheduleLibraryRangeUpdate,
+  totalHeight: libraryVirtualTotalHeight,
+  updateRange: updateLibraryVirtualRange,
+  visibleItems: visibleRankedTracks
+} = useVirtualRows(rankedTracks, {
+  root: pageRoot,
+  list: trackVirtualList,
+  rowHeight: TRACK_ROW_HEIGHT
+})
 const activeMeta = computed(() => {
   if (viewType.value === 'liked') {
     return {
@@ -177,6 +204,10 @@ watch(
   },
   { immediate: true }
 )
+
+watch(viewType, () => {
+  nextTick(updateLibraryVirtualRange)
+})
 
 function openLocalPicker() {
   fileInput.value?.click()
