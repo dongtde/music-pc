@@ -170,8 +170,9 @@ import { getAudioQualityDefinition, getAudioQualityOptions } from '../utils/audi
 import { getPlaybackErrorDisplay } from '../utils/playbackError'
 import '../styles/player.css'
 
+const loadFullScreenPlayer = () => import('./FullScreenPlayer.vue')
 const CommentModal = defineAsyncComponent(() => import('./CommentModal.vue'))
-const FullScreenPlayer = defineAsyncComponent(() => import('./FullScreenPlayer.vue'))
+const FullScreenPlayer = defineAsyncComponent(loadFullScreenPlayer)
 const theme = useThemeStore()
 const player = usePlayerStore()
 const library = useLibraryStore()
@@ -204,10 +205,15 @@ const fullPlayerVisualizerMode = ref(readFullPlayerVisualizerMode())
 const fullPlayerDanmakuCommentLimit = 80
 const fullPlayerDanmakuPrefetchThreshold = 12
 const fullPlayerDanmakuMaxItems = 36
-const fullPlayerDanmakuActivationDelay = 520
+const fullPlayerDanmakuActivationDelay = 780
 const fullPlayerDanmakuLoadDelay = 560
+const fullPlayerBackgroundTaskDelay = 700
 let removeTrackEndedListener = null
 let playerBarResizeObserver = null
+let fullPlayerPreloadPromise = null
+let fullPlayerPreloadHandle = 0
+let fullPlayerPreloadHandleType = ''
+let fullPlayerBackgroundTaskTimer = 0
 let lastQueueTrackKey = ''
 let lastQueueTrackRequestedAt = 0
 
@@ -388,7 +394,7 @@ watch(
     fullPlayerDanmaku.reset(currentTrack.value)
 
     if (fullPlayerOpen.value && danmakuEnabled.value) {
-      fullPlayerDanmaku.schedule()
+      scheduleFullPlayerBackgroundTasks(260)
     }
   },
   { immediate: true }
@@ -396,12 +402,11 @@ watch(
 
 watch(fullPlayerOpen, (open) => {
   if (open && danmakuEnabled.value) {
-    currentTrackComments.preload(currentTrack.value)
-    fullPlayerDanmaku.schedule()
+    scheduleFullPlayerBackgroundTasks()
     return
   }
 
-  fullPlayerDanmaku.clearSchedule()
+  clearFullPlayerBackgroundTasks()
 })
 
 watch(fullPlayerVisualizerMode, (mode) => {
@@ -507,6 +512,7 @@ function toggleFullPlayer() {
   const willOpen = !fullPlayerOpen.value
 
   if (willOpen) {
+    preloadFullPlayer()
     fullPlayerMounted.value = true
   }
 
@@ -531,6 +537,84 @@ function handleCoverFlightEnd(direction) {
 
 function getAlbumArtRect() {
   return trackSummary.value?.getAlbumArtRect?.() ?? null
+}
+
+function preloadFullPlayer() {
+  if (fullPlayerPreloadPromise) {
+    return fullPlayerPreloadPromise
+  }
+
+  fullPlayerPreloadPromise = loadFullScreenPlayer().catch((error) => {
+    fullPlayerPreloadPromise = null
+    console.warn('Failed to preload full screen player:', error)
+    return null
+  })
+
+  return fullPlayerPreloadPromise
+}
+
+function scheduleFullPlayerPreload() {
+  if (typeof window === 'undefined' || fullPlayerPreloadHandle || fullPlayerPreloadPromise) {
+    return
+  }
+
+  const runPreload = () => {
+    fullPlayerPreloadHandle = 0
+    fullPlayerPreloadHandleType = ''
+    preloadFullPlayer()
+  }
+
+  if (typeof window.requestIdleCallback === 'function') {
+    fullPlayerPreloadHandleType = 'idle'
+    fullPlayerPreloadHandle = window.requestIdleCallback(runPreload, { timeout: 2200 })
+    return
+  }
+
+  fullPlayerPreloadHandleType = 'timeout'
+  fullPlayerPreloadHandle = window.setTimeout(runPreload, 900)
+}
+
+function cancelFullPlayerPreload() {
+  if (!fullPlayerPreloadHandle || typeof window === 'undefined') {
+    return
+  }
+
+  if (fullPlayerPreloadHandleType === 'idle') {
+    window.cancelIdleCallback?.(fullPlayerPreloadHandle)
+  } else {
+    window.clearTimeout(fullPlayerPreloadHandle)
+  }
+
+  fullPlayerPreloadHandle = 0
+  fullPlayerPreloadHandleType = ''
+}
+
+function scheduleFullPlayerBackgroundTasks(delay = fullPlayerBackgroundTaskDelay) {
+  clearFullPlayerBackgroundTasks()
+
+  if (!fullPlayerOpen.value || !danmakuEnabled.value || typeof window === 'undefined') {
+    return
+  }
+
+  fullPlayerBackgroundTaskTimer = window.setTimeout(() => {
+    fullPlayerBackgroundTaskTimer = 0
+
+    if (!fullPlayerOpen.value || !danmakuEnabled.value) {
+      return
+    }
+
+    currentTrackComments.preload(currentTrack.value)
+    fullPlayerDanmaku.schedule(180)
+  }, Math.max(0, Number(delay) || 0))
+}
+
+function clearFullPlayerBackgroundTasks() {
+  if (fullPlayerBackgroundTaskTimer && typeof window !== 'undefined') {
+    window.clearTimeout(fullPlayerBackgroundTaskTimer)
+  }
+
+  fullPlayerBackgroundTaskTimer = 0
+  fullPlayerDanmaku.clearSchedule()
 }
 
 function toggleMute() {
@@ -824,11 +908,14 @@ onMounted(() => {
 
   document.addEventListener('pointerdown', handleOutsideClick)
   removeTrackEndedListener = player.onTrackEnded(handleTrackEnded)
+  scheduleFullPlayerPreload()
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', syncPlayerBarHeight)
   document.removeEventListener('pointerdown', handleOutsideClick)
+  cancelFullPlayerPreload()
+  clearFullPlayerBackgroundTasks()
   playerBarResizeObserver?.disconnect()
   playerBarResizeObserver = null
   removeTrackEndedListener?.()

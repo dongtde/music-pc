@@ -518,7 +518,8 @@
   box-shadow:
     0 18px 46px rgba(0, 0, 0, 0.34),
     inset 0 0 0 10px #1b203c;
-  will-change: left, top, width, height, border-radius, opacity;
+  transform-origin: top left;
+  will-change: transform, opacity, border-radius;
 }
 
 .full-player__deck-mark {

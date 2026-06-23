@@ -16,9 +16,9 @@
       </button>
 
       <div
-        v-if="visualizerMode === 'trails'"
+        v-if="visualizerActive && visualizerMode === 'trails'"
         class="full-player__visualizer full-player__visualizer--comment-nebula"
-        :class="{ 'is-playing': player.state.isPlaying }"
+        :class="{ 'is-playing': visualizerActive && player.state.isPlaying }"
         aria-hidden="true"
       >
         <span
@@ -45,9 +45,9 @@
       </div>
 
       <div
-        v-if="visualizerMode === 'particles'"
+        v-if="visualizerActive && visualizerMode === 'particles'"
         class="full-player__visualizer full-player__visualizer--particles"
-        :class="{ 'is-playing': player.state.isPlaying }"
+        :class="{ 'is-playing': visualizerActive && player.state.isPlaying }"
         aria-hidden="true"
       >
         <span
@@ -61,9 +61,9 @@
         <section class="full-player__turntable" aria-label="唱片封面">
           <div class="full-player__deck">
             <div
-              v-if="visualizerMode === 'halo'"
+              v-if="visualizerActive && visualizerMode === 'halo'"
               class="full-player__record-corona"
-              :class="{ 'is-playing': player.state.isPlaying }"
+              :class="{ 'is-playing': visualizerActive && player.state.isPlaying }"
               aria-hidden="true"
             >
               <span class="full-player__corona-aura full-player__corona-aura--one" />
@@ -100,9 +100,9 @@
         </section>
 
         <div
-          v-if="visualizerMode === 'needle'"
+          v-if="visualizerActive && visualizerMode === 'needle'"
           class="full-player__needle-map"
-          :class="{ 'is-playing': player.state.isPlaying }"
+          :class="{ 'is-playing': visualizerActive && player.state.isPlaying }"
           aria-hidden="true"
         >
           <svg viewBox="0 0 760 260" preserveAspectRatio="none">
@@ -141,7 +141,8 @@
             :current-time="player.state.currentTime"
             :playing="player.state.isPlaying"
             :danmaku-active="danmakuActive"
-            :breath="visualizerMode === 'breath'"
+            :breath="visualizerActive && visualizerMode === 'breath'"
+            :layout-delay="coverFlightActive ? openingWorkDelay : 0"
             @seek="seekToLyric"
           />
         </section>
@@ -262,12 +263,20 @@ const coverFlightActive = ref(false);
 const lastSourceRect = ref(null);
 const danmakuMounted = ref(false);
 const danmakuActive = ref(false);
+const visualizerActive = ref(false);
 const playbackLyricIndex = ref(0);
 const lyricLines = ref(createLyricPlaceholder('歌词加载中...'));
 let coverFlightAnimation = null;
 let danmakuActivationTimer = null;
 let danmakuActivationFrame = 0;
+let visualizerActivationTimer = null;
+let visualizerActivationFrame = 0;
+let lyricsLayoutTimer = 0;
 let lyricRequestId = 0;
+const coverFlightDuration = 620;
+const openingWorkDelay = coverFlightDuration + 90;
+const visualizerActivationDelay = coverFlightDuration + 120;
+const visualizerModeSwitchDelay = 120;
 
 const fallbackCoverPalette = {
   primary: '#213245',
@@ -415,6 +424,28 @@ watch(
 
 watch(
   () => props.open,
+  (open) => {
+    if (open) {
+      scheduleVisualizerActivation(visualizerActivationDelay);
+      return;
+    }
+
+    deactivateVisualizer();
+  },
+  { immediate: true },
+);
+
+watch(
+  () => props.visualizerMode,
+  () => {
+    if (props.open) {
+      scheduleVisualizerActivation(visualizerModeSwitchDelay);
+    }
+  },
+);
+
+watch(
+  () => props.open,
   async (open, previousOpen) => {
     if (!open && previousOpen === undefined) {
       return;
@@ -426,8 +457,8 @@ watch(
       coverFlightActive.value = Boolean(sourceRect);
       await nextTick();
       await waitForLayoutFrame();
-      lyricsScroller.value?.refreshLayout('auto');
       playCoverFlight('enter', { sourceRect });
+      requestLyricsLayoutRefresh('auto', openingWorkDelay);
       return;
     }
 
@@ -457,11 +488,13 @@ watch(
 
 watch(playbackLyricIndex, async () => {
   await nextTick();
-  lyricsScroller.value?.refreshLayout();
+  requestLyricsLayoutRefresh('smooth', coverFlightActive.value ? openingWorkDelay : 0);
 });
 
 onBeforeUnmount(() => {
   clearDanmakuActivation();
+  clearVisualizerActivation();
+  clearLyricsLayoutRefresh();
   lyricRequestId += 1;
 });
 
@@ -497,6 +530,69 @@ function clearDanmakuActivation() {
   }
 }
 
+function scheduleVisualizerActivation(delay = visualizerActivationDelay) {
+  clearVisualizerActivation();
+  visualizerActive.value = false;
+
+  if (!props.open) {
+    return;
+  }
+
+  const timeout = Math.max(0, Number(delay) || 0);
+
+  visualizerActivationTimer = window.setTimeout(() => {
+    visualizerActivationTimer = null;
+    visualizerActivationFrame = window.requestAnimationFrame(() => {
+      visualizerActivationFrame = 0;
+      visualizerActive.value = Boolean(props.open);
+    });
+  }, timeout);
+}
+
+function deactivateVisualizer() {
+  clearVisualizerActivation();
+  visualizerActive.value = false;
+}
+
+function clearVisualizerActivation() {
+  if (visualizerActivationTimer) {
+    window.clearTimeout(visualizerActivationTimer);
+    visualizerActivationTimer = null;
+  }
+
+  if (visualizerActivationFrame) {
+    window.cancelAnimationFrame(visualizerActivationFrame);
+    visualizerActivationFrame = 0;
+  }
+}
+
+function requestLyricsLayoutRefresh(behavior = 'smooth', delay = 0) {
+  clearLyricsLayoutRefresh();
+
+  const runRefresh = () => {
+    lyricsLayoutTimer = 0;
+    lyricsScroller.value?.refreshLayout(behavior);
+  };
+
+  const timeout = Math.max(0, Number(delay) || 0);
+
+  if (!timeout) {
+    runRefresh();
+    return;
+  }
+
+  lyricsLayoutTimer = window.setTimeout(runRefresh, timeout);
+}
+
+function clearLyricsLayoutRefresh() {
+  if (!lyricsLayoutTimer) {
+    return;
+  }
+
+  window.clearTimeout(lyricsLayoutTimer);
+  lyricsLayoutTimer = 0;
+}
+
 async function loadTrackLyrics(track) {
   const trackId = String(track?.id ?? track ?? '');
   lyricRequestId += 1;
@@ -507,7 +603,7 @@ async function loadTrackLyrics(track) {
   if (!isNeteaseTrackId(trackId)) {
     lyricLines.value = createLyricPlaceholder(trackId ? '暂无歌词' : '无播放歌曲');
     await nextTick();
-    lyricsScroller.value?.refreshLayout('auto');
+    requestLyricsLayoutRefresh('auto', props.open ? openingWorkDelay : 0);
     return;
   }
 
@@ -532,7 +628,7 @@ async function loadTrackLyrics(track) {
   }
 
   await nextTick();
-  lyricsScroller.value?.refreshLayout('auto');
+  requestLyricsLayoutRefresh('auto', props.open ? openingWorkDelay : 0);
 }
 
 function syncPlaybackLyric(currentTime) {
@@ -590,48 +686,43 @@ function playCoverFlight(direction, options = {}) {
   const toRect = direction === 'enter' ? targetRect : sourceRect;
   const fromRadius = direction === 'enter' ? '8px' : '50%';
   const toRadius = direction === 'enter' ? '50%' : '8px';
+  const fromTransform = createFlightTransform(fromRect, toRect);
+  const toTransform = 'translate3d(0, 0, 0) scale(1, 1)';
 
   Object.assign(flyer.style, {
     display: 'block',
-    left: `${fromRect.left}px`,
-    top: `${fromRect.top}px`,
-    width: `${fromRect.width}px`,
-    height: `${fromRect.height}px`,
-    borderRadius: fromRadius,
+    left: `${toRect.left}px`,
+    top: `${toRect.top}px`,
+    width: `${toRect.width}px`,
+    height: `${toRect.height}px`,
+    borderRadius: toRadius,
     opacity: '1',
+    transform: fromTransform,
+    transformOrigin: 'top left',
   });
-  flyer.getBoundingClientRect();
 
   coverFlightAnimation = flyer.animate(
     [
       {
-        left: `${fromRect.left}px`,
-        top: `${fromRect.top}px`,
-        width: `${fromRect.width}px`,
-        height: `${fromRect.height}px`,
         borderRadius: fromRadius,
         opacity: 0.96,
-        transform: 'scale(1)',
+        transform: fromTransform,
       },
       {
-        left: `${toRect.left}px`,
-        top: `${toRect.top}px`,
-        width: `${toRect.width}px`,
-        height: `${toRect.height}px`,
         borderRadius: toRadius,
         opacity: 1,
-        transform: 'scale(1)',
+        transform: toTransform,
       },
     ],
     {
-      duration: 620,
+      duration: coverFlightDuration,
       easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
       fill: 'forwards',
     },
   );
 
   coverFlightAnimation.onfinish = () => {
-    flyer.style.display = 'none';
+    resetCoverFlyer(flyer);
     coverFlightAnimation = null;
     coverFlightActive.value = false;
     showCoverLabel();
@@ -639,12 +730,35 @@ function playCoverFlight(direction, options = {}) {
   };
 
   coverFlightAnimation.oncancel = () => {
-    flyer.style.display = 'none';
+    resetCoverFlyer(flyer);
     coverFlightAnimation = null;
     coverFlightActive.value = false;
     showCoverLabel();
     emit('cover-flight-end', direction);
   };
+}
+
+function createFlightTransform(fromRect, toRect) {
+  const scaleX = fromRect.width / toRect.width;
+  const scaleY = fromRect.height / toRect.height;
+  const translateX = fromRect.left - toRect.left;
+  const translateY = fromRect.top - toRect.top;
+
+  return `translate3d(${translateX}px, ${translateY}px, 0) scale(${scaleX}, ${scaleY})`;
+}
+
+function resetCoverFlyer(flyer) {
+  Object.assign(flyer.style, {
+    display: 'none',
+    left: '',
+    top: '',
+    width: '',
+    height: '',
+    borderRadius: '',
+    opacity: '',
+    transform: '',
+    transformOrigin: '',
+  });
 }
 
 function hideCoverLabel() {

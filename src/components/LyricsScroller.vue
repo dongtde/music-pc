@@ -116,6 +116,10 @@ const props = defineProps({
   requireSeekable: {
     type: Boolean,
     default: false
+  },
+  layoutDelay: {
+    type: Number,
+    default: 0
   }
 })
 
@@ -131,6 +135,7 @@ const dragState = {
   moved: false
 }
 let previewFrame = 0
+let layoutTimer = 0
 let previewTimer = null
 let wheelTimer = null
 let suppressNextClick = false
@@ -189,7 +194,7 @@ watch(
     }
 
     await nextTick()
-    refreshLayout()
+    scheduleLayoutRefresh()
   }
 )
 
@@ -197,13 +202,13 @@ watch(
   () => props.lines,
   async () => {
     resetInteraction()
-    await refreshLayout('auto')
+    scheduleLayoutRefresh('auto')
   }
 )
 
 onMounted(() => {
   window.addEventListener('resize', handleResize)
-  nextTick(() => refreshLayout('auto'))
+  nextTick(() => scheduleLayoutRefresh('auto'))
 })
 
 onBeforeUnmount(() => {
@@ -407,6 +412,24 @@ function refreshLayout(behavior = 'smooth') {
   centerCurrentLyric(behavior)
 }
 
+function scheduleLayoutRefresh(behavior = 'smooth', delay = props.layoutDelay) {
+  clearLayoutTimer()
+
+  const runRefresh = () => {
+    layoutTimer = 0
+    refreshLayout(behavior)
+  }
+
+  const timeout = Math.max(0, Number(delay) || 0)
+
+  if (!timeout) {
+    runRefresh()
+    return
+  }
+
+  layoutTimer = window.setTimeout(runRefresh, timeout)
+}
+
 function updateEdgePadding() {
   const element = scroller.value
 
@@ -469,8 +492,16 @@ function cleanupTimers() {
     window.cancelAnimationFrame(previewFrame)
     previewFrame = 0
   }
+  clearLayoutTimer()
   clearPreviewTimer()
   clearWheelTimer()
+}
+
+function clearLayoutTimer() {
+  if (layoutTimer) {
+    window.clearTimeout(layoutTimer)
+    layoutTimer = 0
+  }
 }
 
 function clearPreviewTimer() {
