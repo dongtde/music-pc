@@ -56,6 +56,34 @@ export async function getPlaylistCommentsData({ id, limit = 20, offset = 0 }) {
   return mapCommentResult(response, { offset })
 }
 
+export async function getPlaylistCommentStatsData(id) {
+  const playlistId = String(id ?? '')
+
+  if (!playlistId) {
+    return {
+      commentCount: 0,
+      commentCountLabel: ''
+    }
+  }
+
+  return getCachedData(
+    cacheKey('playlist-comment-stats', { id: playlistId }),
+    CACHE_TTL.comments,
+    async () => {
+      const response = await getPlaylistComments({
+        id: playlistId,
+        limit: 1,
+        offset: 0
+      })
+
+      return {
+        commentCount: toFiniteCount(response.total),
+        commentCountLabel: ''
+      }
+    }
+  )
+}
+
 export async function getSongCommentsData({ id, limit = 20, offset = 0 }) {
   return getCachedData(
     cacheKey('song-comments', { id, limit, offset }),
@@ -77,7 +105,7 @@ function mapCommentResult(result = {}, { offset = 0, isFirstPage = offset <= 0 }
     hotComments: (result.hotComments ?? []).map(mapComment),
     comments: (result.comments ?? []).map(mapComment),
     total: result.total ?? 0,
-    more: Boolean(result.more),
+    more: result.more,
     isFirstPage
   }
 }

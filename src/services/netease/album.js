@@ -26,8 +26,32 @@ export async function getAlbumsDiscoveryData({ area = 'ALL', limit = 36, offset 
     albums: albums.map((album, index) => mapAlbumCard(album, offset + index)),
     topAlbums: getTopAlbumList(topResponse).map(mapAlbumCard).slice(0, 10),
     total,
-    more: Boolean(newAlbumResponse.more || newAlbumResponse.hasMore)
+    more: getExplicitMore(newAlbumResponse) ?? false
   }
+}
+
+function getExplicitMore(source = {}) {
+  if (!source || typeof source !== 'object') {
+    return null
+  }
+
+  if ('hasMore' in source) {
+    return Boolean(source.hasMore)
+  }
+
+  if ('has_more' in source) {
+    return Boolean(source.has_more)
+  }
+
+  if ('has_next' in source) {
+    return Boolean(source.has_next)
+  }
+
+  if ('more' in source) {
+    return Boolean(source.more)
+  }
+
+  return null
 }
 
 export async function getAlbumDetailData(id, options = {}) {

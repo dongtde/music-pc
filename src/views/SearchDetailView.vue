@@ -164,6 +164,7 @@ const searchInput = ref('')
 const activeSearchType = ref(normalizeSearchType(route.query.type))
 const searchResults = ref([])
 const resultTotal = ref(0)
+const resultHasMore = ref(false)
 const resultLoading = ref(false)
 const resultError = ref('')
 let resultRequestId = 0
@@ -208,7 +209,7 @@ const resultSummary = computed(() => {
   return total ? `找到 ${formatCompactCount(total)} 个结果` : '暂无匹配结果'
 })
 const showLoadMore = computed(() =>
-  Boolean(keyword.value && !resultError.value && searchResults.value.length && searchResults.value.length < resultTotal.value)
+  Boolean(keyword.value && !resultError.value && searchResults.value.length && resultHasMore.value)
 )
 
 watch(
@@ -283,6 +284,7 @@ async function loadResults({ reset = true } = {}) {
     cancelResultRequest()
     searchResults.value = []
     resultTotal.value = 0
+    resultHasMore.value = false
     resultError.value = ''
     return
   }
@@ -309,9 +311,12 @@ async function loadResults({ reset = true } = {}) {
       return
     }
 
+    const previousResultCount = reset ? 0 : searchResults.value.length
     const nextItems = reset ? data.items : [...searchResults.value, ...data.items]
+
     searchResults.value = uniqueItems(nextItems)
     resultTotal.value = data.total || searchResults.value.length
+    resultHasMore.value = Boolean(data.hasMore && searchResults.value.length > previousResultCount)
   } catch (error) {
     if (isAbortError(error)) {
       return

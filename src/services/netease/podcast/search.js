@@ -25,8 +25,34 @@ export async function searchPodcastsData({ keyword, limit = 18, offset = 0 } = {
   return {
     items: resources.map(mapVoiceListSearchResult).filter((item) => item.id),
     total: result.totalCount ?? result.total ?? resources.length,
-    more: Boolean(result.hasMore || result.more)
+    more: getExplicitMore(result, response) ?? false
   }
+}
+
+function getExplicitMore(...sources) {
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') {
+      continue
+    }
+
+    if ('hasMore' in source) {
+      return Boolean(source.hasMore)
+    }
+
+    if ('has_more' in source) {
+      return Boolean(source.has_more)
+    }
+
+    if ('has_next' in source) {
+      return Boolean(source.has_next)
+    }
+
+    if ('more' in source) {
+      return Boolean(source.more)
+    }
+  }
+
+  return null
 }
 
 export async function getMyCreatedVoiceListData(limit = 20) {

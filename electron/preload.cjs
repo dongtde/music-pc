@@ -52,4 +52,12 @@ contextBridge.exposeInMainWorld('mappicDesktop', {
     onCommand: (listener) =>
       createSubscription('desktop-lyrics:command', listener),
   },
+  taskbarControls: {
+    available: process.platform === 'win32',
+    publishState: (payload) =>
+      ipcRenderer.send('taskbar-controls:state', payload),
+    getState: () => ipcRenderer.invoke('taskbar-controls:get-state'),
+    onCommand: (listener) =>
+      createSubscription('taskbar-controls:command', listener),
+  },
 });

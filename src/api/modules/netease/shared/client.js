@@ -47,6 +47,7 @@ export const pagesizeParamPaths = new Set([
   '/lastest/songs/listen',
   '/playlist/track/all',
   '/playlist/track/all/new',
+  '/rank/audio',
   '/user/cloud',
   '/user/playlist',
   '/user/video/collect',

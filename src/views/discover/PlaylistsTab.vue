@@ -342,9 +342,15 @@ async function loadData({ reset = false, force = false } = {}) {
     }
 
     categoryGroups.value = normalizeCategoryGroups(data.categoryGroups)
+    const previousPlaylistCount = playlists.value.length
+
     playlists.value = reset ? data.playlists : mergePlaylists(playlists.value, data.playlists)
-    playlistsOffset.value = offset + data.playlists.length
-    hasMore.value = Boolean(data.playlists.length && (data.more || playlistsOffset.value < data.total))
+    playlistsOffset.value = playlists.value.length
+    hasMore.value = Boolean(
+      data.more &&
+      data.playlists.length &&
+      (reset || playlists.value.length > previousPlaylistCount)
+    )
     activeCategory.value = normalizeCategory({
       id: data.activeCategoryId ?? activeCategory.value.id,
       name: data.activeCategory || activeCategory.value.name

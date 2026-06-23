@@ -48,7 +48,7 @@ export async function getArtistSongsData({ id, limit = 30, offset = 0, order = '
   return {
     tracks: songs.map((song, index) => mapPlaylistTrack(song, offset + index)),
     total,
-    more: Boolean(response.more || (total && offset + songs.length < total))
+    more: response.more ?? Boolean(total && offset + songs.length < total)
   }
 }
 

@@ -41,7 +41,7 @@ export async function getPlaylistDiscoveryData(
         ...categoryMeta,
         playlists: playlists.map((playlist, index) => mapPlaylist(playlist, offset + index)),
         total,
-        more: Boolean(playlistResponse.more || (total && offset + playlists.length < total)),
+        more: playlistResponse.more ?? Boolean(total && offset + playlists.length < total),
         activeCategory: activeCategory.name,
         activeCategoryId
       }

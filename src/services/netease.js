@@ -1,6 +1,7 @@
 export {
   getAlbumCommentsData,
   getMvCommentsData,
+  getPlaylistCommentStatsData,
   getPlaylistCommentsData,
   getPodcastProgramCommentsData,
   getSongCommentsData,

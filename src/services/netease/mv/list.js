@@ -63,7 +63,7 @@ export async function getVideoCenterData({
     subscribed,
     followArtistNew,
     total: allResponse.count ?? allResponse.total ?? all.length,
-    more: Boolean(allResponse.hasMore || allResponse.more),
+    more: getExplicitMore(allResponse) ?? false,
     active
   }
 }
@@ -81,8 +81,32 @@ export async function getFilteredMvsData({
   return {
     items,
     total: response.count ?? response.total ?? items.length,
-    more: Boolean(response.hasMore || response.more)
+    more: getExplicitMore(response) ?? false
   }
+}
+
+function getExplicitMore(source = {}) {
+  if (!source || typeof source !== 'object') {
+    return null
+  }
+
+  if ('hasMore' in source) {
+    return Boolean(source.hasMore)
+  }
+
+  if ('has_more' in source) {
+    return Boolean(source.has_more)
+  }
+
+  if ('has_next' in source) {
+    return Boolean(source.has_next)
+  }
+
+  if ('more' in source) {
+    return Boolean(source.more)
+  }
+
+  return null
 }
 
 async function hydrateMissingMvCards(mvs = [], options = {}) {

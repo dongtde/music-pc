@@ -57,7 +57,6 @@
           </div>
           <header class="search-section__head">
             <strong>热门搜索</strong>
-            <small>{{ defaultKeyword ? `默认：${defaultKeyword}` : '发现今天大家都在听什么' }}</small>
           </header>
           <div class="hot-search-list">
             <button
@@ -70,7 +69,6 @@
               <span :class="{ hot: index < 3 }">{{ index + 1 }}</span>
               <div>
                 <strong>{{ item.keyword }}</strong>
-                <small>{{ item.content || formatScore(item.score) }}</small>
               </div>
             </button>
           </div>
@@ -239,7 +237,6 @@ import { useMessage } from 'naive-ui'
 import SongListRow from './SongListRow.vue'
 import WindowControls from './WindowControls.vue'
 import {
-  formatSearchScore,
   useSearchBoot,
   useSearchHistory,
   useSearchSuggestions
@@ -599,10 +596,6 @@ function getResultSubtitle(item) {
   }
 
   return item.subtitle || ''
-}
-
-function formatScore(score) {
-  return formatSearchScore(score)
 }
 
 function handleOutsideClick(event) {

@@ -151,6 +151,8 @@ export function useSongComments(options = {}) {
         return null
       }
 
+      const previousCommentCount = resetPage ? 0 : comments.value.length
+
       if (resetPage) {
         hotComments.value = data.hotComments
         comments.value = data.comments
@@ -160,7 +162,10 @@ export function useSongComments(options = {}) {
 
       trackId.value = id
       total.value = data.total
-      hasMore.value = data.more || comments.value.length < data.total
+      hasMore.value =
+        data.more === false
+          ? false
+          : Boolean(comments.value.length > previousCommentCount && (data.more || comments.value.length < total.value))
       offset.value = comments.value.length
       onLoaded?.({
         trackId: id,

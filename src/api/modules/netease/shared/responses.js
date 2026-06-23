@@ -16,6 +16,7 @@ import {
 export function toSongListResponse(response = {}) {
   const data = response.data ?? response
   const songs = extractSongItems(data).map(normalizeSong)
+  const explicitMore = getExplicitMore(data, response)
 
   return {
     ...response,
@@ -23,7 +24,7 @@ export function toSongListResponse(response = {}) {
     songs,
     data: songs,
     total: response.total ?? data.total ?? data.count ?? songs.length,
-    more: Boolean(data.has_next || data.more || response.more)
+    more: explicitMore
   }
 }
 
@@ -42,6 +43,7 @@ export function toPlaylistListResponse(response = {}) {
     return nestedItems.length ? nestedItems : item
   })
   const playlists = playlistItems.filter(Boolean).map(normalizePlaylist)
+  const explicitMore = getExplicitMore(data, response)
 
   return {
     ...response,
@@ -49,7 +51,7 @@ export function toPlaylistListResponse(response = {}) {
     playlists,
     data: playlists,
     total: data.total ?? data.count ?? data.total_count ?? playlists.length,
-    more: Boolean(data.has_next || data.more)
+    more: explicitMore
   }
 }
 
@@ -158,6 +160,8 @@ export function toPlaylistTracksResponse(response = {}, id) {
   const total = data.total ?? data.count ?? data.songcount ?? response.total ?? songs.length
   const page = Number(data.page ?? response.page ?? 1)
   const pageSize = Number(data.pageSize ?? data.pagesize ?? data.page_size ?? response.pageSize ?? response.pagesize ?? songs.length)
+  const explicitMore = getExplicitMore(data, response)
+  const inferredMore = Boolean(total && pageSize && page * pageSize < total)
 
   return {
     ...response,
@@ -168,8 +172,34 @@ export function toPlaylistTracksResponse(response = {}, id) {
     },
     songs,
     total,
-    more: Boolean(data.has_next || data.more || (total && pageSize && page * pageSize < total))
+    more: explicitMore ?? inferredMore
   }
+}
+
+function getExplicitMore(...sources) {
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') {
+      continue
+    }
+
+    if ('hasMore' in source) {
+      return Boolean(source.hasMore)
+    }
+
+    if ('has_more' in source) {
+      return Boolean(source.has_more)
+    }
+
+    if ('has_next' in source) {
+      return Boolean(source.has_next)
+    }
+
+    if ('more' in source) {
+      return Boolean(source.more)
+    }
+  }
+
+  return undefined
 }
 
 export function toRankTracksResponse(response = {}, id, metaResponse = {}) {
@@ -178,6 +208,19 @@ export function toRankTracksResponse(response = {}, id, metaResponse = {}) {
   const songs = firstArray(data.songlist, data.songs, data.info, data.list, data).map(normalizeSong)
   const rankInfo = firstObject(data.rankinfo, data.rank_info, meta.rankinfo, meta.rank_info, meta, data)
   const total = data.total ?? data.count ?? rankInfo.extra?.resp?.all_total ?? songs.length
+  const explicitMore = getExplicitMore(data, response)
+  const page = Number(data.page ?? response.page ?? response.params?.page ?? 1)
+  const pageSize = Number(
+    data.pageSize ??
+      data.pagesize ??
+      data.page_size ??
+      response.pageSize ??
+      response.pagesize ??
+      response.params?.pageSize ??
+      response.params?.pagesize ??
+      songs.length
+  )
+  const inferredMore = Boolean(total && pageSize && page * pageSize < total)
 
   return {
     ...response,
@@ -206,7 +249,7 @@ export function toRankTracksResponse(response = {}, id, metaResponse = {}) {
     },
     songs,
     total,
-    more: Boolean(data.has_next || data.more)
+    more: explicitMore ?? inferredMore
   }
 }
 
@@ -227,7 +270,7 @@ export function toArtistListResponse(response = {}) {
     list: {
       artists
     },
-    more: Boolean(data.has_next)
+    more: getExplicitMore(data, response)
   }
 }
 
@@ -251,13 +294,15 @@ export function toArtistSongsResponse(response = {}) {
   const total = response.total ?? data.total ?? data.count ?? response.extra?.page_total ?? data.extra?.page_total ?? songs.length
   const page = Number(response.params?.page ?? data.page ?? 1)
   const pageSize = Number(response.params?.pageSize ?? response.params?.pagesize ?? data.pageSize ?? data.pagesize ?? songs.length)
+  const explicitMore = getExplicitMore(data, response)
+  const inferredMore = Boolean(total && pageSize && page * pageSize < total)
 
   return {
     ...response,
     songs,
     hotSongs: songs,
     total,
-    more: Boolean(data.has_next || data.more || (total && pageSize && page * pageSize < total))
+    more: explicitMore ?? inferredMore
   }
 }
 
@@ -267,6 +312,8 @@ export function toArtistAlbumsResponse(response = {}) {
   const total = response.total ?? data.total ?? data.count ?? response.extra?.page_total ?? data.extra?.page_total ?? albums.length
   const page = Number(response.params?.page ?? data.page ?? 1)
   const pageSize = Number(response.params?.pageSize ?? response.params?.pagesize ?? data.pageSize ?? data.pagesize ?? albums.length)
+  const explicitMore = getExplicitMore(data, response)
+  const inferredMore = Boolean(total && pageSize && page * pageSize < total)
 
   return {
     ...response,
@@ -274,7 +321,7 @@ export function toArtistAlbumsResponse(response = {}) {
     albums,
     artist: albums[0]?.artist ?? null,
     total,
-    more: Boolean(data.has_next || data.more || (total && pageSize && page * pageSize < total))
+    more: explicitMore ?? inferredMore
   }
 }
 
@@ -300,13 +347,15 @@ export function toArtistVideosResponse(response = {}) {
   const page = Number(response.params?.page ?? data.page ?? 1)
   const pageSize = Number(response.params?.pageSize ?? response.params?.pagesize ?? data.pageSize ?? data.pagesize ?? videos.length)
   const cursor = pageSize ? page * pageSize : videos.length
+  const explicitMore = getExplicitMore(data, response)
+  const inferredMore = Boolean(total && pageSize && cursor < total)
 
   return {
     ...response,
     data: {
       page: {
         cursor,
-        more: Boolean(data.has_next || data.more || (total && pageSize && cursor < total))
+        more: explicitMore ?? inferredMore
       },
       records: videos
     },
@@ -348,12 +397,14 @@ export function toAlbumListResponse(response = {}) {
   const total = response.total ?? data.total ?? data.count ?? response.extra?.page_total ?? data.extra?.page_total ?? albums.length
   const page = Number(response.params?.page ?? data.page ?? 1)
   const pageSize = Number(response.params?.pageSize ?? response.params?.pagesize ?? data.pageSize ?? data.pagesize ?? albums.length)
+  const explicitMore = getExplicitMore(data, response)
+  const inferredMore = Boolean(total && pageSize && page * pageSize < total)
 
   return {
     ...response,
     albums,
     total,
-    more: Boolean(data.has_next || data.more || (total && pageSize && page * pageSize < total))
+    more: explicitMore ?? inferredMore
   }
 }
 
@@ -411,13 +462,14 @@ export function toAlbumDetailResponse(response = {}) {
     data.album?.songlist
   ).map(normalizeSong)
   const total = data.total ?? data.count ?? album.size ?? songs.length
+  const explicitMore = getExplicitMore(data, response)
 
   return {
     ...response,
     album,
     songs,
     total,
-    more: Boolean(data.has_next || data.more)
+    more: explicitMore
   }
 }
 
@@ -438,13 +490,16 @@ export function toAlbumInfoResponse(response = {}) {
 
 export function toCommentResponse(response = {}) {
   const comments = firstArray(response.list, response.comments, response.data?.list).map(normalizeComment)
+  const maxPage = Number(response.maxPage ?? response.max_page ?? response.data?.maxPage ?? response.data?.max_page)
+  const currentPage = Number(response.current_page ?? response.currentPage ?? response.page ?? response.data?.current_page ?? response.data?.page ?? 1)
+  const explicitMore = getExplicitMore(response.data, response)
 
   return {
     ...response,
     comments,
-    hotComments: response.current_page <= 1 ? comments.slice(0, 3) : [],
+    hotComments: currentPage <= 1 ? comments.slice(0, 3) : [],
     total: response.count ?? response.total ?? response.data?.count ?? comments.length,
-    more: Boolean(response.maxPage && response.current_page < response.maxPage)
+    more: explicitMore ?? (maxPage ? currentPage < maxPage : undefined)
   }
 }
 

@@ -84,7 +84,7 @@ export async function getPlaylistOverviewData(id, { trackLimit = 60, listid = ''
         }),
         tracks: tracks.map(mapPlaylistTrack),
         total,
-        more: Boolean(trackResponse.more || (total && tracks.length < total))
+        more: trackResponse.more ?? Boolean(total && tracks.length < total)
       }
     }
   )
@@ -102,7 +102,7 @@ export async function getPlaylistTracksData({ id, listid = '', limit = 100, offs
       return {
         tracks: songs.map((song, index) => mapPlaylistTrack(song, offset + index)),
         total,
-        more: Boolean(response.more || (total && offset + songs.length < total) || songs.length >= limit)
+        more: response.more ?? Boolean(total && offset + songs.length < total)
       }
     }
   )

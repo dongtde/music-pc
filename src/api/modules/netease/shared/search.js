@@ -137,10 +137,36 @@ export function toSearchResponse(response = {}, type = 1) {
       ),
       mvs: mvItems.map(normalizeSearchMv),
       mvCount: getSearchResultTotal(data, byType.get('mv'), mvItems, normalizedType === 'mv'),
-      hasMore: Boolean(data.has_next || data.more)
+      hasMore: getExplicitMore(data, response)
     },
     type
   }
+}
+
+function getExplicitMore(...sources) {
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') {
+      continue
+    }
+
+    if ('hasMore' in source) {
+      return Boolean(source.hasMore)
+    }
+
+    if ('has_more' in source) {
+      return Boolean(source.has_more)
+    }
+
+    if ('has_next' in source) {
+      return Boolean(source.has_next)
+    }
+
+    if ('more' in source) {
+      return Boolean(source.more)
+    }
+  }
+
+  return undefined
 }
 
 export function emptySearchResponse(type = 1) {

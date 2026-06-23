@@ -115,7 +115,7 @@
               @click="openCommentsModal"
             >
               <MessageCircle :size="17" />
-              <span>评论 {{ commentTotal || '' }}</span>
+              <span>评论 {{ commentTotal }}</span>
             </button>
           </div>
         </div>
@@ -192,6 +192,7 @@ import { useMessage } from 'naive-ui';
 import CommentModal from '../components/CommentModal.vue';
 import SongListRow from '../components/SongListRow.vue';
 import {
+  getPlaylistCommentStatsData,
   getPlaylistCommentsData,
   getPlaylistOverviewData,
   getPlaylistTracksData,
@@ -207,7 +208,7 @@ import { isAbortError } from '../utils/request';
 import { waitForMinimumDelay } from '../utils/time';
 import '../styles/playlist.css';
 
-const PLAYLIST_INITIAL_TRACK_LIMIT = 60;
+const PLAYLIST_INITIAL_TRACK_LIMIT = 100;
 const PLAYLIST_TRACK_PAGE_SIZE = 100;
 const TRACK_ROW_HEIGHT = 58;
 
@@ -225,6 +226,7 @@ const trackLoadMoreTrigger = ref(null);
 const trackLoading = ref(false);
 const trackError = ref('');
 const trackHasMore = ref(false);
+const prefetchedCommentTotal = ref(null);
 const playAllLoading = ref(false);
 let playlistLoadToken = 0;
 let activeTrackRequest = null;
@@ -283,7 +285,20 @@ const commentState = usePaginatedComments({
 const commentsModalVisible = commentState.visible;
 const hotComments = commentState.hotComments;
 const comments = commentState.comments;
-const commentTotal = commentState.displayTotal;
+const commentTotal = computed(() => {
+  const stateTotal = Number(commentState.displayTotal.value);
+  const prefetchedTotal = Number(prefetchedCommentTotal.value);
+
+  if (Number.isFinite(stateTotal) && stateTotal > 0) {
+    return stateTotal;
+  }
+
+  if (Number.isFinite(prefetchedTotal)) {
+    return prefetchedTotal;
+  }
+
+  return stateTotal || 0;
+});
 const commentsHasMore = commentState.hasMore;
 const commentsLoading = commentState.loading;
 const commentsError = commentState.error;
@@ -356,6 +371,7 @@ async function loadPlaylistDetail(id) {
   loadMoreController.cleanup();
   remotePlaylist.value = null;
   remoteTracks.value = [];
+  prefetchedCommentTotal.value = null;
   errorMessage.value = '';
   resetTrackLoadingState();
 
@@ -387,6 +403,7 @@ async function loadPlaylistDetail(id) {
     remoteTracks.value = getUniqueTracks(data.tracks);
     syncTrackHasMore();
     updateVirtualRange();
+    loadPlaylistCommentStats(meta.remoteId, loadToken);
 
     if (!remoteTracks.value.length && trackHasMore.value) {
       await loadMoreTracks({ force: true, token: loadToken });
@@ -504,12 +521,17 @@ async function runLoadMoreTracks({ force = false, token = playlistLoadToken } = 
       return null;
     }
 
+    const previousTrackCount = remoteTracks.value.length;
     appendUniqueTracks(data.tracks);
+    const addedTrackCount = remoteTracks.value.length - previousTrackCount;
     syncTrackHasMore(data.more);
 
-    if (trackHasMore.value && !data.tracks?.length) {
+    if (data.more === false || (Array.isArray(data.tracks) && !data.tracks.length)) {
       trackHasMore.value = false;
-      trackError.value = '歌曲加载失败';
+    }
+
+    if (trackHasMore.value && addedTrackCount <= 0) {
+      trackHasMore.value = false;
     }
 
     return data;
@@ -639,6 +661,40 @@ function openCommentsModal() {
   }
 
   return commentState.open(commentResourceId.value);
+}
+
+async function loadPlaylistCommentStats(id, token = playlistLoadToken) {
+  if (!isPlaylistCommentId(id)) {
+    prefetchedCommentTotal.value = 0;
+    return null;
+  }
+
+  try {
+    const stats = await getPlaylistCommentStatsData(id);
+
+    if (token !== playlistLoadToken || String(commentResourceId.value) !== String(id)) {
+      return null;
+    }
+
+    const count = Number(stats.commentCount);
+    prefetchedCommentTotal.value = Number.isFinite(count) ? count : 0;
+
+    if (remotePlaylist.value) {
+      remotePlaylist.value = {
+        ...remotePlaylist.value,
+        commentCount: prefetchedCommentTotal.value,
+      };
+    }
+
+    return stats;
+  } catch (error) {
+    if (token === playlistLoadToken) {
+      console.warn('Failed to load playlist comment stats:', error);
+      prefetchedCommentTotal.value = Number(playlist.value.commentCount) || 0;
+    }
+
+    return null;
+  }
 }
 
 function isPlaylistCommentId(id) {

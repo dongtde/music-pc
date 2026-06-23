@@ -89,12 +89,41 @@ export async function getSearchResultData({ keyword, type = 1, limit = 20, offse
     offset
   }, options)
   const result = response.result ?? {}
+  const items = mapSearchItemsByType(result, type)
+  const total = getSearchTotalByType(result, type)
+  const explicitHasMore = getExplicitMore(result, response)
 
   return {
-    items: mapSearchItemsByType(result, type),
-    total: getSearchTotalByType(result, type),
-    hasMore: Boolean(result.hasMore || result.more)
+    items,
+    total,
+    hasMore: explicitHasMore ?? Boolean(total && offset + items.length < total)
   }
+}
+
+function getExplicitMore(...sources) {
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') {
+      continue
+    }
+
+    if ('hasMore' in source) {
+      return Boolean(source.hasMore)
+    }
+
+    if ('has_more' in source) {
+      return Boolean(source.has_more)
+    }
+
+    if ('has_next' in source) {
+      return Boolean(source.has_next)
+    }
+
+    if ('more' in source) {
+      return Boolean(source.more)
+    }
+  }
+
+  return undefined
 }
 
 function mapHotKeyword(item, index) {

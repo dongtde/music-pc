@@ -115,6 +115,18 @@ export function pickField(source = {}, keys = []) {
   return undefined
 }
 
+export function pickDurationField(...values) {
+  for (const value of values) {
+    const number = Number(value)
+
+    if (Number.isFinite(number) && number > 0) {
+      return value
+    }
+  }
+
+  return 0
+}
+
 export function cleanKugouText(value = '') {
   return String(value ?? '')
     .replace(/<\/?em>/gi, '')
@@ -170,19 +182,30 @@ export function normalizeSong(song = {}, index = 0) {
     480
   )
   const id = source.album_audio_id ?? source.mixsongid ?? source.add_mixsongid ?? source.audio_id ?? source.id ?? source.hash
-  const duration = toMilliseconds(
-    source.timelength ??
-      source.timelen ??
-      source.duration ??
-      source.duration_128 ??
-      source.duration_320 ??
-      source.duration_high ??
-      source.audio_info?.duration_128 ??
-      source.audio_info?.duration_320 ??
-      source.audio_info?.duration_high ??
-      source.deprecated?.duration ??
-      source.video_timelength
-  )
+  const duration = toMilliseconds(pickDurationField(
+    source.timelength,
+    source.timelen,
+    source.time_length,
+    source.timelength_320,
+    source['320time'],
+    source.duration,
+    source.duration_ms,
+    source.durationMs,
+    source.duration_128,
+    source.duration_320,
+    source.duration_high,
+    source.filetime,
+    source.FileTime,
+    source.TimeLength,
+    source.FileDuration,
+    source.audio_info?.time_length,
+    source.audio_info?.timelength_320,
+    source.audio_info?.duration_128,
+    source.audio_info?.duration_320,
+    source.audio_info?.duration_high,
+    source.deprecated?.duration,
+    source.video_timelength
+  ))
   const mvId =
     source.video_id ||
     source.video_info?.video_id ||

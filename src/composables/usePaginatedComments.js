@@ -69,11 +69,15 @@ export function usePaginatedComments(options = {}) {
       })
       const nextHotComments = data.hotComments ?? []
       const nextComments = data.comments ?? []
+      const previousCommentCount = resetPage ? 0 : comments.value.length
 
       hotComments.value = resetPage ? nextHotComments : hotComments.value
       comments.value = resetPage ? nextComments : [...comments.value, ...nextComments]
       total.value = Number(data.total) || comments.value.length
-      hasMore.value = Boolean(data.more || comments.value.length < total.value)
+      hasMore.value =
+        data.more === false
+          ? false
+          : Boolean(comments.value.length > previousCommentCount && (data.more || comments.value.length < total.value))
       offset.value = comments.value.length
 
       return data

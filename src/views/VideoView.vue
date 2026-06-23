@@ -1037,10 +1037,16 @@ async function loadFiltered({ reset = false } = {}) {
       return
     }
 
+    const previousMvCount = filteredMvs.value.length
+
     filteredMvs.value = reset ? data.items : uniqueMvs([...filteredMvs.value, ...data.items])
     filteredTotal.value = data.total
-    filteredMore.value = Boolean(data.more && data.items.length)
-    filteredOffset.value = requestOffset + data.items.length
+    filteredMore.value = Boolean(
+      data.more &&
+      data.items.length &&
+      (reset || filteredMvs.value.length > previousMvCount)
+    )
+    filteredOffset.value = filteredMvs.value.length
     await nextTick()
     scheduleFilteredGridMetrics()
   } catch (error) {

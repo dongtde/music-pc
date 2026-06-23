@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, net, protocol } = require('electron');
 const path = require('node:path');
 const { createDesktopLyricsManager } = require('./desktopLyricsWindow.cjs');
 const { createAppProtocolRegistrar } = require('./protocolProxy.cjs');
+const { createTaskbarControlsManager } = require('./taskbarControls.cjs');
 const { openExternalUrl, sendToWindow } = require('./windowUtils.cjs');
 const {
   captureFirstScreenSmoke,
@@ -9,6 +10,7 @@ const {
 } = require('./smoke.cjs');
 
 const APP_PROTOCOL = 'mappic';
+const APP_USER_MODEL_ID = 'com.lanyin.music';
 const isDev = !app.isPackaged;
 const isDebug =
   process.env.MAPPIC_DESKTOP_DEBUG === '1' || process.argv.includes('--debug');
@@ -25,6 +27,7 @@ const neteaseApiTarget =
   process.env.NETEASE_API_TARGET || 'https://music-api.xcj.pw';
 const preloadPath = path.join(__dirname, 'preload.cjs');
 const distRoot = path.join(__dirname, '..', 'dist');
+const appIconPath = path.join(__dirname, '..', 'build', 'icon.ico');
 const cookieJarPath = path.join(app.getPath('userData'), 'kugou-proxy-cookies.json');
 const desktopLyricsStatePath = path.join(
   app.getPath('userData'),
@@ -37,6 +40,12 @@ let mainWindowIpcRegistered = false;
 if (isAutomationSmoke) {
   app.commandLine.appendSwitch('disable-gpu');
   app.commandLine.appendSwitch('disable-background-timer-throttling');
+}
+
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
+if (process.platform === 'win32') {
+  app.setAppUserModelId(APP_USER_MODEL_ID);
 }
 
 process.on('uncaughtException', (error) => {
@@ -80,6 +89,10 @@ const desktopLyrics = createDesktopLyricsManager({
   openExternalUrl,
   statePath: desktopLyricsStatePath,
 });
+const taskbarControls = createTaskbarControlsManager({
+  ipcMain,
+  getMainWindow: () => mainWindow,
+});
 
 async function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -88,6 +101,7 @@ async function createMainWindow() {
     minWidth: 960,
     minHeight: 640,
     frame: false,
+    icon: appIconPath,
     title: '澜音',
     backgroundColor: '#0b0d11',
     autoHideMenuBar: true,
@@ -104,6 +118,7 @@ async function createMainWindow() {
   attachNavigationGuards(mainWindow);
   attachDebugLogging(mainWindow);
   attachWindowStateEvents(mainWindow);
+  taskbarControls.attachToWindow(mainWindow);
 
   await mainWindow.loadURL(`${APP_PROTOCOL}://app/#/home`);
 
@@ -277,6 +292,7 @@ app.whenReady()
     protocolRegistrar.registerAppProtocol();
     registerMainWindowIpc();
     desktopLyrics.registerIpc();
+    taskbarControls.registerIpc();
     await createMainWindow();
     await restoreDesktopLyricsOnStartup();
 

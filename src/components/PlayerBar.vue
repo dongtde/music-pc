@@ -163,6 +163,7 @@ import { useCurrentTrackComments } from '../composables/useCurrentTrackComments'
 import { useDesktopLyricsBridge } from '../composables/useDesktopLyricsBridge'
 import { useFullPlayerDanmakuComments } from '../composables/useFullPlayerDanmakuComments'
 import { useProgressLyrics } from '../composables/useProgressLyrics'
+import { useTaskbarControlsBridge } from '../composables/useTaskbarControlsBridge'
 import { readStorage, writeStorage } from '../utils/storage'
 import { formatTime } from '../utils/time'
 import { getAudioQualityDefinition, getAudioQualityOptions } from '../utils/audioQuality'
@@ -287,6 +288,14 @@ const desktopLyricsWindowOpen = desktopLyricsBridge.windowOpen
 const desktopLyricsLocked = desktopLyricsBridge.locked
 const desktopLyricsButtonLabel = desktopLyricsBridge.buttonLabel
 const toggleDesktopLyrics = desktopLyricsBridge.toggle
+useTaskbarControlsBridge({
+  player,
+  currentTrack,
+  playPreviousTrack,
+  playNextTrack,
+  getThumbnailClip: getAlbumArtRect,
+  onPlaybackError: showPlaybackError
+})
 const playbackQualityOptions = computed(() =>
   getAudioQualityOptions(currentTrack.value, { selected: player.state.playbackQuality })
 )

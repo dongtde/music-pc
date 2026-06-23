@@ -788,9 +788,15 @@ async function loadCategory({ reset = false } = {}) {
       return
     }
 
+    const previousPodcastCount = categoryPodcasts.value.length
+
     categoryPodcasts.value = reset ? data.items : dedupeById([...categoryPodcasts.value, ...data.items])
-    categoryOffset.value = reset ? data.items.length : offset + data.items.length
-    categoryMore.value = Boolean(data.more && data.items.length)
+    categoryOffset.value = categoryPodcasts.value.length
+    categoryMore.value = Boolean(
+      data.more &&
+      data.items.length &&
+      (reset || categoryPodcasts.value.length > previousPodcastCount)
+    )
   } catch (error) {
     if (isAbortError(error) || requestId !== categoryRequestId) {
       return

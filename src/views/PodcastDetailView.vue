@@ -333,10 +333,12 @@ async function loadMorePrograms() {
       return
     }
 
+    const previousProgramCount = programs.value.length
+
     programs.value = dedupeTracks([...programs.value, ...data.programs])
     total.value = data.total
     offset.value = programs.value.length
-    more.value = data.more
+    more.value = Boolean(data.more && data.programs.length && programs.value.length > previousProgramCount)
     nextTick(() => {
       updateProgramVirtualRange()
       loadMoreController.setup()
