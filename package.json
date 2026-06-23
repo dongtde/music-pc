@@ -13,6 +13,7 @@
     "smoke:first-screen": "node scripts/first-screen-smoke.js",
     "smoke:fps": "node scripts/fps-smoke.js",
     "smoke:player": "node scripts/player-smoke.js",
+    "smoke:electron-proxy": "node scripts/electron-proxy-smoke.cjs",
     "preview": "vite preview --host 127.0.0.1",
     "desktop:dev": "vite --host 127.0.0.1",
     "desktop:debug": "node scripts/desktop-debug.cjs",

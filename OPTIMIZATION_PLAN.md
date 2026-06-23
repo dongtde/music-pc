@@ -55,7 +55,7 @@
 | 部分完成 | P0 | 播放器 | `PlayerBar.vue` 体量大且承担全屏播放器、弹幕、歌词、评论、桌面歌词通信、音质、队列等多职责 | 已先抽出 `PlayerTrackSummary.vue`、`PlayerModePopover.vue`、`PlayerTransportControls.vue`、`PlayerVolumePopover.vue`、`PlayerProgressBar.vue`、`PlayerDanmakuToggle.vue`、`PlayerDesktopLyricsButton.vue`、`PlayerQueuePopover.vue`、`PlayerQualityPopover.vue`、`PlayerVisualizerPopover.vue`、`PlayerTrackActions.vue`、`useDesktopLyricsBridge.js`、`useProgressLyrics.js`、`useFullPlayerDanmakuComments.js` 和 `useCurrentTrackComments.js`；已新增 `src/services/lyrics.js` 统一歌词缓存/请求去重；已在 `src/stores/player.js` 增加播放 URL LRU 缓存、`queueSource`、`queueVersion`、音量持久化、播放模式持久化和按模式选曲 helper，并为首页、发现、搜索、FM、专辑、歌单、歌手、电台、资料库等入口补齐队列来源；`useCurrentTrackComments.js` 已增加评论数 stale 缓存 |
 | 已完成 | P0 | 服务层 | `src/services/netease.js` 原超过 120KB，`src/api/modules/netease.js` 原约 76.8KB，业务聚合和协议适配混在一起 | 已保持兼容出口并完成原子化拆分：服务层根入口约 2.0KB，home/playlist/podcast/artist/mv 已继续拆到二级子模块，FM、喜欢状态、下载、榜单也已独立；API 根入口约 3.2KB，已拆到 auth/home/mv/podcast/user/playlist/charts/artist/album/comments/song/search，shared 已拆成 client/base/responses/search/playback/lyrics |
 | 已完成 | P0 | 构建基线 | 当前没有性能预算、包体分析、Lighthouse/Playwright 回归基线 | 已补充包体基线命令 `npm run baseline:bundle`，并补齐路由 smoke、播放器 smoke、首屏 smoke、首屏截图和首页 FPS smoke；MV 独立页 FPS 后续继续补齐 |
-| 待处理 | P0 | Electron 安全/稳定 | `electron/main.cjs` 媒体/API 代理、桌面歌词、协议服务集中在单文件 | 保持行为不变的前提下分模块，并为 URL 白名单、Range 请求、错误码加测试 |
+| 部分完成 | P0 | Electron 安全/稳定 | 已将 `electron/main.cjs` 拆为薄入口，并抽出 `electron/protocolProxy.cjs`、`electron/desktopLyricsWindow.cjs`、`electron/smoke.cjs`、`electron/windowUtils.cjs`；媒体代理已增加 GET/HEAD 限制、Range 透传校验、敏感头剥离、内网地址拦截和可选 host 白名单 smoke | 后续继续补自定义协议/API 代理/桌面歌词 IPC 的 Electron smoke，完善 preload 参数校验 |
 
 ## 3. 全局架构优化
 
@@ -457,8 +457,8 @@
 
 | 优先级 | 功能 | 具体优化 |
 | --- | --- | --- |
-| P0 | 模块拆分 | 主进程拆 `protocolProxy`、`desktopLyricsWindow`、`windowSecurity`、`cookieJar` |
-| P1 | 媒体代理 | `/media?url=` 代理应限制协议和 host 策略，支持 Range，记录 4xx/5xx |
+| P0（部分完成） | 模块拆分 | 已拆 `protocolProxy`、`desktopLyricsWindow`、`windowUtils`、`smoke`；`cookieJar` 当前随 API 代理留在 `protocolProxy` 内，后续可继续独立 |
+| P1（部分完成） | 媒体代理 | `/media?url=` 已限制 GET/HEAD、HTTP(S)、敏感头剥离、内网 host 拦截、可选 host 白名单，并通过 `npm run smoke:electron-proxy` 校验 Range 透传；后续补真实媒体 206/4xx/5xx Electron smoke |
 | P1 | API 代理 | cookie jar 当前内存 Map，重启丢失但安全；确认是否需要持久化 |
 | P1 | 安全 | 保持 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`，为 preload API 加参数校验 |
 | P2 | 窗口状态 | 主窗口大小、桌面歌词位置/锁定状态持久化 |
@@ -510,7 +510,7 @@
 | P0 | 播放 smoke | 已完成：新增 `npm run smoke:player`，覆盖本地播放、队列上一首/下一首、列表/顺序/单曲/随机模式、音量同步、ended 监听和本地文件错误模型；报告输出到 `reports/performance/player-smoke.md` |
 | P1 | 性能 smoke | 部分完成：新增 `npm run smoke:fps`，覆盖首页音乐/视频 feed idle、scroll、recovery FPS 和视频 hydration 小窗口，报告输出到 `reports/performance/home-fps-smoke.md`；待处理：MV 独立页、全屏播放器、桌面歌词打开/关闭 |
 | P1 | API 单测 | normalizers、cacheKey、error normalization、lyrics parsing、audio quality |
-| P1 | Electron smoke | 自定义协议、API 代理、media 代理、桌面歌词 IPC |
+| P1 | Electron smoke | 已新增 `npm run smoke:electron-proxy` 覆盖 media URL 校验和 Range 头保留；自定义协议、API 代理、真实 media 代理、桌面歌词 IPC 仍待补齐 |
 | P2 | 可访问性 | 键盘操作、焦点陷阱、modal 关闭、aria 状态 |
 
 ## 7. 分阶段路线图
@@ -571,7 +571,7 @@
 | 桌面歌词 | IPC 频率审计 | 窗口置顶优化、歌词缓存 | 位置持久化 | - |
 | 播放器 | 部分完成：左侧歌曲摘要、模式、传输控制、音量、进度、弹幕按钮、桌面歌词按钮、队列、音质、视觉效果、歌曲动作组件化，桌面歌词桥接、进度条歌词预览、全屏弹幕评论流、当前歌曲评论弹窗/统计已抽 composable，统一歌词服务、URL 缓存、队列来源/版本治理、音量统一、播放模式 store 化、评论数 stale 缓存、错误模型、播放 smoke 已完成 | 真实浏览器播放 smoke | 可恢复错误提示 | - |
 | 服务层 | 已完成：服务缓存上限、comments/lyrics/search/home/playlist/album/artist/mv/podcast/FM/喜欢/下载/榜单拆分、auth 登录/QR/session/VIP 服务拆分、API domain 原子化与 shared 子模块拆分 | 并发池、取消、重试 | normalizers 单测 | 监控看板 |
-| Electron | 主进程模块化 | 代理安全、Range、preload 校验 | 窗口状态 | - |
+| Electron | 已部分完成：主进程薄入口化，拆出协议代理、桌面歌词窗口、smoke 和窗口工具；media 代理已补 GET/HEAD、内网拦截、可选 host 白名单、Range 头 smoke | 真实代理 206/4xx/5xx smoke、API 代理安全、preload 校验 | 窗口状态 | - |
 | 构建基线 | 已完成：包体 raw/gzip/brotli 报告、路由 smoke、播放器 smoke、首屏 smoke、首屏截图和首页 FPS smoke | MV 独立页 FPS | 性能预算门禁 | - |
 | PWA | - | 版本化缓存、限额 | 更新提示 | - |
 
