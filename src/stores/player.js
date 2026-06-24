@@ -4,6 +4,11 @@ import { STORAGE_KEYS } from '../config/app'
 import { currentTrack as fallbackTrack, newSongs } from '../data/music'
 import { useAuthStore } from './auth'
 import { useLibraryStore } from './library'
+import {
+  createCoverPaletteFromTint,
+  normalizeCoverPalette,
+  sampleCoverTint
+} from '../utils/coverPalette'
 import { createLruCache } from '../utils/lruCache'
 import { readJsonStorage, readStorage, writeJsonStorage, writeStorage } from '../utils/storage'
 import { parseCookieString } from '../utils/kugouAuth'
@@ -62,6 +67,8 @@ const state = reactive({
 
 let lastPersistedSecond = Math.floor(state.currentTime)
 let playbackClockFrame = 0
+let coverPaletteRequestId = 0
+let initialCoverPaletteRefreshStarted = false
 
 audio.volume = state.volume
 
@@ -126,6 +133,11 @@ if (typeof window !== 'undefined') {
 }
 
 export function usePlayerStore() {
+  if (!initialCoverPaletteRefreshStarted) {
+    initialCoverPaletteRefreshStarted = true
+    refreshCurrentTrackCoverPalette()
+  }
+
   async function playTrack(track) {
     if (!track?.id) {
       return false
@@ -148,6 +160,7 @@ export function usePlayerStore() {
       state.playbackQuality = playbackSource.quality
       persistPlaybackQuality(playbackSource.quality)
       state.currentTrack = normalizeTrack(track, playbackSource.url, playbackSource.quality)
+      refreshCurrentTrackCoverPalette()
       state.duration = parseDuration(state.currentTrack.duration)
       state.currentTime = 0
       lastPersistedSecond = 0
@@ -600,8 +613,56 @@ function normalizeTrack(track, url, quality = state.playbackQuality) {
     playbackQualityLabel: qualityDefinition.shortLabel,
     elapsed: '0:00',
     duration: track.time ?? track.duration ?? '0:00',
-    coverPalette: track.coverPalette ?? fallbackTrack.coverPalette
+    coverPalette: normalizeCoverPalette(track.coverPalette ?? fallbackTrack.coverPalette)
   }
+}
+
+function refreshCurrentTrackCoverPalette() {
+  const track = state.currentTrack
+  const coverUrl = normalizeCoverPaletteUrl(track.coverUrl)
+  const requestId = ++coverPaletteRequestId
+
+  if (!coverUrl) {
+    return
+  }
+
+  const trackKey = getCoverPaletteTrackKey(track)
+
+  sampleCoverTint(coverUrl)
+    .then((tintRgb) => {
+      if (!isCurrentCoverPaletteRequest(requestId, trackKey)) {
+        return
+      }
+
+      state.currentTrack.coverPalette = createCoverPaletteFromTint(
+        tintRgb,
+        fallbackTrack.coverPalette
+      )
+      persistPlaybackSnapshot()
+    })
+    .catch((error) => {
+      if (isCurrentCoverPaletteRequest(requestId, trackKey)) {
+        console.warn('Failed to sample current track cover palette:', error)
+      }
+    })
+}
+
+function isCurrentCoverPaletteRequest(requestId, trackKey) {
+  return (
+    requestId === coverPaletteRequestId &&
+    getCoverPaletteTrackKey(state.currentTrack) === trackKey
+  )
+}
+
+function getCoverPaletteTrackKey(track = {}) {
+  return [
+    track.id ?? '',
+    normalizeCoverPaletteUrl(track.coverUrl)
+  ].join(':')
+}
+
+function normalizeCoverPaletteUrl(coverUrl) {
+  return typeof coverUrl === 'string' ? coverUrl.trim() : ''
 }
 
 function getCurrentQueueIndex() {
@@ -687,7 +748,7 @@ function normalizeRestoredTrack(track) {
     ...restoredTrack,
     elapsed: elapsed ?? '0:00',
     duration: restoredTrack.duration ?? restoredTrack.time ?? '0:00',
-    coverPalette: restoredTrack.coverPalette ?? fallbackTrack.coverPalette
+    coverPalette: normalizeCoverPalette(restoredTrack.coverPalette ?? fallbackTrack.coverPalette)
   }
 }
 
@@ -700,7 +761,7 @@ function createEmptyTrack() {
     duration: '0:00',
     playbackQuality: initialPlaybackQuality,
     qualities: [],
-    coverPalette: fallbackTrack.coverPalette
+    coverPalette: normalizeCoverPalette(fallbackTrack.coverPalette)
   }
 }
 
