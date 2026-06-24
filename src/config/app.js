@@ -10,6 +10,7 @@ export const STORAGE_KEYS = {
   kugouAuth: 'mappic:kugou-auth',
   neteaseSession: 'mappic:netease-session',
   dailyVipClaim: 'mappic:daily-vip-claim',
+  dailyVipAutoStatusCheck: 'mappic:daily-vip-auto-status-check',
   libraryData: 'mappic:library:data',
   playerSnapshot: 'mappic:player:last-track',
   playerPlayMode: 'mappic:player:play-mode',

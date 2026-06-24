@@ -124,11 +124,23 @@ export function readDailyVipClaim() {
   return readJsonStorage(STORAGE_KEYS.dailyVipClaim, {})
 }
 
+export function readDailyVipAutoStatusCheck() {
+  return readJsonStorage(STORAGE_KEYS.dailyVipAutoStatusCheck, {})
+}
+
 export function writeDailyVipClaim({ date, identity, claimedAt = Date.now() }) {
   writeJsonStorage(STORAGE_KEYS.dailyVipClaim, {
     date,
     identity,
     claimedAt
+  })
+}
+
+export function writeDailyVipAutoStatusCheck({ date, identity, checkedAt = Date.now() }) {
+  writeJsonStorage(STORAGE_KEYS.dailyVipAutoStatusCheck, {
+    date,
+    identity,
+    checkedAt
   })
 }
 

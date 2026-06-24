@@ -261,7 +261,7 @@ const vipExpireText = computed(() => {
 
 onMounted(() => {
   if (auth.state.isLoggedIn && !auth.isGuest.value && !auth.state.vip.loaded && !auth.state.vip.loading) {
-    auth.refreshVipStatus()
+    auth.refreshVipStatus({ automatic: true })
   }
 })
 

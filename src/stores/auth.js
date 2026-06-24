@@ -16,11 +16,13 @@ import {
   clearStoredSession,
   getAuthIdentity,
   mergeAuthCookieString,
+  readDailyVipAutoStatusCheck,
   parseAuthCookie,
   readDailyVipClaim,
   readInitialAuthSession,
   saveStoredSession,
   writeAuthCookie,
+  writeDailyVipAutoStatusCheck,
   writeDailyVipClaim
 } from '../services/auth/session'
 import {
@@ -456,7 +458,7 @@ function setAccountState({ profile, account, loginType }) {
 }
 
 function syncVipAfterLogin() {
-  return refreshVipStatus()
+  return refreshVipStatus({ automatic: true })
     .catch(() => false)
     .then(() => ensureDailyVipClaim())
     .catch(() => {
@@ -464,17 +466,27 @@ function syncVipAfterLogin() {
     })
 }
 
-async function refreshVipStatus({ force = false } = {}) {
+async function refreshVipStatus({ force = false, automatic = false } = {}) {
   if (!state.isLoggedIn || state.loginType === 'guest') {
     resetVipState()
     return false
   }
 
-  if (vipStatusRequest && !force) {
+  const receiveDay = getLocalDateString()
+  const identity = getVipClaimIdentity()
+
+  if (vipStatusRequest && (automatic || !force)) {
     return vipStatusRequest
   }
 
-  const identity = getVipClaimIdentity()
+  if (automatic && hasDailyVipAutoStatusCheck(receiveDay, identity)) {
+    return state.vip.active
+  }
+
+  if (automatic) {
+    markDailyVipAutoStatusCheck(receiveDay, identity)
+  }
+
   state.vip.loading = true
   state.vip.error = ''
 
@@ -535,7 +547,7 @@ function ensureDailyVipClaim() {
   })
     .then((response) => {
       markDailyVipClaim(receiveDay, identity)
-      refreshVipStatus({ force: true })
+      refreshVipStatus({ force: true, automatic: true })
       return response
     })
     .catch((error) => {
@@ -702,6 +714,25 @@ function getVipClaimIdentity() {
 
 function markDailyVipClaim(receiveDay = getLocalDateString(), identity = getVipClaimIdentity()) {
   writeDailyVipClaim({
+    date: receiveDay,
+    identity
+  })
+}
+
+function hasDailyVipAutoStatusCheck(
+  receiveDay = getLocalDateString(),
+  identity = getVipClaimIdentity()
+) {
+  const statusRecord = readDailyVipAutoStatusCheck()
+
+  return statusRecord?.date === receiveDay && statusRecord?.identity === identity
+}
+
+function markDailyVipAutoStatusCheck(
+  receiveDay = getLocalDateString(),
+  identity = getVipClaimIdentity()
+) {
+  writeDailyVipAutoStatusCheck({
     date: receiveDay,
     identity
   })
