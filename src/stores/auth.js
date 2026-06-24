@@ -479,8 +479,16 @@ async function refreshVipStatus({ force = false, automatic = false } = {}) {
     return vipStatusRequest
   }
 
-  if (automatic && hasDailyVipAutoStatusCheck(receiveDay, identity)) {
-    return state.vip.active
+  const autoStatusRecord = automatic ? getDailyVipAutoStatusCheck(receiveDay, identity) : null
+
+  if (automatic && !force && autoStatusRecord) {
+    if (restoreVipStatusFromAutoCheck(autoStatusRecord)) {
+      return state.vip.active
+    }
+
+    if (Number(autoStatusRecord.version) >= 2) {
+      return state.vip.active
+    }
   }
 
   if (automatic) {
@@ -496,11 +504,22 @@ async function refreshVipStatus({ force = false, automatic = false } = {}) {
         return false
       }
 
+      const active = isYouthVipActive(response)
+
       state.vip.raw = response
-      state.vip.active = isYouthVipActive(response)
+      state.vip.active = active
       state.vip.loaded = true
       state.vip.error = ''
-      return state.vip.active
+
+      if (automatic) {
+        markDailyVipAutoStatusCheck(receiveDay, identity, {
+          active,
+          raw: response,
+          loaded: true
+        })
+      }
+
+      return active
     })
     .catch((error) => {
       if (getVipClaimIdentity() === identity) {
@@ -719,23 +738,41 @@ function markDailyVipClaim(receiveDay = getLocalDateString(), identity = getVipC
   })
 }
 
-function hasDailyVipAutoStatusCheck(
+function getDailyVipAutoStatusCheck(
   receiveDay = getLocalDateString(),
   identity = getVipClaimIdentity()
 ) {
   const statusRecord = readDailyVipAutoStatusCheck()
 
-  return statusRecord?.date === receiveDay && statusRecord?.identity === identity
+  if (statusRecord?.date === receiveDay && statusRecord?.identity === identity) {
+    return statusRecord
+  }
+
+  return null
 }
 
 function markDailyVipAutoStatusCheck(
   receiveDay = getLocalDateString(),
-  identity = getVipClaimIdentity()
+  identity = getVipClaimIdentity(),
+  status = {}
 ) {
   writeDailyVipAutoStatusCheck({
     date: receiveDay,
-    identity
+    identity,
+    ...status
   })
+}
+
+function restoreVipStatusFromAutoCheck(statusRecord = {}) {
+  if (statusRecord.loaded !== true) {
+    return false
+  }
+
+  state.vip.raw = statusRecord.raw ?? null
+  state.vip.active = Boolean(statusRecord.active)
+  state.vip.loaded = true
+  state.vip.error = ''
+  return true
 }
 
 function resetVipState() {
