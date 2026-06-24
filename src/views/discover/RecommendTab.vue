@@ -286,10 +286,18 @@
         <router-link
           v-for="mv in homeRecommendedMvs"
           :key="mv.id"
-          :to="{ name: 'video', query: { mvId: mv.id } }"
+          :to="getRecommendedMvRouteTarget(mv)"
           class="mv-card"
+          @mouseenter="queueRecommendedMvPreview(mv)"
+          @mouseleave="stopRecommendedMvPreview(mv)"
         >
-          <div class="mv-cover" :class="`cover--${mv.type}`">
+          <div
+            class="mv-cover"
+            :class="[
+              `cover--${mv.type}`,
+              getRecommendedMvPreviewCoverClass(mv)
+            ]"
+          >
             <img
               v-if="mv.coverUrl"
               class="mv-cover__image"
@@ -298,6 +306,29 @@
               loading="lazy"
               decoding="async"
             />
+            <video
+              v-if="isRecommendedMvPreviewActive(mv) && recommendedMvPreviewState.url"
+              ref="recommendedMvPreviewVideo"
+              class="mv-cover__preview"
+              :class="{ 'is-ready': isRecommendedMvPreviewReady(mv) }"
+              :src="recommendedMvPreviewState.url"
+              muted
+              autoplay
+              loop
+              playsinline
+              preload="auto"
+              disablepictureinpicture
+              @loadeddata="handleRecommendedMvPreviewReady(mv, $event)"
+              @canplay="handleRecommendedMvPreviewReady(mv, $event)"
+              @error="handleRecommendedMvPreviewError(mv, $event)"
+            />
+            <span
+              v-if="isRecommendedMvPreviewLoading(mv)"
+              class="mv-preview-loading"
+              aria-hidden="true"
+            >
+              <LoaderCircle :size="18" class="mv-preview-spin" />
+            </span>
             <span class="mv-hover-bg" aria-hidden="true" />
             <span class="mv-play">
               <Play :size="18" fill="currentColor" />
@@ -375,6 +406,7 @@ import { useMessage } from 'naive-ui';
 import {
   ChevronLeft,
   ChevronRight,
+  LoaderCircle,
   Play,
   Radio,
 } from 'lucide-vue-next';
@@ -388,9 +420,12 @@ import {
   recommendedRadios,
   recommendedSingles,
 } from '../../data/music';
-import { getHomeDiscoverData } from '../../services/netease';
+import { getHomeDiscoverData, getMvPlaybackUrlData } from '../../services/netease';
 import { usePlayerStore } from '../../stores/player';
+import { createLruCache } from '../../utils/lruCache';
+import { createMvRouteQuery } from '../../utils/mv';
 import { getPlaybackErrorDisplay } from '../../utils/playbackError';
+import { isAbortError } from '../../utils/request';
 
 const HOME_SKELETON_MIN_MS = 360;
 const RECOMMENDED_SINGLE_DISPLAY_LIMIT = 12;
@@ -420,6 +455,7 @@ const visibleRecommendedSingles = computed(() =>
 const homeRecommendedMvs = ref(recommendedMvs);
 const homeRecommendedRadios = ref(recommendedRadios);
 const recommendPage = ref(null);
+const recommendedMvPreviewVideo = ref(null);
 const isHomeLoading = ref(true);
 const playlistCarouselColumns = ref(6);
 const playlistCarouselGap = computed(() =>
@@ -511,10 +547,24 @@ const latestSkeletonCarouselNeeded = computed(
     getPlaylistCarouselPageStarts(6, LATEST_CAROUSEL_ROWS, playlistCarouselColumns.value)
       .length > 1
 );
+const recommendedMvPreviewState = ref({
+  id: '',
+  key: '',
+  url: '',
+  loading: false,
+  ready: false,
+  error: ''
+});
 let heroTimer;
 let playlistCarouselResizeObserver;
 let playlistCarouselResizeFrame = 0;
+let recommendedMvPreviewTimer = 0;
+let recommendedMvPreviewController = null;
+let recommendedMvPreviewElement = null;
 let isRecommendTabActive = false;
+const recommendedMvPreviewCache = createLruCache(18);
+const RECOMMENDED_MV_PREVIEW_DELAY_MS = 420;
+const RECOMMENDED_MV_PREVIEW_QUALITY = 720;
 
 function chunkItems(items, size) {
   const sourceItems = items.filter(Boolean);
@@ -651,6 +701,294 @@ function createHeroTrack(slide) {
     time: '0:00',
     duration: '0:00'
   };
+}
+
+function getRecommendedMvRouteTarget(mv = {}) {
+  const query = createMvRouteQuery(
+    {
+      mvId: mv.id,
+      mvHash: mv.mvHash || mv.hash
+    },
+    mv
+  );
+
+  return query ? { name: 'video', query } : { name: 'video' };
+}
+
+function getRecommendedMvPreviewKey(mv = {}) {
+  const id = String(mv?.id ?? mv?.mvId ?? mv?.mvid ?? mv?.vid ?? mv?.hash ?? mv?.mvHash ?? '');
+  const hash = String(mv?.hash ?? mv?.mvHash ?? '');
+
+  return id ? `${id}:${hash || 'auto'}:${RECOMMENDED_MV_PREVIEW_QUALITY}` : '';
+}
+
+function canPreviewRecommendedMv(mv = {}) {
+  return Boolean(mv?.coverUrl && getRecommendedMvPreviewKey(mv));
+}
+
+function getRecommendedMvPreviewCoverClass(mv = {}) {
+  return {
+    'is-previewing': isRecommendedMvPreviewActive(mv),
+    'is-preview-loading': isRecommendedMvPreviewLoading(mv),
+    'is-preview-ready': isRecommendedMvPreviewReady(mv)
+  };
+}
+
+function isRecommendedMvPreviewActive(mv = {}) {
+  const key = getRecommendedMvPreviewKey(mv);
+
+  return Boolean(key && recommendedMvPreviewState.value.key === key);
+}
+
+function isRecommendedMvPreviewLoading(mv = {}) {
+  return isRecommendedMvPreviewActive(mv) && recommendedMvPreviewState.value.loading;
+}
+
+function isRecommendedMvPreviewReady(mv = {}) {
+  return isRecommendedMvPreviewActive(mv) && recommendedMvPreviewState.value.ready;
+}
+
+function queueRecommendedMvPreview(mv = {}) {
+  if (typeof window === 'undefined' || !canPreviewRecommendedMv(mv)) {
+    return;
+  }
+
+  const key = getRecommendedMvPreviewKey(mv);
+
+  if (
+    recommendedMvPreviewState.value.key === key &&
+    (recommendedMvPreviewState.value.loading || recommendedMvPreviewState.value.url)
+  ) {
+    return;
+  }
+
+  stopRecommendedMvPreview();
+
+  recommendedMvPreviewState.value = {
+    id: String(mv.id ?? mv.hash ?? ''),
+    key,
+    url: '',
+    loading: true,
+    ready: false,
+    error: ''
+  };
+
+  const cachedPlaybackUrl = recommendedMvPreviewCache.get(key);
+
+  if (cachedPlaybackUrl?.url) {
+    applyRecommendedMvPreviewUrl(cachedPlaybackUrl, key);
+    return;
+  }
+
+  recommendedMvPreviewTimer = window.setTimeout(() => {
+    recommendedMvPreviewTimer = 0;
+    loadRecommendedMvPreview(mv, key);
+  }, RECOMMENDED_MV_PREVIEW_DELAY_MS);
+}
+
+async function loadRecommendedMvPreview(mv = {}, key = getRecommendedMvPreviewKey(mv)) {
+  if (!key || recommendedMvPreviewState.value.key !== key) {
+    return;
+  }
+
+  const controller = new AbortController();
+  recommendedMvPreviewController = controller;
+
+  try {
+    const playbackUrl = await getMvPlaybackUrlData(
+      mv.id,
+      RECOMMENDED_MV_PREVIEW_QUALITY,
+      mv,
+      { signal: controller.signal }
+    );
+
+    if (controller.signal.aborted || recommendedMvPreviewState.value.key !== key) {
+      return;
+    }
+
+    if (playbackUrl?.url) {
+      recommendedMvPreviewCache.set(key, playbackUrl);
+      applyRecommendedMvPreviewUrl(playbackUrl, key);
+    } else {
+      markRecommendedMvPreviewError(key);
+    }
+  } catch (error) {
+    if (!isAbortError(error)) {
+      console.debug('Failed to load recommend MV preview:', error);
+      markRecommendedMvPreviewError(key);
+    }
+  } finally {
+    if (recommendedMvPreviewController === controller) {
+      recommendedMvPreviewController = null;
+    }
+  }
+}
+
+function applyRecommendedMvPreviewUrl(playbackUrl, key) {
+  if (recommendedMvPreviewState.value.key !== key) {
+    return;
+  }
+
+  const url = normalizePreviewVideoUrl(playbackUrl?.url);
+
+  if (!url) {
+    markRecommendedMvPreviewError(key);
+    return;
+  }
+
+  recommendedMvPreviewState.value = {
+    ...recommendedMvPreviewState.value,
+    url,
+    loading: true,
+    ready: false,
+    error: ''
+  };
+  nextTick(() => playRecommendedMvPreviewVideo(key));
+}
+
+function handleRecommendedMvPreviewReady(mv = {}, event) {
+  if (!isRecommendedMvPreviewActive(mv)) {
+    return;
+  }
+
+  recommendedMvPreviewElement = event?.target ?? recommendedMvPreviewElement;
+  recommendedMvPreviewState.value = {
+    ...recommendedMvPreviewState.value,
+    loading: false,
+    ready: true,
+    error: ''
+  };
+  playRecommendedMvPreviewVideo(recommendedMvPreviewState.value.key);
+}
+
+function handleRecommendedMvPreviewError(mv = {}, event) {
+  const video = event?.target;
+
+  if (video && !video.currentSrc && !video.src) {
+    return;
+  }
+
+  if (isRecommendedMvPreviewActive(mv)) {
+    markRecommendedMvPreviewError(recommendedMvPreviewState.value.key);
+  }
+}
+
+async function playRecommendedMvPreviewVideo(key) {
+  await nextTick();
+
+  if (recommendedMvPreviewState.value.key !== key || !recommendedMvPreviewState.value.url) {
+    return;
+  }
+
+  const video = getRecommendedMvPreviewVideoElement();
+
+  if (!video) {
+    return;
+  }
+
+  recommendedMvPreviewElement = video;
+  video.muted = true;
+  video.volume = 0;
+
+  try {
+    await video.play();
+  } catch (error) {
+    if (recommendedMvPreviewState.value.key === key) {
+      recommendedMvPreviewState.value = {
+        ...recommendedMvPreviewState.value,
+        loading: false
+      };
+    }
+  }
+}
+
+function getRecommendedMvPreviewVideoElement() {
+  return Array.isArray(recommendedMvPreviewVideo.value)
+    ? recommendedMvPreviewVideo.value.find(Boolean) ?? null
+    : recommendedMvPreviewVideo.value;
+}
+
+function markRecommendedMvPreviewError(key) {
+  if (recommendedMvPreviewState.value.key !== key) {
+    return;
+  }
+
+  recommendedMvPreviewState.value = {
+    ...recommendedMvPreviewState.value,
+    loading: false,
+    ready: false,
+    error: 'preview-failed'
+  };
+}
+
+function stopRecommendedMvPreview(mv = null) {
+  if (mv && !isRecommendedMvPreviewActive(mv)) {
+    return;
+  }
+
+  cancelRecommendedMvPreviewTimer();
+
+  if (recommendedMvPreviewController) {
+    recommendedMvPreviewController.abort();
+    recommendedMvPreviewController = null;
+  }
+
+  releaseRecommendedMvPreviewVideo();
+  resetRecommendedMvPreviewState();
+}
+
+function cancelRecommendedMvPreviewTimer() {
+  if (recommendedMvPreviewTimer && typeof window !== 'undefined') {
+    window.clearTimeout(recommendedMvPreviewTimer);
+    recommendedMvPreviewTimer = 0;
+  }
+}
+
+function releaseRecommendedMvPreviewVideo() {
+  const video = recommendedMvPreviewElement ?? getRecommendedMvPreviewVideoElement();
+
+  if (!video) {
+    recommendedMvPreviewElement = null;
+    return;
+  }
+
+  try {
+    if (!video.paused) {
+      video.pause();
+    }
+
+    video.removeAttribute('src');
+    video.load();
+  } catch (error) {
+    console.debug('Failed to release recommend MV preview:', error);
+  } finally {
+    recommendedMvPreviewElement = null;
+  }
+}
+
+function resetRecommendedMvPreviewState() {
+  recommendedMvPreviewState.value = {
+    id: '',
+    key: '',
+    url: '',
+    loading: false,
+    ready: false,
+    error: ''
+  };
+}
+
+function normalizePreviewVideoUrl(url) {
+  if (typeof url !== 'string') {
+    return '';
+  }
+
+  const value = url.trim();
+
+  if (!value) {
+    return '';
+  }
+
+  return value.startsWith('//') ? `https:${value}` : value;
 }
 
 function getPlaylistCarouselPageStarts(itemCount, rows, visibleColumns) {
@@ -816,6 +1154,7 @@ function schedulePlaylistCarouselColumnSync(width = getPlaylistCarouselContainer
 async function loadHomeData() {
   const startedAt = Date.now();
 
+  stopRecommendedMvPreview();
   isHomeLoading.value = true;
 
   try {
@@ -881,6 +1220,7 @@ function activateRecommendTab() {
 function deactivateRecommendTab() {
   isRecommendTabActive = false;
   stopHeroAutoplay();
+  stopRecommendedMvPreview();
 }
 
 onMounted(() => {

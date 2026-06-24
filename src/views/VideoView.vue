@@ -221,9 +221,34 @@
             class="mv-video-card"
             type="button"
             @click="selectMv(mv, { autoplay: true })"
+            @mouseenter="queueMvPreview(mv, getMvPreviewCardKey('watch', mv))"
+            @mouseleave="stopMvPreview(mv, getMvPreviewCardKey('watch', mv))"
           >
-            <span class="mv-video-card__cover">
+            <span class="mv-video-card__cover" :class="getMvPreviewCoverClass(mv, getMvPreviewCardKey('watch', mv))">
               <img v-if="mv.coverUrl" :src="mv.coverUrl" :alt="mv.title" loading="lazy" decoding="async" />
+              <video
+                v-if="isMvPreviewActive(mv, getMvPreviewCardKey('watch', mv)) && mvPreviewState.url"
+                ref="mvPreviewVideo"
+                class="mv-video-card__preview"
+                :class="{ 'is-ready': isMvPreviewReady(mv, getMvPreviewCardKey('watch', mv)) }"
+                :src="mvPreviewState.url"
+                muted
+                autoplay
+                loop
+                playsinline
+                preload="auto"
+                disablepictureinpicture
+                @loadeddata="handleMvPreviewReady(mv, getMvPreviewCardKey('watch', mv), $event)"
+                @canplay="handleMvPreviewReady(mv, getMvPreviewCardKey('watch', mv), $event)"
+                @error="handleMvPreviewError(mv, getMvPreviewCardKey('watch', mv), $event)"
+              />
+              <span
+                v-if="isMvPreviewLoading(mv, getMvPreviewCardKey('watch', mv))"
+                class="mv-video-card__preview-loading"
+                aria-hidden="true"
+              >
+                <LoaderCircle :size="18" class="mv-spin" />
+              </span>
               <em>{{ mv.duration || '--:--' }}</em>
               <span class="mv-video-card__play"><Play :size="17" fill="currentColor" /></span>
             </span>
@@ -283,8 +308,33 @@
             class="mv-hero-card"
             type="button"
             @click="selectMv(mv, { autoplay: true })"
+            @mouseenter="queueMvPreview(mv, getMvPreviewCardKey('hero', mv))"
+            @mouseleave="stopMvPreview(mv, getMvPreviewCardKey('hero', mv))"
           >
             <img v-if="mv.coverUrl" :src="mv.coverUrl" :alt="mv.title" loading="lazy" decoding="async" />
+            <video
+              v-if="isMvPreviewActive(mv, getMvPreviewCardKey('hero', mv)) && mvPreviewState.url"
+              ref="mvPreviewVideo"
+              class="mv-hero-card__preview"
+              :class="{ 'is-ready': isMvPreviewReady(mv, getMvPreviewCardKey('hero', mv)) }"
+              :src="mvPreviewState.url"
+              muted
+              autoplay
+              loop
+              playsinline
+              preload="auto"
+              disablepictureinpicture
+              @loadeddata="handleMvPreviewReady(mv, getMvPreviewCardKey('hero', mv), $event)"
+              @canplay="handleMvPreviewReady(mv, getMvPreviewCardKey('hero', mv), $event)"
+              @error="handleMvPreviewError(mv, getMvPreviewCardKey('hero', mv), $event)"
+            />
+            <span
+              v-if="isMvPreviewLoading(mv, getMvPreviewCardKey('hero', mv))"
+              class="mv-video-card__preview-loading mv-hero-card__preview-loading"
+              aria-hidden="true"
+            >
+              <LoaderCircle :size="18" class="mv-spin" />
+            </span>
             <span class="mv-hero-card__shade" />
             <span class="mv-hero-card__label">视频</span>
             <span class="mv-hero-card__caption">
@@ -311,9 +361,34 @@
                 class="mv-video-card"
                 type="button"
                 @click="selectMv(mv, { autoplay: true })"
+                @mouseenter="queueMvPreview(mv, getMvPreviewCardKey(section.id, mv))"
+                @mouseleave="stopMvPreview(mv, getMvPreviewCardKey(section.id, mv))"
               >
-                <span class="mv-video-card__cover">
+                <span class="mv-video-card__cover" :class="getMvPreviewCoverClass(mv, getMvPreviewCardKey(section.id, mv))">
                   <img v-if="mv.coverUrl" :src="mv.coverUrl" :alt="mv.title" loading="lazy" decoding="async" />
+                  <video
+                    v-if="isMvPreviewActive(mv, getMvPreviewCardKey(section.id, mv)) && mvPreviewState.url"
+                    ref="mvPreviewVideo"
+                    class="mv-video-card__preview"
+                    :class="{ 'is-ready': isMvPreviewReady(mv, getMvPreviewCardKey(section.id, mv)) }"
+                    :src="mvPreviewState.url"
+                    muted
+                    autoplay
+                    loop
+                    playsinline
+                    preload="auto"
+                    disablepictureinpicture
+                    @loadeddata="handleMvPreviewReady(mv, getMvPreviewCardKey(section.id, mv), $event)"
+                    @canplay="handleMvPreviewReady(mv, getMvPreviewCardKey(section.id, mv), $event)"
+                    @error="handleMvPreviewError(mv, getMvPreviewCardKey(section.id, mv), $event)"
+                  />
+                  <span
+                    v-if="isMvPreviewLoading(mv, getMvPreviewCardKey(section.id, mv))"
+                    class="mv-video-card__preview-loading"
+                    aria-hidden="true"
+                  >
+                    <LoaderCircle :size="18" class="mv-spin" />
+                  </span>
                   <span class="mv-video-card__count"><Video :size="12" />{{ mv.playCount }}</span>
                   <span class="mv-video-card__play"><Play :size="17" fill="currentColor" /></span>
                 </span>
@@ -370,9 +445,34 @@
                 class="mv-video-card"
                 type="button"
                 @click="selectMv(mv, { autoplay: true })"
+                @mouseenter="queueMvPreview(mv, getMvPreviewCardKey('library', mv))"
+                @mouseleave="stopMvPreview(mv, getMvPreviewCardKey('library', mv))"
               >
-                <span class="mv-video-card__cover">
+                <span class="mv-video-card__cover" :class="getMvPreviewCoverClass(mv, getMvPreviewCardKey('library', mv))">
                   <img v-if="mv.coverUrl" :src="mv.coverUrl" :alt="mv.title" loading="lazy" decoding="async" />
+                  <video
+                    v-if="isMvPreviewActive(mv, getMvPreviewCardKey('library', mv)) && mvPreviewState.url"
+                    ref="mvPreviewVideo"
+                    class="mv-video-card__preview"
+                    :class="{ 'is-ready': isMvPreviewReady(mv, getMvPreviewCardKey('library', mv)) }"
+                    :src="mvPreviewState.url"
+                    muted
+                    autoplay
+                    loop
+                    playsinline
+                    preload="auto"
+                    disablepictureinpicture
+                    @loadeddata="handleMvPreviewReady(mv, getMvPreviewCardKey('library', mv), $event)"
+                    @canplay="handleMvPreviewReady(mv, getMvPreviewCardKey('library', mv), $event)"
+                    @error="handleMvPreviewError(mv, getMvPreviewCardKey('library', mv), $event)"
+                  />
+                  <span
+                    v-if="isMvPreviewLoading(mv, getMvPreviewCardKey('library', mv))"
+                    class="mv-video-card__preview-loading"
+                    aria-hidden="true"
+                  >
+                    <LoaderCircle :size="18" class="mv-spin" />
+                  </span>
                   <span class="mv-video-card__count"><Video :size="12" />{{ mv.playCount }}</span>
                   <span class="mv-video-card__play"><Play :size="17" fill="currentColor" /></span>
                 </span>
@@ -475,6 +575,7 @@ const playerStage = ref(null)
 const videoElement = ref(null)
 const filteredLoadMoreTrigger = ref(null)
 const filteredVirtualList = ref(null)
+const mvPreviewVideo = ref(null)
 const activeBrowseTab = ref('recommend')
 const loading = ref(false)
 const filteredLoading = ref(false)
@@ -516,6 +617,15 @@ const videoState = reactive({
   volume: 1,
   muted: false
 })
+const mvPreviewState = reactive({
+  id: '',
+  cardKey: '',
+  playbackKey: '',
+  url: '',
+  loading: false,
+  ready: false,
+  error: ''
+})
 const commentState = reactive({
   visible: false,
   loading: false,
@@ -552,7 +662,11 @@ let filteredGridMetricsFrame = 0
 let nextMvPrefetchTimer = 0
 let nextMvPrefetchController = null
 let nextMvPrefetchKey = ''
+let mvPreviewTimer = 0
+let mvPreviewController = null
+let mvPreviewElement = null
 const nextMvPlaybackUrlCache = createLruCache(8)
+const mvPreviewPlaybackUrlCache = createLruCache(18)
 const DANMAKU_COMMENT_PAGE_SIZE = 24
 const CONTROLS_HIDE_DELAY_MS = 2200
 const CONTROLS_HIDE_REFRESH_INTERVAL_MS = 350
@@ -562,6 +676,8 @@ const FILTERED_GRID_ROW_GAP = 28
 const FILTERED_GRID_OVERSCAN_ROWS = 4
 const FILTERED_GRID_FALLBACK_ROWS = 8
 const NEXT_MV_PREFETCH_DELAY_MS = 700
+const MV_CARD_PREVIEW_DELAY_MS = 420
+const MV_CARD_PREVIEW_QUALITY = 720
 
 const activeMv = computed(() => activePayload.value?.mv ?? null)
 const activeVideoUrl = computed(() => normalizePlayableUrl(activeMv.value?.url))
@@ -742,6 +858,8 @@ watch(
 )
 
 watch(activeBrowseTab, async (tab) => {
+  stopMvPreview()
+
   if (tab !== 'library') {
     return
   }
@@ -802,6 +920,261 @@ function updateFilteredGridMetrics() {
   if (columnsChanged) {
     nextTick(scheduleFilteredGridMetrics)
   }
+}
+
+function getMvPreviewCardKey(scope, mv = {}) {
+  const id = String(mv?.id ?? mv?.hash ?? mv?.mvHash ?? '')
+  return `${scope || 'mv'}:${id}`
+}
+
+function getMvPreviewPlaybackKey(mv = {}) {
+  const source = withCurrentMvPlatform(mv)
+  return getMvPlaybackPrefetchKey(source?.id, MV_CARD_PREVIEW_QUALITY, getMvPlaybackPlatform(source))
+}
+
+function getMvPreviewCoverClass(mv, cardKey) {
+  return {
+    'is-previewing': isMvPreviewActive(mv, cardKey),
+    'is-preview-loading': isMvPreviewLoading(mv, cardKey),
+    'is-preview-ready': isMvPreviewReady(mv, cardKey)
+  }
+}
+
+function isMvPreviewActive(mv, cardKey) {
+  return Boolean(
+    cardKey &&
+      mvPreviewState.cardKey === cardKey &&
+      mvPreviewState.playbackKey === getMvPreviewPlaybackKey(mv)
+  )
+}
+
+function isMvPreviewLoading(mv, cardKey) {
+  return isMvPreviewActive(mv, cardKey) && mvPreviewState.loading
+}
+
+function isMvPreviewReady(mv, cardKey) {
+  return isMvPreviewActive(mv, cardKey) && mvPreviewState.ready
+}
+
+function queueMvPreview(mv, cardKey) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const source = withCurrentMvPlatform(mv)
+  const playbackKey = getMvPreviewPlaybackKey(source)
+
+  if (!source?.id || !cardKey || !playbackKey) {
+    return
+  }
+
+  if (
+    mvPreviewState.cardKey === cardKey &&
+    mvPreviewState.playbackKey === playbackKey &&
+    (mvPreviewState.loading || mvPreviewState.url)
+  ) {
+    return
+  }
+
+  stopMvPreview()
+
+  mvPreviewState.id = String(source.id)
+  mvPreviewState.cardKey = cardKey
+  mvPreviewState.playbackKey = playbackKey
+  mvPreviewState.url = ''
+  mvPreviewState.loading = true
+  mvPreviewState.ready = false
+  mvPreviewState.error = ''
+
+  const cachedPlaybackUrl =
+    mvPreviewPlaybackUrlCache.get(playbackKey) ?? nextMvPlaybackUrlCache.get(playbackKey)
+
+  if (cachedPlaybackUrl?.url) {
+    applyMvPreviewUrl(cachedPlaybackUrl, playbackKey)
+    return
+  }
+
+  mvPreviewTimer = window.setTimeout(() => {
+    mvPreviewTimer = 0
+    loadMvPreview(source, playbackKey)
+  }, MV_CARD_PREVIEW_DELAY_MS)
+}
+
+async function loadMvPreview(source, playbackKey) {
+  if (!source?.id || mvPreviewState.playbackKey !== playbackKey) {
+    return
+  }
+
+  const controller = new AbortController()
+  mvPreviewController = controller
+
+  try {
+    const playbackUrl = await getMvPlaybackUrlData(
+      source.id,
+      MV_CARD_PREVIEW_QUALITY,
+      source,
+      { signal: controller.signal }
+    )
+
+    if (controller.signal.aborted || mvPreviewState.playbackKey !== playbackKey) {
+      return
+    }
+
+    if (playbackUrl?.url) {
+      mvPreviewPlaybackUrlCache.set(playbackKey, playbackUrl)
+      applyMvPreviewUrl(playbackUrl, playbackKey)
+    } else {
+      markMvPreviewError(playbackKey)
+    }
+  } catch (error) {
+    if (!isAbortError(error)) {
+      console.debug('Failed to load MV card preview:', error)
+      markMvPreviewError(playbackKey)
+    }
+  } finally {
+    if (mvPreviewController === controller) {
+      mvPreviewController = null
+    }
+  }
+}
+
+function applyMvPreviewUrl(playbackUrl, playbackKey) {
+  if (mvPreviewState.playbackKey !== playbackKey) {
+    return
+  }
+
+  const url = normalizePlayableUrl(playbackUrl?.url)
+
+  if (!url) {
+    markMvPreviewError(playbackKey)
+    return
+  }
+
+  mvPreviewState.url = url
+  mvPreviewState.loading = true
+  mvPreviewState.ready = false
+  mvPreviewState.error = ''
+  nextTick(() => playMvPreviewVideo(playbackKey))
+}
+
+function handleMvPreviewReady(mv, cardKey, event) {
+  if (!isMvPreviewActive(mv, cardKey)) {
+    return
+  }
+
+  mvPreviewElement = event?.target ?? mvPreviewElement
+  mvPreviewState.loading = false
+  mvPreviewState.ready = true
+  playMvPreviewVideo(mvPreviewState.playbackKey)
+}
+
+function handleMvPreviewError(mv, cardKey, event) {
+  const video = event?.target
+
+  if (video && !video.currentSrc && !video.src) {
+    return
+  }
+
+  if (isMvPreviewActive(mv, cardKey)) {
+    markMvPreviewError(mvPreviewState.playbackKey)
+  }
+}
+
+async function playMvPreviewVideo(playbackKey) {
+  await nextTick()
+
+  if (mvPreviewState.playbackKey !== playbackKey || !mvPreviewState.url) {
+    return
+  }
+
+  const video = getMvPreviewVideoElement()
+
+  if (!video) {
+    return
+  }
+
+  mvPreviewElement = video
+  video.muted = true
+  video.volume = 0
+
+  try {
+    await video.play()
+  } catch (error) {
+    if (mvPreviewState.playbackKey === playbackKey) {
+      mvPreviewState.loading = false
+    }
+  }
+}
+
+function getMvPreviewVideoElement() {
+  return Array.isArray(mvPreviewVideo.value)
+    ? mvPreviewVideo.value.find(Boolean) ?? null
+    : mvPreviewVideo.value
+}
+
+function markMvPreviewError(playbackKey) {
+  if (mvPreviewState.playbackKey !== playbackKey) {
+    return
+  }
+
+  mvPreviewState.loading = false
+  mvPreviewState.ready = false
+  mvPreviewState.error = 'preview-failed'
+}
+
+function stopMvPreview(mv = null, cardKey = '') {
+  if (mv && cardKey && !isMvPreviewActive(mv, cardKey)) {
+    return
+  }
+
+  cancelMvPreviewTimer()
+
+  if (mvPreviewController) {
+    mvPreviewController.abort()
+    mvPreviewController = null
+  }
+
+  releaseMvPreviewVideo()
+  resetMvPreviewState()
+}
+
+function cancelMvPreviewTimer() {
+  if (mvPreviewTimer && typeof window !== 'undefined') {
+    window.clearTimeout(mvPreviewTimer)
+    mvPreviewTimer = 0
+  }
+}
+
+function releaseMvPreviewVideo() {
+  const video = mvPreviewElement ?? getMvPreviewVideoElement()
+
+  if (!video) {
+    mvPreviewElement = null
+    return
+  }
+
+  try {
+    if (!video.paused) {
+      video.pause()
+    }
+
+    video.removeAttribute('src')
+    video.load()
+  } catch (error) {
+    console.debug('Failed to release MV card preview:', error)
+  } finally {
+    mvPreviewElement = null
+  }
+}
+
+function resetMvPreviewState() {
+  mvPreviewState.id = ''
+  mvPreviewState.cardKey = ''
+  mvPreviewState.playbackKey = ''
+  mvPreviewState.url = ''
+  mvPreviewState.loading = false
+  mvPreviewState.ready = false
+  mvPreviewState.error = ''
 }
 
 function scheduleNextMvPrefetch() {
@@ -891,6 +1264,7 @@ function cancelPendingMvRequests() {
   cancelPlaybackRequest()
   cancelQualityRequest()
   cancelNextMvPrefetch()
+  stopMvPreview()
   danmakuCommentRequestId += 1
 }
 
@@ -1127,6 +1501,7 @@ function openMore(tab) {
 }
 
 async function reloadFiltered() {
+  stopMvPreview()
   filteredLoadMoreController.cleanup()
   cancelFilteredRequest()
   filteredOffset.value = 0
@@ -1203,6 +1578,7 @@ async function selectMv(mv, options = {}) {
     return
   }
 
+  stopMvPreview()
   cancelPlaybackRequest()
   cancelQualityRequest()
   const requestId = ++playbackRequestId
@@ -1652,6 +2028,7 @@ function clearControlsTimer() {
 }
 
 function backToBrowse() {
+  stopMvPreview()
   releaseActiveVideo()
   resetVideoState()
   router.replace({ name: 'video' })
@@ -1901,7 +2278,8 @@ function getMvPlaybackPrefetchKey(id, quality = 1080, platform = 'netease') {
 }
 
 function getCachedMvPlaybackUrl(id, quality = 1080, mv = {}) {
-  return nextMvPlaybackUrlCache.get(getMvPlaybackPrefetchKey(id, quality, getMvPlaybackPlatform(mv))) ?? null
+  const key = getMvPlaybackPrefetchKey(id, quality, getMvPlaybackPlatform(mv))
+  return nextMvPlaybackUrlCache.get(key) ?? mvPreviewPlaybackUrlCache.get(key) ?? null
 }
 
 function prefetchMvPoster(coverUrl) {

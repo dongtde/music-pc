@@ -1,6 +1,5 @@
 import axios from 'axios'
-import { API_CONFIG, STORAGE_KEYS } from '../../config/app'
-import { readStorage } from '../../utils/storage'
+import { API_CONFIG } from '../../config/app'
 
 const neteaseHttp = axios.create({
   baseURL: API_CONFIG.neteaseBaseURL,
@@ -8,26 +7,18 @@ const neteaseHttp = axios.create({
   withCredentials: false
 })
 
-neteaseHttp.interceptors.request.use((config) => {
-  const cookie = readStorage(STORAGE_KEYS.neteaseCookie, '')
-
-  if (cookie && !config.params?.cookie) {
-    config.params = {
-      ...(config.params ?? {}),
-      cookie
-    }
-  }
-
-  return config
-})
-
 neteaseHttp.interceptors.response.use((response) => response.data, (error) => Promise.reject(error))
 
 function getNetease(path, params = {}, config = {}) {
   return neteaseHttp.get(path, {
     ...config,
-    params
+    params: withoutCookieParam(params)
   })
+}
+
+function withoutCookieParam(params = {}) {
+  const { cookie, ...rest } = params ?? {}
+  return rest
 }
 
 export function getPersonalizedMvs(params = {}, config = {}) {

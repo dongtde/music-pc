@@ -2374,15 +2374,51 @@
 .radio-cover::after {
   position: absolute;
   inset: 0;
+  z-index: 2;
   background: linear-gradient(180deg, transparent 45%, rgba(0, 0, 0, 0.62));
   content: '';
+}
+
+.mv-cover__preview {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.mv-cover__preview.is-ready {
+  opacity: 1;
+}
+
+.mv-preview-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 5;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.58);
+  transform: translate(-50%, -50%);
+}
+
+.mv-preview-spin {
+  animation: mv-preview-spin 900ms linear infinite;
 }
 
 .mv-hover-bg,
 .radio-hover-bg {
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 3;
   background: rgba(var(--accent-rgb), 0.26);
   opacity: 0;
   transition: opacity 220ms ease;
@@ -2393,12 +2429,16 @@
   opacity: 1;
 }
 
+.mv-card:hover .mv-cover.is-preview-ready .mv-hover-bg {
+  opacity: 0;
+}
+
 .mv-play,
 .radio-play {
   position: absolute;
   top: 50%;
   left: 50%;
-  z-index: 2;
+  z-index: 4;
   display: grid;
   width: 42px;
   height: 42px;
@@ -2420,15 +2460,26 @@
   transform: translate(-50%, -50%) scale(1);
 }
 
+.mv-card:hover .mv-cover.is-preview-loading .mv-play,
+.mv-card:hover .mv-cover.is-preview-ready .mv-play {
+  opacity: 0;
+  transform: translate(-50%, calc(-50% + 8px)) scale(0.92);
+}
+
 .mv-cover em {
   position: absolute;
   right: 12px;
   bottom: 10px;
-  z-index: 2;
+  z-index: 4;
   color: #ffffff;
   font-size: 12px;
   font-style: normal;
   font-weight: 800;
+  transition: opacity 180ms ease;
+}
+
+.mv-card:hover .mv-cover em {
+  opacity: 0;
 }
 
 .radio-grid {
@@ -2921,6 +2972,12 @@
   }
 }
 
+@keyframes mv-preview-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .skeleton-hero::after,
   .skeleton-line,
@@ -2938,7 +2995,8 @@
   .skeleton-radio-icon,
   .skeleton-chart-summary-cover,
   .skeleton-carousel-button,
-  .skeleton-region-chart-card {
+  .skeleton-region-chart-card,
+  .mv-preview-spin {
     animation: none;
   }
 }

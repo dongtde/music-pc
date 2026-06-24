@@ -17,9 +17,36 @@
       </div>
     </template>
 
-    <div class="comment-modal__scroll" @scroll.passive="handleScroll">
-      <div v-if="loading && !comments.length" class="comment-modal__state">
-        {{ loadingText }}
+    <div
+      class="comment-modal__scroll"
+      :aria-busy="loading || undefined"
+      @scroll.passive="handleScroll"
+    >
+      <div
+        v-if="loading && !comments.length"
+        class="comment-modal__skeleton"
+        role="status"
+        aria-live="polite"
+        :aria-label="loadingText"
+      >
+        <span class="comment-modal__skeleton-title" aria-hidden="true" />
+        <article
+          v-for="item in initialSkeletonCount"
+          :key="`comment-skeleton-${item}`"
+          class="comment-modal-skeleton"
+          aria-hidden="true"
+        >
+          <span class="comment-modal-skeleton__avatar" />
+          <span class="comment-modal-skeleton__body">
+            <span class="comment-modal-skeleton__meta">
+              <span class="comment-modal-skeleton__line comment-modal-skeleton__line--name" />
+              <span class="comment-modal-skeleton__line comment-modal-skeleton__line--time" />
+            </span>
+            <span class="comment-modal-skeleton__line comment-modal-skeleton__line--copy" />
+            <span class="comment-modal-skeleton__line comment-modal-skeleton__line--copy-short" />
+            <span class="comment-modal-skeleton__line comment-modal-skeleton__line--action" />
+          </span>
+        </article>
       </div>
       <div v-else-if="error" class="comment-modal__state comment-modal__state--error">
         {{ error }}
@@ -90,8 +117,28 @@
           <div v-if="!comments.length" class="comment-modal__state">
             {{ emptyText }}
           </div>
-          <div v-if="loading && comments.length" class="comment-modal__loading-more">
-            {{ moreLoadingText }}
+          <div
+            v-if="loading && comments.length"
+            class="comment-modal__loading-more"
+            role="status"
+            aria-live="polite"
+            :aria-label="moreLoadingText"
+          >
+            <article
+              v-for="item in moreSkeletonCount"
+              :key="`comment-more-skeleton-${item}`"
+              class="comment-modal-skeleton comment-modal-skeleton--compact"
+              aria-hidden="true"
+            >
+              <span class="comment-modal-skeleton__avatar" />
+              <span class="comment-modal-skeleton__body">
+                <span class="comment-modal-skeleton__meta">
+                  <span class="comment-modal-skeleton__line comment-modal-skeleton__line--name" />
+                  <span class="comment-modal-skeleton__line comment-modal-skeleton__line--time" />
+                </span>
+                <span class="comment-modal-skeleton__line comment-modal-skeleton__line--copy" />
+              </span>
+            </article>
           </div>
         </section>
       </template>
@@ -103,6 +150,9 @@
 import { computed, watch } from 'vue'
 import { ThumbsUp } from 'lucide-vue-next'
 import '../styles/comment-modal.css'
+
+const initialSkeletonCount = 5
+const moreSkeletonCount = 2
 
 const props = defineProps({
   show: {
