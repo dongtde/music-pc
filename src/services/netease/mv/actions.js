@@ -1,4 +1,4 @@
-import { likeResource as likeNeteaseResource, subscribeMv as subscribeNeteaseMv } from '../../../api/modules/neteaseLegacy'
+import { likeResource as likeNeteaseResource, subscribeMv as subscribeNeteaseMv } from '../../../api/modules/netease'
 
 export async function toggleMvSubscribeData({ id, subscribe }) {
   return subscribeNeteaseMv({

@@ -64,6 +64,12 @@ export const routes = [
     meta: { title: '视频', icon: 'Video' }
   },
   {
+    path: '/kugou-mv/:id?',
+    name: 'kugou-video',
+    component: () => import('../views/VideoView.vue'),
+    meta: { title: '酷狗 MV', icon: 'Video', mvPlatform: 'kugou' }
+  },
+  {
     path: '/friends',
     name: 'friends',
     component: () => import('../views/SimpleView.vue'),

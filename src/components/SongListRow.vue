@@ -93,6 +93,7 @@ import { AudioLines, Play, Video } from 'lucide-vue-next'
 import { usePlayerStore } from '../stores/player'
 import { useAuthStore } from '../stores/auth'
 import { getAudioQualityBadges } from '../utils/audioQuality'
+import { createKugouMvRouteTarget } from '../utils/mv'
 import { getSongAccessBadges } from '../utils/songAccess'
 
 const player = usePlayerStore()
@@ -181,13 +182,13 @@ function getAlbumTarget(track) {
 }
 
 function getVideoTarget(track) {
-  if (!track.hasVideo) {
+  const target = createKugouMvRouteTarget(track)
+
+  if (!track.hasVideo && !target.params?.id) {
     return ''
   }
 
-  const mvId = normalizeRouteId(track.mvId ?? track.videoId ?? track.mv)
-
-  return mvId ? { name: 'video', query: { mvId } } : { name: 'video' }
+  return target
 }
 
 function normalizeRouteId(value) {

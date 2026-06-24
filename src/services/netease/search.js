@@ -6,6 +6,7 @@ import {
 } from '../../api/modules/netease'
 import { CACHE_TTL } from '../../config/app'
 import { normalizeAudioQualities } from '../../utils/audioQuality'
+import { createKugouMvRouteTarget, getMvRouteMeta } from '../../utils/mv'
 import { isAbortError } from '../../utils/request'
 import { isVipSong, normalizeSongAccess } from '../../utils/songAccess'
 import { cacheKey, getCachedData } from '../cache'
@@ -287,8 +288,14 @@ function mapSearchUser(user) {
 }
 
 function mapSearchMv(mv) {
+  const hash = getMvHash(mv)
+  const to = mv.id
+    ? createKugouMvRouteTarget({ mvId: mv.id, mvHash: hash }, mv)
+    : { name: 'kugou-video' }
+
   return {
     id: mv.id,
+    hash,
     type: 'mv',
     title: mv.name,
     name: mv.name,
@@ -298,8 +305,39 @@ function mapSearchMv(mv) {
       formatDuration(mv.duration)
     ].filter(Boolean).join(' · '),
     coverUrl: mv.cover ?? mv.imgurl ?? mv.picUrl,
-    to: mv.id ? { name: 'video', query: { mvId: mv.id } } : { name: 'video' }
+    to
   }
+}
+
+function getMvHash(mv = {}) {
+  const hash =
+    mv.hash ||
+    mv.Hash ||
+    mv.video_hash ||
+    mv.VideoHash ||
+    mv.mvhash ||
+    mv.MVHash ||
+    mv.mv_hash ||
+    mv.mkv_hash ||
+    mv.mkv_sd_hash ||
+    mv.mkv_hd_hash ||
+    mv.mkv_sq_hash ||
+    mv.fhd_hash ||
+    mv.fhd_hash_265 ||
+    mv.qhd_hash ||
+    mv.qhd_hash_265 ||
+    mv.hd_hash ||
+    mv.hd_hash_265 ||
+    mv.sd_hash ||
+    mv.sd_hash_265 ||
+    mv.ld_hash ||
+    mv.ld_hash_265
+
+  if (hash) {
+    return hash
+  }
+
+  return mv.id && !/^\d+$/.test(String(mv.id)) ? mv.id : ''
 }
 
 function getArtistIds(artists = []) {
@@ -310,8 +348,10 @@ function getArtistIds(artists = []) {
 
 function getKugouTrackMeta(song = {}) {
   const access = normalizeSongAccess(song)
+  const mvMeta = getMvRouteMeta(song)
 
   return {
+    ...mvMeta,
     hash: song.hash || song.file_hash || song.audio_hash || song.hash_128 || song['128hash'] || '',
     album_audio_id: song.album_audio_id ?? song.mixsongid ?? song.add_mixsongid ?? song.audio_id ?? '',
     mixsongid: song.mixsongid ?? song.add_mixsongid ?? song.album_audio_id ?? '',

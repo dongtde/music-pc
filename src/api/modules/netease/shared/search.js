@@ -310,10 +310,35 @@ export function normalizeSearchMv(mv = {}, index = 0) {
       ]),
       640
     )
+    const id = pickField(mv, ['id', 'ID', 'video_id', 'VideoID', 'VideoId', 'mvid', 'MVID', 'mv_id', 'MvID', 'hash', 'Hash', 'video_hash'])
+    const hash =
+      pickField(mv, [
+        'hash',
+        'Hash',
+        'video_hash',
+        'VideoHash',
+        'MvHash',
+        'MVHash',
+        'mvhash',
+        'mkv_sd_hash',
+        'fhd_hash',
+        'fhd_hash_265',
+        'qhd_hash',
+        'qhd_hash_265',
+        'hd_hash',
+        'hd_hash_265',
+        'sd_hash',
+        'sd_hash_265',
+        'ld_hash',
+        'ld_hash_265'
+      ]) ||
+      (/^\d+$/.test(String(id ?? '')) ? '' : id)
 
     return {
       ...mv,
-      id: pickField(mv, ['id', 'ID', 'video_id', 'VideoID', 'VideoId', 'mvid', 'MVID', 'mv_id', 'MvID', 'hash', 'Hash', 'video_hash']),
+      id,
+      hash,
+      videoId: pickField(mv, ['video_id', 'VideoID', 'VideoId', 'id', 'ID', 'mvid', 'MVID', 'mv_id', 'MvID']),
       name: cleanKugouText(pickField(mv, ['name', 'Name', 'video_name', 'VideoName', 'title', 'Title'])) || filename.name || '鏈懡鍚?MV',
       artistName:
         cleanKugouText(pickField(mv, ['artistName', 'author_name', 'AuthorName', 'singername', 'SingerName', 'artist_name'])) ||

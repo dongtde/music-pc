@@ -787,6 +787,9 @@ function serializeTrack(track) {
     commentCountLabel: track.commentCountLabel,
     vip: track.vip,
     hasVideo: track.hasVideo,
+    mvId: track.mvId,
+    mvHash: track.mvHash,
+    videoId: track.videoId,
     to: track.to
   }
 }

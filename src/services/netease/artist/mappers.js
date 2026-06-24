@@ -1,4 +1,5 @@
 import { isVipSong } from '../../../utils/songAccess'
+import { createKugouMvRouteTarget } from '../../../utils/mv'
 import {
   coverType,
   formatAlbumDate,
@@ -140,10 +141,15 @@ export function mapArtistVideo(record = {}, index = 0) {
   const base = resource.mlogBaseData ?? record.mlogBaseData ?? {}
   const ext = resource.mlogExtVO ?? record.mlogExtVO ?? {}
   const id = base.id ?? record.id
+  const hash = getMvHash(record, base, ext)
   const artists = Array.isArray(ext.artists) ? ext.artists : []
+  const to = id
+    ? createKugouMvRouteTarget({ mvId: id, mvHash: hash }, record, base, ext)
+    : { name: 'kugou-video' }
 
   return {
     id,
+    hash,
     title: record.name || record.title || base.text || base.originalTitle || ext.song?.name || '视频',
     description: record.desc || base.desc || '',
     artist: record.artistName || ext.artistName || getArtistNames(artists),
@@ -155,6 +161,43 @@ export function mapArtistVideo(record = {}, index = 0) {
     songName: ext.song?.name || '',
     shareUrl: resource.shareUrl || '',
     type: coverType(index),
-    to: id ? { name: 'video', query: { mvId: id } } : { name: 'video' }
+    to
   }
+}
+
+function getMvHash(...sources) {
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') {
+      continue
+    }
+
+    const hash =
+      source.hash ||
+      source.Hash ||
+      source.video_hash ||
+      source.VideoHash ||
+      source.mvhash ||
+      source.MVHash ||
+      source.mv_hash ||
+      source.mkv_hash ||
+      source.mkv_sd_hash ||
+      source.mkv_hd_hash ||
+      source.mkv_sq_hash ||
+      source.fhd_hash ||
+      source.fhd_hash_265 ||
+      source.qhd_hash ||
+      source.qhd_hash_265 ||
+      source.hd_hash ||
+      source.hd_hash_265 ||
+      source.sd_hash ||
+      source.sd_hash_265 ||
+      source.ld_hash ||
+      source.ld_hash_265
+
+    if (hash) {
+      return hash
+    }
+  }
+
+  return ''
 }

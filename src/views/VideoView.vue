@@ -450,6 +450,7 @@ import {
 import { useAuthStore } from '../stores/auth'
 import { usePlayerStore } from '../stores/player'
 import { createLruCache } from '../utils/lruCache'
+import { createKugouMvRouteTarget, createMvRouteQuery as createSharedMvRouteQuery } from '../utils/mv'
 import { isAbortError } from '../utils/request'
 import { parseDuration } from '../utils/time'
 import '../styles/mv.css'
@@ -564,7 +565,10 @@ const NEXT_MV_PREFETCH_DELAY_MS = 700
 
 const activeMv = computed(() => activePayload.value?.mv ?? null)
 const activeVideoUrl = computed(() => normalizePlayableUrl(activeMv.value?.url))
-const isWatchMode = computed(() => Boolean(route.query.mvId))
+const isKugouMvRoute = computed(() => route.name === 'kugou-video' || route.meta?.mvPlatform === 'kugou')
+const routeMvId = computed(() => normalizeRouteValue(isKugouMvRoute.value ? route.params.id ?? route.query.mvId : route.query.mvId))
+const routeMvHash = computed(() => normalizeRouteValue(route.query.mvHash))
+const isWatchMode = computed(() => Boolean(routeMvId.value))
 const isVideoPlaying = computed(() => videoState.isPlaying)
 const progressPercent = computed(() => {
   const duration = videoState.duration || parseDuration(activeMv.value?.duration)
@@ -715,18 +719,24 @@ onBeforeRouteLeave(() => {
 })
 
 watch(
-  () => route.query.mvId,
-  (id) => {
-    if (id && String(id) !== String(activeMv.value?.id ?? '')) {
-      selectMv({ id }, { replace: true, autoplay: true })
+  () => [route.name, route.params.id, route.query.mvId, route.query.mvHash],
+  () => {
+    const routeMv = getCurrentRouteMv()
+
+    if (routeMv?.id) {
+      if (hasActiveRouteMvChanged(routeMv)) {
+        selectMv(routeMv, { replace: true, autoplay: true })
+      }
       return
     }
 
-    if (!id) {
-      cancelPlaybackRequest()
-      cancelQualityRequest()
-      releaseActiveVideo()
-      resetVideoState()
+    cancelPlaybackRequest()
+    cancelQualityRequest()
+    releaseActiveVideo()
+    resetVideoState()
+
+    if (!isKugouMvRoute.value && !hasBrowseData() && !loading.value) {
+      loadBootData()
     }
   }
 )
@@ -795,9 +805,9 @@ function updateFilteredGridMetrics() {
 }
 
 function scheduleNextMvPrefetch() {
-  const candidate = nextPlaybackCandidate.value
+  const candidate = withCurrentMvPlatform(nextPlaybackCandidate.value)
   const quality = getPreferredMvPlaybackQuality()
-  const key = getMvPlaybackPrefetchKey(candidate?.id, quality)
+  const key = getMvPlaybackPrefetchKey(candidate?.id, quality, getMvPlaybackPlatform(candidate))
 
   if (!candidate?.id || !key) {
     cancelNextMvPrefetch()
@@ -928,6 +938,109 @@ function cancelQualityRequest() {
   loading.value = false
 }
 
+function normalizeRouteValue(value) {
+  const firstValue = Array.isArray(value) ? value[0] : value
+
+  return firstValue === undefined || firstValue === null || firstValue === '' ? '' : String(firstValue)
+}
+
+function getCurrentRouteMv() {
+  if (!routeMvId.value) {
+    return null
+  }
+
+  return withCurrentMvPlatform({
+    id: routeMvId.value,
+    ...(routeMvHash.value ? { hash: routeMvHash.value, mvHash: routeMvHash.value } : {})
+  })
+}
+
+function hasActiveRouteMvChanged(routeMv = {}) {
+  if (!activeMv.value?.id) {
+    return true
+  }
+
+  if (String(routeMv.id) !== String(activeMv.value.id)) {
+    return true
+  }
+
+  const routeHash = routeMv.hash || routeMv.mvHash || ''
+  const activeHash = activeMv.value.hash || activeMv.value.mvHash || ''
+
+  if (routeHash && String(routeHash) !== String(activeHash)) {
+    return true
+  }
+
+  return getMvPlaybackPlatform(routeMv, { includeRoute: false }) !== getMvPlaybackPlatform(activeMv.value, { includeRoute: false })
+}
+
+function withCurrentMvPlatform(mv = {}) {
+  if (!mv || typeof mv !== 'object') {
+    return mv
+  }
+
+  return getMvPlaybackPlatform(mv) === 'kugou' ? markKugouMv(mv) : mv
+}
+
+function normalizePlaybackPayload(data = {}, sourceMv = {}) {
+  if (getMvPlaybackPlatform(sourceMv, { includeRoute: false }) !== 'kugou') {
+    return data
+  }
+
+  return {
+    ...data,
+    mv: markKugouMv(data.mv ?? sourceMv),
+    similar: (data.similar ?? []).map(markKugouMv),
+    artistMvs: (data.artistMvs ?? []).map(markKugouMv)
+  }
+}
+
+function markKugouMv(mv = {}) {
+  if (!mv || typeof mv !== 'object') {
+    return mv
+  }
+
+  return {
+    ...mv,
+    platform: 'kugou',
+    sourcePlatform: 'kugou'
+  }
+}
+
+function getMvPlaybackPlatform(mv = {}, { includeRoute = true } = {}) {
+  if (mv?.platform === 'kugou' || mv?.sourcePlatform === 'kugou') {
+    return 'kugou'
+  }
+
+  return includeRoute && isKugouMvRoute.value ? 'kugou' : 'netease'
+}
+
+function createMvRouteTarget(mv = {}) {
+  const source = withCurrentMvPlatform(mv)
+  const routeMeta = {
+    mvId: source?.id,
+    mvHash: source?.hash || source?.mvHash
+  }
+
+  if (getMvPlaybackPlatform(source, { includeRoute: false }) === 'kugou') {
+    return createKugouMvRouteTarget(routeMeta, source)
+  }
+
+  const query = createSharedMvRouteQuery(routeMeta, source)
+
+  return query ? { name: 'video', query } : { name: 'video' }
+}
+
+function hasBrowseData() {
+  return Boolean(
+    recommendedMvs.value.length ||
+      firstMvs.value.length ||
+      exclusiveMvs.value.length ||
+      topMvs.value.length ||
+      filteredMvs.value.length
+  )
+}
+
 async function loadBootData() {
   cancelBootRequest()
   const requestId = ++bootRequestId
@@ -937,6 +1050,17 @@ async function loadBootData() {
   errorMessage.value = ''
 
   try {
+    if (isKugouMvRoute.value) {
+      const routeMv = getCurrentRouteMv()
+
+      if (routeMv?.id) {
+        await selectMv(routeMv, { replace: true, silent: true, autoplay: true })
+      } else {
+        errorMessage.value = 'MV id is empty'
+      }
+      return
+    }
+
     const data = await getVideoCenterData({
       area: filters.area,
       type: filters.type,
@@ -964,9 +1088,9 @@ async function loadBootData() {
     await nextTick()
     scheduleFilteredGridMetrics()
 
-    const routeMvId = route.query.mvId
-    if (routeMvId) {
-      await selectMv({ id: routeMvId }, { replace: true, silent: true, autoplay: true })
+    const routeMv = getCurrentRouteMv()
+    if (routeMv?.id) {
+      await selectMv(routeMv, { replace: true, silent: true, autoplay: true })
     } else if (data.active?.mv) {
       setActivePayload(data.active)
     }
@@ -1073,7 +1197,8 @@ async function loadFiltered({ reset = false } = {}) {
 }
 
 async function selectMv(mv, options = {}) {
-  const id = mv?.id
+  const sourceMv = withCurrentMvPlatform(mv)
+  const id = sourceMv?.id
   if (!id) {
     return
   }
@@ -1091,18 +1216,27 @@ async function selectMv(mv, options = {}) {
 
   try {
     const quality = options.quality || 1080
-    const prefetchedPlaybackUrl = getCachedMvPlaybackUrl(id, quality)
+    const prefetchedPlaybackUrl = getCachedMvPlaybackUrl(id, quality, sourceMv)
+    const applyDetailPayload = (detailData) => {
+      if (requestId !== playbackRequestId || controller.signal.aborted) {
+        return
+      }
+
+      setActivePayload(normalizePlaybackPayload(detailData, sourceMv))
+    }
     const data = await getMvPlaybackData(id, quality, {
-      signal: controller.signal
-    }, prefetchedPlaybackUrl)
+      signal: controller.signal,
+      onDetail: applyDetailPayload
+    }, prefetchedPlaybackUrl, sourceMv)
 
     if (requestId !== playbackRequestId || controller.signal.aborted) {
       return
     }
 
-    setActivePayload(data)
+    const payload = normalizePlaybackPayload(data, sourceMv)
+    setActivePayload(payload)
     if (!options.replace) {
-      router.replace({ name: 'video', query: { mvId: id } })
+      router.replace(createMvRouteTarget(payload.mv ?? sourceMv))
     }
     if (!options.silent) {
       scrollToPlayer()
@@ -1238,7 +1372,7 @@ async function applyActiveMvPlaybackUrl({
   const requestId = ++qualityRequestId
   const controller = new AbortController()
   qualityRequestController = controller
-  const currentMv = activeMv.value
+  const currentMv = withCurrentMvPlatform(activeMv.value)
   loading.value = true
   videoState.error = ''
   videoState.recoverable = false
@@ -1756,18 +1890,18 @@ function getPreferredMvPlaybackQuality() {
   return Number(activeMv.value?.urlQuality) || Number(qualityOptions.value[0]) || 1080
 }
 
-function getMvPlaybackPrefetchKey(id, quality = 1080) {
+function getMvPlaybackPrefetchKey(id, quality = 1080, platform = 'netease') {
   const normalizedId = String(id ?? '')
 
   if (!normalizedId) {
     return ''
   }
 
-  return `${normalizedId}:${Number(quality) || 1080}`
+  return `${platform || 'netease'}:${normalizedId}:${Number(quality) || 1080}`
 }
 
-function getCachedMvPlaybackUrl(id, quality = 1080) {
-  return nextMvPlaybackUrlCache.get(getMvPlaybackPrefetchKey(id, quality)) ?? null
+function getCachedMvPlaybackUrl(id, quality = 1080, mv = {}) {
+  return nextMvPlaybackUrlCache.get(getMvPlaybackPrefetchKey(id, quality, getMvPlaybackPlatform(mv))) ?? null
 }
 
 function prefetchMvPoster(coverUrl) {

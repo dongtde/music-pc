@@ -339,7 +339,14 @@ export function toArtistVideosResponse(response = {}) {
     name: item.video_name || item.name || item.title || item.filename || '视频',
     cover: normalizeKugouImage(item.hdpic || item.cover || item.imgurl || item.sizable_cover, 640),
     playCount: item.play_count ?? item.playCount ?? item.history_heat ?? item.heat ?? 0,
-    hash: item.hash || item.mkv_sd_hash || item.audio_hash,
+    hash:
+      item.hash ||
+      item.mkv_sd_hash ||
+      item.fhd_hash ||
+      item.hd_hash ||
+      item.sd_hash ||
+      item.ld_hash ||
+      item.audio_hash,
     publishTime: item.publish_date || '',
     desc: item.remark || item.topic || item.intro || ''
   }))
@@ -377,7 +384,15 @@ export function toMvListResponse(response = {}) {
       artistName: item.author_name || item.singername || item.artist_name || '',
       playCount: item.play_count ?? item.playCount ?? item.heat ?? 0,
       duration: toMilliseconds(item.duration || item.timelength || item.video_timelength),
-      hash: item.hash || item.video_hash || item.mvhash,
+      hash:
+        item.hash ||
+        item.video_hash ||
+        item.mvhash ||
+        item.mkv_sd_hash ||
+        item.fhd_hash ||
+        item.hd_hash ||
+        item.sd_hash ||
+        item.ld_hash,
       rank: index + 1
     }))
 

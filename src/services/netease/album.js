@@ -8,6 +8,7 @@ import {
 } from '../../api/modules/netease'
 import { COVER_TYPES } from '../../config/app'
 import { normalizeAudioQualities } from '../../utils/audioQuality'
+import { getMvRouteMeta } from '../../utils/mv'
 import { isAbortError } from '../../utils/request'
 import { isVipSong, normalizeSongAccess } from '../../utils/songAccess'
 
@@ -230,8 +231,10 @@ function getArtistIds(artists = []) {
 
 function getKugouTrackMeta(song = {}) {
   const access = normalizeSongAccess(song)
+  const mvMeta = getMvRouteMeta(song)
 
   return {
+    ...mvMeta,
     hash: song.hash || song.file_hash || song.audio_hash || song.hash_128 || song['128hash'] || '',
     album_audio_id: song.album_audio_id ?? song.mixsongid ?? song.add_mixsongid ?? song.audio_id ?? '',
     mixsongid: song.mixsongid ?? song.add_mixsongid ?? song.album_audio_id ?? '',

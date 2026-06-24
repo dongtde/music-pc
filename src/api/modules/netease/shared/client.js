@@ -112,6 +112,27 @@ export function normalizeParams(path, params) {
     } else if (path === '/youth/channel/detail' || path === '/youth/channel/song') {
       normalized.global_collection_id ??= normalized.id
       delete normalized.id
+    } else if (path === '/video/detail') {
+      normalized.id ??= normalized.mvid ?? normalized.mvId ?? normalized.videoId ?? normalized.video_id
+      delete normalized.mvid
+      delete normalized.mvId
+      delete normalized.videoId
+      delete normalized.video_id
+    } else if (path === '/video/url' || path === '/video/privilege') {
+      normalized.hash ??=
+        normalized.videoHash ??
+        normalized.video_hash ??
+        normalized.mvHash ??
+        normalized.mvhash ??
+        (/^\d+$/.test(String(normalized.id ?? '')) ? '' : normalized.id)
+      delete normalized.id
+      delete normalized.mvid
+      delete normalized.mvId
+      delete normalized.videoId
+      delete normalized.video_id
+      delete normalized.videoHash
+      delete normalized.video_hash
+      delete normalized.mvHash
     }
   }
 

@@ -468,6 +468,8 @@ function normalizeTrack(track = {}, index = 0) {
     vip: Boolean(track.vip),
     hasVideo: Boolean(track.hasVideo),
     mvId: track.mvId || '',
+    mvHash: track.mvHash || '',
+    videoId: track.videoId || '',
     artistId: track.artistId || '',
     albumId: track.albumId || '',
     playedAt: track.playedAt || 0,

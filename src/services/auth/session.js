@@ -136,11 +136,22 @@ export function writeDailyVipClaim({ date, identity, claimedAt = Date.now() }) {
   })
 }
 
-export function writeDailyVipAutoStatusCheck({ date, identity, checkedAt = Date.now() }) {
+export function writeDailyVipAutoStatusCheck({
+  date,
+  identity,
+  checkedAt = Date.now(),
+  active = false,
+  raw = null,
+  loaded = false
+}) {
   writeJsonStorage(STORAGE_KEYS.dailyVipAutoStatusCheck, {
     date,
     identity,
-    checkedAt
+    checkedAt,
+    active: Boolean(active),
+    raw,
+    loaded: Boolean(loaded),
+    version: 2
   })
 }
 

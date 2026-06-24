@@ -80,32 +80,67 @@ import {
   getLyricCandidate
 } from './shared'
 
-export const subscribeMv = (params = {}) => getKugou('/youth/channel/sub', params)
+function normalizeMvDetailParams(params = {}) {
+  const id = params.id ?? params.mvid ?? params.mvId ?? params.videoId ?? params.video_id
+  const nextParams = { ...params, id }
 
-export const getSubscribedMvs = (params = {}) => getKugou('/user/video/collect', params)
+  delete nextParams.mvid
+  delete nextParams.mvId
+  delete nextParams.videoId
+  delete nextParams.video_id
 
-export const getMvComments = (params = {}) => getKugou('/comment/music', params).then(toCommentResponse)
+  return nextParams
+}
 
-export const likeResource = (params = {}) => getKugou('/youth/channel/sub', params)
+function normalizeMvHashParams(params = {}) {
+  const idCandidate = params.id ?? params.mvid ?? params.mvId ?? params.videoId ?? params.video_id
+  const hash =
+    params.hash ??
+    params.videoHash ??
+    params.video_hash ??
+    params.mvHash ??
+    params.mvhash ??
+    (/^\d+$/.test(String(idCandidate ?? '')) ? '' : idCandidate)
+  const nextParams = { ...params, hash }
 
-export const getSimilarMvs = (params = {}) => getKugou('/ai/recommend', params).then(toSongListResponse)
+  delete nextParams.id
+  delete nextParams.mvid
+  delete nextParams.mvId
+  delete nextParams.videoId
+  delete nextParams.video_id
+  delete nextParams.videoHash
+  delete nextParams.video_hash
+  delete nextParams.mvHash
 
-export const getAllMvs = (params = {}) => getKugou('/brush', params).then(toMvListResponse)
+  return nextParams
+}
 
-export const getFirstMvs = (params = {}) => getKugou('/brush', params).then(toMvListResponse)
+export const subscribeMv = (params = {}, config = {}) => getKugou('/youth/channel/sub', params, config)
 
-export const getExclusiveMvs = (params = {}) => getKugou('/brush', params).then(toMvListResponse)
+export const getSubscribedMvs = (params = {}, config = {}) => getKugou('/user/video/collect', params, config)
 
-export const getTopMvs = (params = {}) => getKugou('/brush', params).then(toMvListResponse)
+export const getMvComments = (params = {}, config = {}) => getKugou('/comment/music', params, config).then(toCommentResponse)
 
-export const getMvDetail = (params = {}) => getKugou('/video/detail', params)
+export const likeResource = (params = {}, config = {}) => getKugou('/youth/channel/sub', params, config)
 
-export const getMvDetailInfo = (params = {}) => getKugou('/video/privilege', params)
+export const getSimilarMvs = (params = {}, config = {}) => getKugou('/ai/recommend', params, config).then(toSongListResponse)
 
-export const getMvUrl = (params = {}) => getKugou('/video/url', params)
+export const getAllMvs = (params = {}, config = {}) => getKugou('/brush', params, config).then(toMvListResponse)
 
-export const getFollowArtistNewMvs = (params = {}) => getKugou('/artist/follow/newsongs', params).then(toSongListResponse)
+export const getFirstMvs = (params = {}, config = {}) => getKugou('/brush', params, config).then(toMvListResponse)
 
-export const getUgcMv = (params = {}) => getKugou('/video/detail', params)
+export const getExclusiveMvs = (params = {}, config = {}) => getKugou('/brush', params, config).then(toMvListResponse)
+
+export const getTopMvs = (params = {}, config = {}) => getKugou('/brush', params, config).then(toMvListResponse)
+
+export const getMvDetail = (params = {}, config = {}) => getKugou('/video/detail', normalizeMvDetailParams(params), config)
+
+export const getMvDetailInfo = (params = {}, config = {}) => getKugou('/video/privilege', normalizeMvHashParams(params), config)
+
+export const getMvUrl = (params = {}, config = {}) => getKugou('/video/url', normalizeMvHashParams(params), config)
+
+export const getFollowArtistNewMvs = (params = {}, config = {}) => getKugou('/artist/follow/newsongs', params, config).then(toSongListResponse)
+
+export const getUgcMv = (params = {}, config = {}) => getKugou('/video/detail', normalizeMvDetailParams(params), config)
 
 // Podcasts, radio, channels, and scenes
