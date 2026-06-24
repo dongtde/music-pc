@@ -275,7 +275,7 @@ button {
     radial-gradient(circle at 52% 26%, #ffd8be 0 17%, transparent 18%),
     radial-gradient(circle at 50% 54%, #2b1b16 0 23%, transparent 24%),
     linear-gradient(135deg, #c0865c, #43291e);
-  box-shadow: 0 0 0 2px #775a3c;
+  box-shadow: none;
   transition: box-shadow var(--layout-duration-fast) ease;
 }
 
@@ -367,17 +367,17 @@ button {
 .vip-button.profile-vip-button {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 20px;
+  gap: 3px;
+  height: 18px;
   margin-left: 0;
-  padding: 0 8px;
+  padding: 0 7px;
   border-radius: 999px;
   color: var(--vip-button-color);
   background: var(--vip-button-bg);
   box-shadow: none;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 400;
-  line-height: 20px;
+  line-height: 18px;
   transform-origin: left center;
   transition:
     background-color 220ms ease,

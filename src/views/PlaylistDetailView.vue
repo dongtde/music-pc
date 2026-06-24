@@ -103,9 +103,8 @@
               :disabled="!playlistTracks.length || playAllLoading"
               @click="playAllPlaylistTracks"
             >
-              <Play v-if="!isPlaying" :size="18" fill="currentColor" />
-              <Pause v-else :size="18" fill="currentColor" />
-              <span>{{ isPlaying ? '暂停播放' : '播放全部' }}</span>
+              <Play :size="18" fill="currentColor" />
+              <span>播放全部</span>
             </button>
             <button
               v-if="isRemotePlaylist"
@@ -187,7 +186,7 @@
 <script setup>
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { MessageCircle, Pause, Play } from 'lucide-vue-next';
+import { MessageCircle, Play } from 'lucide-vue-next';
 import { useMessage } from 'naive-ui';
 import CommentModal from '../components/CommentModal.vue';
 import SongListRow from '../components/SongListRow.vue';
@@ -308,7 +307,6 @@ const showTrackLoadMore = computed(
 );
 
 const {
-  isPlaying,
   playAll: playLoadedTracks,
   playTrack: playPlaylistTrack,
 } = useQueuePlayback({

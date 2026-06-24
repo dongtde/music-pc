@@ -40,7 +40,7 @@
               :disabled="vipButtonDisabled"
               @click="handleVipButtonClick"
             >
-              <Crown :size="13" />
+              <Crown :size="12" />
               <span>{{ vipButtonText }}</span>
             </button>
           </span>
