@@ -443,9 +443,9 @@ function normalizeRouteId(value) {
   gap: 2px;
   min-width: 28px;
   padding: 0 4px 0 3px;
-  border: 1px solid rgba(245, 196, 66, 0.7);
-  color: #f5c442;
-  background: rgba(245, 196, 66, 0.1);
+  border: 1px solid var(--theme-badge-border);
+  color: var(--theme-badge-color);
+  background: var(--theme-badge-bg);
   font-size: 8px;
   font-weight: 800;
   letter-spacing: 0;
@@ -465,8 +465,9 @@ function normalizeRouteId(value) {
 .song-list-row__quality {
   min-width: 20px;
   padding: 0 4px;
-  border: 1px solid rgba(78, 168, 255, 0.58);
-  color: #4ea8ff;
+  border: 1px solid var(--theme-badge-border);
+  color: var(--theme-badge-color);
+  background: var(--theme-badge-bg);
   font-size: 8px;
   font-weight: 800;
   letter-spacing: 0;
@@ -475,8 +476,9 @@ function normalizeRouteId(value) {
 
 .song-list-row__quality--flac,
 .song-list-row__quality--high {
-  border-color: rgba(245, 158, 11, 0.66);
-  color: #f59e0b;
+  border-color: var(--theme-badge-strong-border);
+  color: var(--theme-badge-color);
+  background: var(--theme-badge-strong-bg);
 }
 
 .song-list-row__video {

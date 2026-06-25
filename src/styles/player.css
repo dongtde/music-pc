@@ -367,20 +367,26 @@
   align-items: center;
   justify-content: center;
   padding: 0 5px;
-  border: 1.5px solid rgba(78, 168, 255, 0.58);
+  border: 1.5px solid var(--theme-badge-border);
   border-radius: 5px;
-  color: #4ea8ff;
+  color: var(--theme-badge-color);
+  background: var(--theme-badge-bg);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0;
   line-height: 1;
   white-space: nowrap;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
 }
 
 .quality-button__badge--flac,
 .quality-button__badge--high {
-  border-color: rgba(245, 158, 11, 0.66);
-  color: #f59e0b;
+  border-color: var(--theme-badge-strong-border);
+  color: var(--theme-badge-color);
+  background: var(--theme-badge-strong-bg);
 }
 
 .quality-option__text {
@@ -978,6 +984,15 @@
 .visualizer-popover-wrap .icon-button.active {
   color: var(--accent);
   background: rgba(var(--accent-rgb), 0.14);
+}
+
+.player-tools > .icon-button.desktop-lyrics-button.active,
+.player-tools > .icon-button.desktop-lyrics-button.active:hover,
+.player.player--full-screen > .player-tools > .icon-button.desktop-lyrics-button.active,
+.player.player--full-screen > .player-tools > .icon-button.desktop-lyrics-button.active:hover {
+  color: var(--accent);
+  background: transparent;
+  box-shadow: none;
 }
 
 .player-tools > .icon-button.locked {

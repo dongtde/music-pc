@@ -342,8 +342,8 @@
 }
 
 .vip-status-dot.active {
-  background: #f5b300;
-  box-shadow: 0 0 0 4px rgba(245, 179, 0, 0.16);
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.16);
 }
 
 .vip-claim-button {
@@ -353,13 +353,13 @@
   min-width: 168px;
   min-height: 42px;
   gap: 8px;
-  border: 1px solid color-mix(in srgb, #f5b300 48%, var(--settings-border));
+  border: 1px solid color-mix(in srgb, var(--accent) 56%, var(--settings-border));
   border-radius: 8px;
-  color: #5b3a00;
+  color: #ffffff;
   background:
-    linear-gradient(180deg, rgba(255, 224, 128, 0.92), rgba(245, 179, 0, 0.84)),
-    #f5b300;
-  box-shadow: 0 12px 24px rgba(245, 179, 0, 0.18);
+    linear-gradient(180deg, var(--accent-hover), var(--accent)),
+    var(--accent);
+  box-shadow: 0 12px 24px rgba(var(--accent-rgb), 0.18);
   cursor: pointer;
   font-size: 14px;
   font-weight: 900;
@@ -378,7 +378,7 @@
 .vip-claim-button.is-active {
   color: #ffffff;
   background:
-    linear-gradient(135deg, var(--accent), var(--settings-fresh)),
+    linear-gradient(135deg, var(--accent-hover), var(--accent)),
     var(--accent);
 }
 

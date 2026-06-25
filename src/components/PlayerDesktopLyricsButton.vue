@@ -1,7 +1,7 @@
 <template>
   <button
     v-if="available"
-    class="icon-button"
+    class="icon-button desktop-lyrics-button"
     type="button"
     :aria-label="label"
     :aria-pressed="open"
@@ -53,5 +53,12 @@ defineEmits(['toggle'])
   font-size: 12px;
   font-weight: 800;
   line-height: 1;
+}
+
+.desktop-lyrics-button.active,
+.desktop-lyrics-button.active:hover {
+  color: var(--accent);
+  background: transparent;
+  box-shadow: none;
 }
 </style>
