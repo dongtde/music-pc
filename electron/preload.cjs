@@ -1,5 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+const MAX_TASKBAR_COMMAND_QUEUE = 20;
+const taskbarCommandQueue = [];
+const taskbarCommandListeners = new Set();
+
 function createSubscription(channel, listener) {
   if (typeof listener !== 'function') {
     return () => {};
@@ -12,6 +16,59 @@ function createSubscription(channel, listener) {
     ipcRenderer.removeListener(channel, wrappedListener);
   };
 }
+
+function createTaskbarCommandSubscription(listener) {
+  if (typeof listener !== 'function') {
+    return () => {};
+  }
+
+  taskbarCommandListeners.add(listener);
+  flushTaskbarCommandQueue(listener);
+
+  return () => {
+    taskbarCommandListeners.delete(listener);
+  };
+}
+
+function flushTaskbarCommandQueue(listener) {
+  if (!taskbarCommandQueue.length) {
+    return;
+  }
+
+  const queuedCommands = taskbarCommandQueue.splice(0);
+
+  queuedCommands.forEach((command) => {
+    safelyNotifyTaskbarCommand(listener, command);
+  });
+}
+
+function notifyTaskbarCommand(command) {
+  if (!taskbarCommandListeners.size) {
+    taskbarCommandQueue.push(command);
+
+    if (taskbarCommandQueue.length > MAX_TASKBAR_COMMAND_QUEUE) {
+      taskbarCommandQueue.shift();
+    }
+
+    return;
+  }
+
+  taskbarCommandListeners.forEach((listener) => {
+    safelyNotifyTaskbarCommand(listener, command);
+  });
+}
+
+function safelyNotifyTaskbarCommand(listener, command) {
+  try {
+    listener(command);
+  } catch (error) {
+    console.warn('Taskbar command listener failed:', error);
+  }
+}
+
+ipcRenderer.on('taskbar-controls:command', (_event, payload) => {
+  notifyTaskbarCommand(payload);
+});
 
 contextBridge.exposeInMainWorld('mappicDesktop', {
   platform: process.platform,
@@ -57,7 +114,9 @@ contextBridge.exposeInMainWorld('mappicDesktop', {
     publishState: (payload) =>
       ipcRenderer.send('taskbar-controls:state', payload),
     getState: () => ipcRenderer.invoke('taskbar-controls:get-state'),
+    completeCommand: (payload) =>
+      ipcRenderer.send('taskbar-controls:command-result', payload),
     onCommand: (listener) =>
-      createSubscription('taskbar-controls:command', listener),
+      createTaskbarCommandSubscription(listener),
   },
 });

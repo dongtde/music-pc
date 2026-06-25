@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, net, protocol } = require('electron');
+const fs = require('node:fs');
 const path = require('node:path');
 const { createDesktopLyricsManager } = require('./desktopLyricsWindow.cjs');
 const { createAppProtocolRegistrar } = require('./protocolProxy.cjs');
@@ -8,6 +9,15 @@ const {
   captureFirstScreenSmoke,
   captureFpsSmoke,
 } = require('./smoke.cjs');
+
+const projectRoot = path.join(__dirname, '..');
+const initialEnvKeys = new Set(Object.keys(process.env));
+
+loadEnvFile(path.join(projectRoot, '.env'), { initialEnvKeys });
+loadEnvFile(path.join(projectRoot, '.env.local'), {
+  initialEnvKeys,
+  override: true,
+});
 
 const APP_PROTOCOL = 'mappic';
 const APP_USER_MODEL_ID = 'com.lanyin.music';
@@ -20,11 +30,17 @@ const electronSmokeMode =
 const isFirstScreenSmoke = electronSmokeMode === 'first-screen';
 const isFpsSmoke = electronSmokeMode === 'fps';
 const isAutomationSmoke = isFirstScreenSmoke || isFpsSmoke;
-const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://127.0.0.1:5173';
-const kugouApiTarget =
-  process.env.KUGOU_API_TARGET || 'https://kugou.cyouhong.cn';
-const neteaseApiTarget =
-  process.env.NETEASE_API_TARGET || 'https://music-api.xcj.pw';
+const devServerUrl = readEnv(['VITE_DEV_SERVER_URL'], 'http://127.0.0.1:5173');
+const kugouApiBase = readEnv(['VITE_KUGOU_API_BASE'], '/api');
+const neteaseApiBase = readEnv(['VITE_NETEASE_API_BASE'], '/netease-api');
+const kugouApiTarget = readEnv(
+  ['VITE_KUGOU_API_TARGET', 'KUGOU_API_TARGET'],
+  '',
+);
+const neteaseApiTarget = readEnv(
+  ['VITE_NETEASE_API_TARGET', 'NETEASE_API_TARGET'],
+  '',
+);
 const preloadPath = path.join(__dirname, 'preload.cjs');
 const distRoot = path.join(__dirname, '..', 'dist');
 const appIconPath = path.join(__dirname, '..', 'build', 'icon.ico');
@@ -76,7 +92,9 @@ const protocolRegistrar = createAppProtocolRegistrar({
   isDev,
   isDebug,
   devServerUrl,
+  kugouApiBase,
   kugouApiTarget,
+  neteaseApiBase,
   neteaseApiTarget,
   distRoot,
   cookieJarPath,
@@ -285,6 +303,72 @@ function attachDebugLogging(window) {
       );
     },
   );
+}
+
+function loadEnvFile(filePath, { initialEnvKeys, override = false } = {}) {
+  let content = '';
+
+  try {
+    content = fs.readFileSync(filePath, 'utf8');
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.warn('[env:load]', filePath, error);
+    }
+
+    return;
+  }
+
+  content.split(/\r?\n/).forEach((line) => {
+    const trimmed = line.trim();
+
+    if (!trimmed || trimmed.startsWith('#')) {
+      return;
+    }
+
+    const separatorIndex = trimmed.indexOf('=');
+
+    if (separatorIndex <= 0) {
+      return;
+    }
+
+    const key = trimmed.slice(0, separatorIndex).trim();
+    const value = normalizeEnvValue(trimmed.slice(separatorIndex + 1));
+
+    if (!key || initialEnvKeys?.has(key)) {
+      return;
+    }
+
+    if (override || process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  });
+}
+
+function normalizeEnvValue(rawValue = '') {
+  const value = rawValue.trim();
+  const quote = value[0];
+
+  if (
+    (quote === '"' || quote === "'") &&
+    value.length >= 2 &&
+    value[value.length - 1] === quote
+  ) {
+    return value.slice(1, -1);
+  }
+
+  return value;
+}
+
+function readEnv(keys, fallback) {
+  for (const key of keys) {
+    const value = process.env[key];
+
+    if (value !== undefined && value !== '') {
+      return value;
+    }
+  }
+
+  return fallback;
 }
 
 app.whenReady()

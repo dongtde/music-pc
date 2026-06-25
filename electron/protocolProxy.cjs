@@ -9,7 +9,9 @@ function createAppProtocolRegistrar({
   isDev,
   isDebug,
   devServerUrl,
+  kugouApiBase = '/api',
   kugouApiTarget,
+  neteaseApiBase = '/netease-api',
   neteaseApiTarget,
   distRoot,
   cookieJarPath,
@@ -20,6 +22,11 @@ function createAppProtocolRegistrar({
   const proxyCookieJars = loadProxyCookieJars(cookieJarPath);
   const allowedMediaHosts = parseHostAllowList(mediaHostAllowList);
   const resolvedDistRoot = path.resolve(distRoot);
+  const resolvedKugouApiBase = normalizeProxyBasePath(kugouApiBase, '/api');
+  const resolvedNeteaseApiBase = normalizeProxyBasePath(
+    neteaseApiBase,
+    '/netease-api',
+  );
 
   function registerAppProtocol() {
     protocol.handle(appProtocol, async (request) => {
@@ -27,16 +34,15 @@ function createAppProtocolRegistrar({
         const url = new URL(request.url);
         const pathname = safeDecodePathname(url.pathname);
 
-        if (url.hostname === 'api' || pathname.startsWith('/api/')) {
-          url.pathname = pathname.replace(/^\/api/, '') || '/';
+        if (isProxyPath(url, pathname, resolvedKugouApiBase, 'api')) {
+          url.pathname = stripProxyBasePath(pathname, resolvedKugouApiBase);
           return await proxyRequest(request, kugouApiTarget, url);
         }
 
         if (
-          url.hostname === 'netease-api' ||
-          pathname.startsWith('/netease-api/')
+          isProxyPath(url, pathname, resolvedNeteaseApiBase, 'netease-api')
         ) {
-          url.pathname = pathname.replace(/^\/netease-api/, '') || '/';
+          url.pathname = stripProxyBasePath(pathname, resolvedNeteaseApiBase);
           return await proxyRequest(request, neteaseApiTarget, url);
         }
 
@@ -74,6 +80,12 @@ function createAppProtocolRegistrar({
   }
 
   async function proxyRequest(request, target, sourceUrl) {
+    if (!target) {
+      return new Response('API proxy target is not configured', {
+        status: 502,
+      });
+    }
+
     const targetUrl = new URL(sourceUrl.pathname + sourceUrl.search, target);
     const headers = new Headers(request.headers);
     const noCookie = headers.has('x-kugou-no-cookie');
@@ -247,6 +259,37 @@ function createAppProtocolRegistrar({
     registerAppProtocol,
     serveStaticAsset,
   };
+}
+
+function normalizeProxyBasePath(value, fallback) {
+  const rawValue = String(value || fallback).trim();
+  const pathValue = /^https?:\/\//i.test(rawValue)
+    ? new URL(rawValue).pathname
+    : rawValue;
+  const withLeadingSlash = pathValue.startsWith('/')
+    ? pathValue
+    : `/${pathValue}`;
+  const withoutTrailingSlash = withLeadingSlash.replace(/\/+$/, '');
+
+  return withoutTrailingSlash || fallback;
+}
+
+function isProxyPath(url, pathname, basePath, hostAlias) {
+  return (
+    url.hostname === hostAlias ||
+    pathname === basePath ||
+    pathname.startsWith(`${basePath}/`)
+  );
+}
+
+function stripProxyBasePath(pathname, basePath) {
+  if (pathname === basePath) {
+    return '/';
+  }
+
+  return pathname.startsWith(basePath)
+    ? pathname.slice(basePath.length) || '/'
+    : pathname;
 }
 
 function safeDecodePathname(pathname) {

@@ -6,9 +6,16 @@ const isWindows = process.platform === 'win32';
 const BUTTON_SIZE = 16;
 const ICON_COLOR = [255, 255, 255, 255];
 const APP_TITLE = '\u6f9c\u97f3';
+const ENABLED_BUTTON_FLAGS = ['enabled'];
+const COMMAND_RESULT_TIMEOUT_MS = 1500;
+const ACTIVATION_GUARD_DELAYS_MS = [0, 50, 150, 350];
 
 function createTaskbarControlsManager({ ipcMain, getMainWindow }) {
   let registered = false;
+  let commandSequence = 0;
+  let lastFocusedAt = 0;
+  let lastBackgroundSnapshot = null;
+  const pendingCommands = new Map();
   let currentState = {
     available: isWindows,
     isPlaying: false,
@@ -16,6 +23,8 @@ function createTaskbarControlsManager({ ipcMain, getMainWindow }) {
     title: '',
     artist: '',
     hasTrack: false,
+    canPrevious: false,
+    canNext: false,
     thumbnailClip: null,
   };
 
@@ -43,6 +52,14 @@ function createTaskbarControlsManager({ ipcMain, getMainWindow }) {
 
       return createPublicState();
     });
+
+    ipcMain.on('taskbar-controls:command-result', (event, payload) => {
+      if (!isTrustedSender(event)) {
+        return;
+      }
+
+      completeCommand(payload);
+    });
   }
 
   function updateState(payload = {}) {
@@ -56,6 +73,22 @@ function createTaskbarControlsManager({ ipcMain, getMainWindow }) {
     if (!window || window.isDestroyed()) {
       return;
     }
+
+    captureBackgroundSnapshot(window);
+    window.on('blur', () => captureBackgroundSnapshot(window));
+    window.on('minimize', () => captureBackgroundSnapshot(window));
+    window.on('hide', () => captureBackgroundSnapshot(window));
+    window.on('focus', () => {
+      lastFocusedAt = Date.now();
+    });
+    window.on('restore', () => {
+      if (safelyReadWindowState(window, 'isFocused', false)) {
+        lastFocusedAt = Date.now();
+        return;
+      }
+
+      captureBackgroundSnapshot(window);
+    });
 
     window.webContents?.once?.('did-finish-load', () => {
       updateWindowControls(window);
@@ -86,15 +119,12 @@ function createTaskbarControlsManager({ ipcMain, getMainWindow }) {
     const playPauseTooltip = currentState.isPlaying
       ? '\u6682\u505c'
       : '\u64ad\u653e';
-    const transportFlags = currentState.isLoading ? ['disabled'] : ['enabled'];
-    const playFlags = currentState.isLoading ? ['disabled'] : ['enabled'];
-
     try {
-      window.setThumbarButtons([
+      const installed = window.setThumbarButtons([
         {
           tooltip: '\u4e0a\u4e00\u9996',
           icon: icons.previous,
-          flags: transportFlags,
+          flags: ENABLED_BUTTON_FLAGS,
           click: () => sendCommand('previous'),
         },
         {
@@ -102,16 +132,20 @@ function createTaskbarControlsManager({ ipcMain, getMainWindow }) {
             ? '\u52a0\u8f7d\u4e2d'
             : playPauseTooltip,
           icon: playPauseIcon,
-          flags: playFlags,
+          flags: ENABLED_BUTTON_FLAGS,
           click: () => sendCommand('toggle-play'),
         },
         {
           tooltip: '\u4e0b\u4e00\u9996',
           icon: icons.next,
-          flags: transportFlags,
+          flags: ENABLED_BUTTON_FLAGS,
           click: () => sendCommand('next'),
         },
       ]);
+
+      if (!installed) {
+        console.warn('[taskbar-controls:update] failed to install buttons');
+      }
 
       window.setTitle(createWindowTitle(currentState));
       applyThumbnailClip(window, currentState.thumbnailClip);
@@ -122,11 +156,28 @@ function createTaskbarControlsManager({ ipcMain, getMainWindow }) {
   }
 
   function sendCommand(action) {
+    const window = getMainWindow();
+
+    if (!window || window.isDestroyed() || window.webContents?.isDestroyed()) {
+      return;
+    }
+
+    const activationSnapshot = getCommandActivationSnapshot(window);
+    guardAgainstForegroundActivation(window, activationSnapshot);
+
     if (currentState.isLoading) {
       return;
     }
 
-    sendToWindow(getMainWindow(), 'taskbar-controls:command', { action });
+    const command = {
+      id: createCommandId(action),
+      action,
+      requestedAt: Date.now(),
+    };
+
+    trackPendingCommand(command);
+    sendToWindow(window, 'taskbar-controls:command', command);
+    dispatchCommandEvent(window, command);
   }
 
   function createPublicState() {
@@ -135,6 +186,8 @@ function createTaskbarControlsManager({ ipcMain, getMainWindow }) {
       isPlaying: currentState.isPlaying,
       isLoading: currentState.isLoading,
       hasTrack: currentState.hasTrack,
+      canPrevious: currentState.canPrevious,
+      canNext: currentState.canNext,
     };
   }
 
@@ -156,16 +209,167 @@ function createTaskbarControlsManager({ ipcMain, getMainWindow }) {
     updateWindowControls,
     clear,
   };
+
+  function createCommandId(action) {
+    commandSequence += 1;
+    return `${Date.now()}-${commandSequence}-${action}`;
+  }
+
+  function trackPendingCommand(command) {
+    const timeout = setTimeout(() => {
+      pendingCommands.delete(command.id);
+      console.warn('[taskbar-controls:command:timeout]', command.action);
+    }, COMMAND_RESULT_TIMEOUT_MS);
+
+    pendingCommands.set(command.id, {
+      action: command.action,
+      timeout,
+    });
+  }
+
+  function completeCommand(payload = {}) {
+    const id = cleanText(payload.id);
+
+    if (!id) {
+      return;
+    }
+
+    const pending = pendingCommands.get(id);
+
+    if (!pending) {
+      return;
+    }
+
+    clearTimeout(pending.timeout);
+    pendingCommands.delete(id);
+
+    if (payload.handled === false) {
+      console.warn('[taskbar-controls:command:unhandled]', pending.action);
+    }
+  }
+
+  function captureBackgroundSnapshot(window) {
+    const snapshot = createActivationSnapshot(window);
+
+    if (!snapshot) {
+      return;
+    }
+
+    if (!snapshot.wasFocused || snapshot.wasMinimized || !snapshot.wasVisible) {
+      lastBackgroundSnapshot = {
+        ...snapshot,
+        capturedAt: Date.now(),
+      };
+    }
+  }
+
+  function getCommandActivationSnapshot(window) {
+    const snapshot = createActivationSnapshot(window);
+
+    if (!snapshot) {
+      return null;
+    }
+
+    if (!snapshot.wasFocused) {
+      lastBackgroundSnapshot = {
+        ...snapshot,
+        capturedAt: Date.now(),
+      };
+      return snapshot;
+    }
+
+    if (
+      lastBackgroundSnapshot &&
+      lastFocusedAt &&
+      Date.now() - lastFocusedAt < 1000
+    ) {
+      return lastBackgroundSnapshot;
+    }
+
+    return snapshot;
+  }
+}
+
+function dispatchCommandEvent(window, command) {
+  const commandJson = JSON.stringify(command).replace(/</g, '\\u003c');
+  const script = [
+    'window.dispatchEvent(new CustomEvent("lanyin:taskbar-command",',
+    `{ detail: ${commandJson} }));`,
+    'true;',
+  ].join('');
+
+  window.webContents
+    .executeJavaScript(script, true)
+    .catch((error) => {
+      console.warn('[taskbar-controls:command:event-fallback]', error);
+    });
+}
+
+function createActivationSnapshot(window) {
+  if (!window || window.isDestroyed()) {
+    return null;
+  }
+
+  return {
+    wasFocused: safelyReadWindowState(window, 'isFocused', true),
+    wasMinimized: safelyReadWindowState(window, 'isMinimized', false),
+    wasVisible: safelyReadWindowState(window, 'isVisible', true),
+  };
+}
+
+function guardAgainstForegroundActivation(window, snapshot) {
+  if (!window || window.isDestroyed() || !snapshot || snapshot.wasFocused) {
+    return;
+  }
+
+  ACTIVATION_GUARD_DELAYS_MS.forEach((delay) => {
+    setTimeout(() => restoreBackgroundWindowState(window, snapshot), delay);
+  });
+}
+
+function restoreBackgroundWindowState(window, snapshot) {
+  if (!window || window.isDestroyed()) {
+    return;
+  }
+
+  if (!snapshot.wasVisible && safelyReadWindowState(window, 'isVisible', false)) {
+    window.hide();
+    return;
+  }
+
+  if (
+    snapshot.wasMinimized &&
+    !safelyReadWindowState(window, 'isMinimized', false)
+  ) {
+    window.minimize();
+    return;
+  }
+
+  if (!snapshot.wasFocused && safelyReadWindowState(window, 'isFocused', false)) {
+    window.blur();
+  }
+}
+
+function safelyReadWindowState(window, methodName, fallback) {
+  try {
+    return typeof window?.[methodName] === 'function'
+      ? Boolean(window[methodName]())
+      : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 function normalizeState(payload = {}, fallback = {}) {
   const track = payload.track || {};
   const title = cleanText(track.name || payload.title);
   const artist = cleanText(track.artist || payload.artist);
+  const controls = payload.controls || {};
   const thumbnailClip = normalizeThumbnailClip(
     payload.thumbnailClip,
     fallback.thumbnailClip,
   );
+  const hasTrack = Boolean(track.id || title);
 
   return {
     available: isWindows,
@@ -173,7 +377,9 @@ function normalizeState(payload = {}, fallback = {}) {
     isLoading: Boolean(payload.playback?.isLoading ?? payload.isLoading),
     title,
     artist,
-    hasTrack: Boolean(track.id || title),
+    hasTrack,
+    canPrevious: Boolean(controls.canPrevious ?? payload.canPrevious ?? hasTrack),
+    canNext: Boolean(controls.canNext ?? payload.canNext ?? hasTrack),
     thumbnailClip,
   };
 }
@@ -233,6 +439,7 @@ function normalizeThumbnailClip(value, fallback = null) {
 
 function applyThumbnailClip(window, thumbnailClip) {
   if (!thumbnailClip) {
+    window.setThumbnailClip({ x: 0, y: 0, width: 0, height: 0 });
     return;
   }
 

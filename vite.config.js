@@ -1,13 +1,38 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
 export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  const readEnv = (keys, fallback) => {
+    for (const key of keys) {
+      const value = process.env[key] ?? env[key];
+
+      if (value !== undefined && value !== '') {
+        return value;
+      }
+    }
+
+    return fallback;
+  };
   const appBuildVersion = `${Date.now().toString(36)}`;
-  const desktopDevPort = Number(process.env.VITE_DEV_SERVER_PORT) || 5174;
-  const kugouApiTarget =
-    process.env.KUGOU_API_TARGET || 'https://kugou.cyouhong.cn/';
-  const neteaseApiTarget =
-    process.env.NETEASE_API_TARGET || 'https://music-api.xcj.pw';
+  const desktopDevPort =
+    Number(readEnv(['VITE_DEV_SERVER_PORT'], '5174')) || 5174;
+  const kugouApiBase = readEnv(['VITE_KUGOU_API_BASE'], '/api');
+  const neteaseApiBase = readEnv(['VITE_NETEASE_API_BASE'], '/netease-api');
+  const kugouApiTarget = readEnv(
+    ['VITE_KUGOU_API_TARGET', 'KUGOU_API_TARGET'],
+    '',
+  );
+  const neteaseApiTarget = readEnv(
+    ['VITE_NETEASE_API_TARGET', 'NETEASE_API_TARGET'],
+    '',
+  );
+  const proxy = createProxyConfig({
+    kugouApiBase,
+    kugouApiTarget,
+    neteaseApiBase,
+    neteaseApiTarget,
+  });
 
   return {
     base: mode === 'desktop' ? './' : '/',
@@ -27,18 +52,7 @@ export default defineConfig(({ mode }) => {
             }
           : undefined,
       allowedHosts: ['.cpolar.top'],
-      proxy: {
-        '^/api': {
-          target: kugouApiTarget,
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api/, ''),
-        },
-        '^/netease-api': {
-          target: neteaseApiTarget,
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/netease-api/, ''),
-        },
-      },
+      proxy,
     },
     build: {
       rollupOptions: {
@@ -67,3 +81,41 @@ export default defineConfig(({ mode }) => {
     },
   };
 });
+
+function createProxyConfig({
+  kugouApiBase,
+  kugouApiTarget,
+  neteaseApiBase,
+  neteaseApiTarget,
+}) {
+  const proxy = {};
+
+  if (kugouApiTarget) {
+    proxy[`^${escapeRegExp(kugouApiBase)}`] = createProxyEntry(
+      kugouApiBase,
+      kugouApiTarget,
+    );
+  }
+
+  if (neteaseApiTarget) {
+    proxy[`^${escapeRegExp(neteaseApiBase)}`] = createProxyEntry(
+      neteaseApiBase,
+      neteaseApiTarget,
+    );
+  }
+
+  return proxy;
+}
+
+function createProxyEntry(basePath, target) {
+  return {
+    target,
+    changeOrigin: true,
+    rewrite: (path) =>
+      path.replace(new RegExp(`^${escapeRegExp(basePath)}`), ''),
+  };
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}

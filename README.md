@@ -107,19 +107,30 @@ npm run desktop:pack
 
 ## 接口与代理
 
+接口配置请从示例文件创建本地配置：
+
+```bash
+Copy-Item .env.example .env.local
+```
+
+`.env.example` 可以提交到仓库，`.env` 和 `.env.local` 会被 Git 忽略。真实后台地址请只放在本地配置或部署环境变量里，不要提交到开源仓库。
+
+```bash
+VITE_KUGOU_API_BASE=/api
+VITE_NETEASE_API_BASE=/netease-api
+VITE_API_TIMEOUT=120000
+VITE_KUGOU_API_TARGET=
+VITE_NETEASE_API_TARGET=
+VITE_DEV_SERVER_URL=http://127.0.0.1:5173
+VITE_DEV_SERVER_PORT=5174
+```
+
 前端默认使用以下代理路径：
 
 - 酷狗相关接口：`/api`
 - 网易云相关接口：`/netease-api`
 
-Electron 主进程会通过自定义协议和代理转发接口请求。可通过环境变量覆盖代理目标：
-
-```bash
-KUGOU_API_TARGET=https://example.com
-NETEASE_API_TARGET=https://example.com
-```
-
-开发时也可以通过 `VITE_DEV_SERVER_URL` 指定 Electron 加载的 Vite 服务地址。
+Vite 开发代理和 Electron 主进程都会读取 `VITE_KUGOU_API_TARGET`、`VITE_NETEASE_API_TARGET`。旧的 `KUGOU_API_TARGET`、`NETEASE_API_TARGET` 仍保留兼容。
 
 ## 相关文档
 

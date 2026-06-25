@@ -1,9 +1,18 @@
 export const API_CONFIG = {
-  // baseURL: 'https://ku-gou-music-api-i2hh.vercel.app/',
-  baseURL: '/api',
-  neteaseBaseURL: '/netease-api',
-  timeout: 120000,
+  baseURL: readEnv('VITE_KUGOU_API_BASE', '/api'),
+  neteaseBaseURL: readEnv('VITE_NETEASE_API_BASE', '/netease-api'),
+  timeout: readNumberEnv('VITE_API_TIMEOUT', 120000),
 };
+
+function readEnv(key, fallback) {
+  const value = import.meta.env[key];
+  return value === undefined || value === '' ? fallback : value;
+}
+
+function readNumberEnv(key, fallback) {
+  const value = Number(readEnv(key, fallback));
+  return Number.isFinite(value) ? value : fallback;
+}
 
 export const STORAGE_KEYS = {
   neteaseCookie: 'mappic:netease-cookie',

@@ -1,4 +1,4 @@
-import { STORAGE_KEYS } from '../config/app'
+import { API_CONFIG, STORAGE_KEYS } from '../config/app'
 import { readJsonStorage, readStorage, writeJsonStorage, writeStorage } from './storage'
 
 const AUTH_COOKIE_FIELDS = [
@@ -13,8 +13,12 @@ const AUTH_COOKIE_FIELDS = [
 ]
 const AUTH_COOKIE_NAMES = AUTH_COOKIE_FIELDS.map((field) => field.cookieName)
 const AUTH_FIELD_KEYS = new Set(AUTH_COOKIE_FIELDS.map((field) => field.key))
-const BROWSER_COOKIE_WRITE_PATHS = ['/api']
-const BROWSER_COOKIE_CLEAR_PATHS = ['/', '/api', '/netease-api']
+const BROWSER_COOKIE_WRITE_PATHS = uniqueCookiePaths([API_CONFIG.baseURL])
+const BROWSER_COOKIE_CLEAR_PATHS = uniqueCookiePaths([
+  '/',
+  API_CONFIG.baseURL,
+  API_CONFIG.neteaseBaseURL
+])
 const BROWSER_COOKIE_MAX_AGE = 180 * 24 * 60 * 60
 const BROWSER_COOKIE_NAME_PATTERNS = [
   /^KUGOU_API/i,
@@ -283,6 +287,23 @@ function shouldPreserveCookie(name = '') {
 
 function cleanCookieValue(value) {
   return cleanString(value).replace(/[;\r\n]/g, '')
+}
+
+function uniqueCookiePaths(paths = []) {
+  return Array.from(new Set(paths.map(normalizeCookiePath).filter(Boolean)))
+}
+
+function normalizeCookiePath(value = '/') {
+  const rawPath = String(value || '/').trim()
+  const urlPath = /^https?:\/\//i.test(rawPath)
+    ? new URL(rawPath).pathname
+    : rawPath
+  const path = urlPath.split(/[?#]/)[0] || '/'
+  const withLeadingSlash = path.startsWith('/') ? path : `/${path}`
+
+  return withLeadingSlash === '/'
+    ? '/'
+    : withLeadingSlash.replace(/\/+$/, '')
 }
 
 function expireBrowserCookie(name) {
