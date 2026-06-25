@@ -18,8 +18,9 @@
     "desktop:dev": "vite --host 127.0.0.1",
     "desktop:debug": "node scripts/desktop-debug.cjs",
     "desktop:start": "electron .",
-    "desktop:build": "vite build --mode desktop && electron-builder --win --x64",
-    "desktop:pack": "vite build --mode desktop && electron-builder --win --x64 --dir"
+    "desktop:prepare-env": "node scripts/prepare-runtime-env.cjs",
+    "desktop:build": "node scripts/prepare-runtime-env.cjs && vite build --mode desktop && electron-builder --win --x64",
+    "desktop:pack": "node scripts/prepare-runtime-env.cjs && vite build --mode desktop && electron-builder --win --x64 --dir"
   },
   "dependencies": {
     "@vitejs/plugin-vue": "^5.2.4",
@@ -45,6 +46,15 @@
       "dist/**/*",
       "electron/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/runtime",
+        "to": "runtime",
+        "filter": [
+          "**/*"
+        ]
+      }
     ],
     "extraMetadata": {
       "main": "electron/main.cjs"

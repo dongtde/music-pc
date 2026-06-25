@@ -65,22 +65,22 @@ npm run desktop:pack
 
 ## 常用脚本
 
-| 命令 | 说明 |
-| --- | --- |
-| `npm run dev` | 启动 Vite 开发服务 |
-| `npm run build` | 构建前端资源 |
-| `npm run preview` | 预览构建产物 |
-| `npm run desktop:dev` | 启动桌面端开发用 Vite 服务 |
-| `npm run desktop:debug` | 启动 Electron 调试流程 |
-| `npm run desktop:start` | 直接运行 Electron |
-| `npm run desktop:build` | 构建 Windows 桌面应用 |
-| `npm run desktop:pack` | 打包桌面应用目录 |
-| `npm run baseline:bundle` | 分析构建包体积 |
-| `npm run smoke:routes` | 路由 smoke 检查 |
-| `npm run smoke:first-screen` | 首屏 smoke 检查 |
-| `npm run smoke:fps` | FPS smoke 检查 |
-| `npm run smoke:player` | 播放器 smoke 检查 |
-| `npm run smoke:electron-proxy` | Electron 代理 smoke 检查 |
+| 命令                           | 说明                       |
+| ------------------------------ | -------------------------- |
+| `npm run dev`                  | 启动 Vite 开发服务         |
+| `npm run build`                | 构建前端资源               |
+| `npm run preview`              | 预览构建产物               |
+| `npm run desktop:dev`          | 启动桌面端开发用 Vite 服务 |
+| `npm run desktop:debug`        | 启动 Electron 调试流程     |
+| `npm run desktop:start`        | 直接运行 Electron          |
+| `npm run desktop:build`        | 构建 Windows 桌面应用      |
+| `npm run desktop:pack`         | 打包桌面应用目录           |
+| `npm run baseline:bundle`      | 分析构建包体积             |
+| `npm run smoke:routes`         | 路由 smoke 检查            |
+| `npm run smoke:first-screen`   | 首屏 smoke 检查            |
+| `npm run smoke:fps`            | FPS smoke 检查             |
+| `npm run smoke:player`         | 播放器 smoke 检查          |
+| `npm run smoke:electron-proxy` | Electron 代理 smoke 检查   |
 
 ## 项目结构
 
@@ -107,13 +107,11 @@ npm run desktop:pack
 
 ## 接口与代理
 
-接口配置请从示例文件创建本地配置：
+接口配置请从示例文件创建本地配置。可以使用 `.env`，也可以使用 `.env.local`：
 
 ```bash
-Copy-Item .env.example .env.local
+Copy-Item .env.example .env
 ```
-
-`.env.example` 可以提交到仓库，`.env` 和 `.env.local` 会被 Git 忽略。真实后台地址请只放在本地配置或部署环境变量里，不要提交到开源仓库。
 
 ```bash
 VITE_KUGOU_API_BASE=/api
@@ -131,6 +129,16 @@ VITE_DEV_SERVER_PORT=5174
 - 网易云相关接口：`/netease-api`
 
 Vite 开发代理和 Electron 主进程都会读取 `VITE_KUGOU_API_TARGET`、`VITE_NETEASE_API_TARGET`。旧的 `KUGOU_API_TARGET`、`NETEASE_API_TARGET` 仍保留兼容。
+
+桌面端打包前会自动执行：
+
+```bash
+npm run desktop:prepare-env
+```
+
+这个命令会从 `.env` / `.env.local` 生成被 Git 忽略的 `build/runtime/runtime.env`，再由 Electron 打包进应用资源目录。这样开源代码里不会出现真实后台地址，打包后的桌面应用仍能读取接口目标。
+
+如果已经生成了桌面应用，也可以把 `.env.local` 放到 exe 同级目录。Electron 启动时会优先读取系统环境变量，其次读取打包资源里的运行时配置和 exe 同级 `.env.local`。
 
 ## 相关文档
 

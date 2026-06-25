@@ -17,6 +17,8 @@ dist-ssr
 .env
 .env.*
 !.env.example
+build/runtime/*.env
+!build/runtime/.gitkeep
 
 # Editor directories and files
 .vscode/*

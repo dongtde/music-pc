@@ -18,6 +18,12 @@ loadEnvFile(path.join(projectRoot, '.env.local'), {
   initialEnvKeys,
   override: true,
 });
+getRuntimeEnvPaths().forEach((filePath) => {
+  loadEnvFile(filePath, {
+    initialEnvKeys,
+    override: true,
+  });
+});
 
 const APP_PROTOCOL = 'mappic';
 const APP_USER_MODEL_ID = 'com.lanyin.music';
@@ -369,6 +375,24 @@ function readEnv(keys, fallback) {
   }
 
   return fallback;
+}
+
+function getRuntimeEnvPaths() {
+  const paths = [];
+
+  if (typeof process.resourcesPath === 'string') {
+    paths.push(
+      path.join(process.resourcesPath, 'runtime', 'runtime.env'),
+      path.join(process.resourcesPath, 'runtime.env'),
+      path.join(process.resourcesPath, '.env.local'),
+    );
+  }
+
+  if (process.execPath) {
+    paths.push(path.join(path.dirname(process.execPath), '.env.local'));
+  }
+
+  return paths;
 }
 
 app.whenReady()
