@@ -2,7 +2,7 @@ import { computed, reactive } from 'vue'
 import { STORAGE_KEYS } from '../config/app'
 import { readJsonStorage, writeJsonStorage } from '../utils/storage'
 
-const LIBRARY_DATA_VERSION = 2
+const LIBRARY_DATA_VERSION = 3
 const LIBRARY_PERSIST_DEBOUNCE_MS = 350
 let persistTimer = 0
 let persistFlushEventsBound = false
@@ -98,6 +98,7 @@ const fallbackTracks = [
     source: '默认歌单'
   }
 ].map(normalizeTrack)
+const fallbackTrackIds = new Set(fallbackTracks.map((track) => String(track.id)))
 
 const defaultCreatedPlaylists = [
   {
@@ -325,18 +326,6 @@ export function useLibraryStore() {
     persist()
   }
 
-  function seedLikedIfEmpty() {
-    if (state.likedTracks.length) {
-      return
-    }
-
-    state.likedTracks = fallbackTracks.slice(0, 6).map((track, index) => ({
-      ...track,
-      likedAt: Date.now() - index * 60000
-    }))
-    persist()
-  }
-
   return {
     state,
     allTracks,
@@ -351,14 +340,15 @@ export function useLibraryStore() {
     createPlaylist,
     addTrackToPlaylist,
     mergeRemotePlaylists,
-    replaceRemotePlaylists,
-    seedLikedIfEmpty
+    replaceRemotePlaylists
   }
 }
 
 function createInitialState() {
   const stored = readJsonStorage(STORAGE_KEYS.libraryData, null)
-  const canReuseStoredDefaults = Number(stored?.version) >= LIBRARY_DATA_VERSION
+  const likedTracks = Array.isArray(stored?.likedTracks)
+    ? stored.likedTracks.map(normalizeTrack).filter((track) => !isFallbackLikedTrack(track))
+    : []
 
   return {
     localTracks: Array.isArray(stored?.localTracks)
@@ -367,12 +357,14 @@ function createInitialState() {
     recentTracks: Array.isArray(stored?.recentTracks)
       ? stored.recentTracks.map(normalizeTrack)
       : [],
-    likedTracks: canReuseStoredDefaults && Array.isArray(stored?.likedTracks)
-      ? stored.likedTracks.map(normalizeTrack)
-      : fallbackTracks.slice(0, 6),
+    likedTracks,
     createdPlaylists: [],
     collectedPlaylists: []
   }
+}
+
+function isFallbackLikedTrack(track) {
+  return track.source === '默认歌单' && fallbackTrackIds.has(String(track.id))
 }
 
 function persist() {

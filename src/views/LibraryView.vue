@@ -7,7 +7,7 @@
         <p>{{ activeMeta.description }}</p>
       </div>
 
-      <div class="library-actions">
+      <div v-if="showLibraryActions" class="library-actions">
         <button
           v-if="isLocalView"
           class="library-action"
@@ -28,6 +28,7 @@
           <span>同步下载</span>
         </button>
         <button
+          v-if="showPlayAllAction"
           class="library-action library-action--primary"
           type="button"
           :disabled="!tracks.length"
@@ -48,7 +49,7 @@
       />
     </section>
 
-    <section class="library-stats" aria-label="资料库统计">
+    <section v-if="showLibraryStats" class="library-stats" aria-label="资料库统计">
       <article>
         <strong>{{ tracks.length }}</strong>
         <span>歌曲</span>
@@ -125,8 +126,9 @@ const downloadSyncLoading = ref(false)
 
 const viewType = computed(() => String(route.params.type || 'local'))
 const isLocalView = computed(() => viewType.value === 'local')
+const isLikedView = computed(() => viewType.value === 'liked')
 const tracks = computed(() => {
-  if (viewType.value === 'liked') {
+  if (isLikedView.value) {
     return library.state.likedTracks
   }
 
@@ -186,6 +188,11 @@ const activeMeta = computed(() => {
   }
 })
 const showDownloadSync = computed(() => isLocalView.value && auth.state.isLoggedIn)
+const showPlayAllAction = computed(() => !isLikedView.value)
+const showLibraryStats = computed(() => !isLikedView.value)
+const showLibraryActions = computed(
+  () => isLocalView.value || showDownloadSync.value || showPlayAllAction.value
+)
 
 const { playAll: playAllTracks, playTrack } = useQueuePlayback({
   queue: rankedTracks,
