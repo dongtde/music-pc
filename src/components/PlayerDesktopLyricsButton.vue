@@ -42,9 +42,10 @@ defineEmits(['toggle'])
   width: 19px;
   height: 19px;
   place-items: center;
-  border: 1.7px solid currentColor;
+  border: 1.5px solid var(--theme-badge-border);
   border-radius: 5px;
-  color: inherit;
+  color: var(--theme-badge-color);
+  background: var(--theme-badge-bg);
   font-family:
     'Microsoft YaHei',
     'PingFang SC',
