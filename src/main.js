@@ -13,8 +13,7 @@ import router from './router'
 import { registerServiceWorker } from './registerServiceWorker'
 import { syncStoredKugouBrowserCookies } from './utils/kugouAuth'
 import './styles/main.css'
-
-syncStoredKugouBrowserCookies()
+import './styles/home.css'
 
 const app = createApp(App)
 
@@ -28,7 +27,23 @@ app.component('NTooltip', NTooltip)
 
 app.use(router)
 
-router.isReady().then(() => {
-  app.mount('#app')
-  registerServiceWorker()
+app.mount('#app')
+
+afterFirstPaint(() => {
+  syncStoredKugouBrowserCookies()
 })
+
+router.isReady().then(() => {
+  afterFirstPaint(registerServiceWorker)
+})
+
+function afterFirstPaint(callback) {
+  if (typeof window === 'undefined') {
+    callback()
+    return
+  }
+
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(callback)
+  })
+}

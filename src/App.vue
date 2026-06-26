@@ -28,21 +28,44 @@
           <div class="route-stage">
             <router-view v-slot="{ Component, route: viewRoute }">
               <Transition :name="routeTransitionName" appear>
-                <KeepAlive v-if="shouldKeepRouteAlive(viewRoute)">
+                <KeepAlive v-if="Component && shouldKeepRouteAlive(viewRoute)">
                   <component
                     :is="Component"
                     :key="getRouteViewKey(viewRoute)"
+                    @home-ready="markHomeBootReady"
                   />
                 </KeepAlive>
                 <component
-                  v-else
+                  v-else-if="Component"
                   :is="Component"
                   :key="getRouteViewKey(viewRoute)"
+                  @home-ready="markHomeBootReady"
+                />
+                <div
+                  v-else
+                  key="route-empty"
+                  class="route-stage__boot-placeholder"
+                  aria-hidden="true"
                 />
               </Transition>
             </router-view>
           </div>
         </section>
+        <Transition name="app-boot">
+          <div
+            v-if="appBootVisible && isImmersiveRoute"
+            class="app-boot-overlay"
+            aria-hidden="true"
+            inert
+          >
+            <SidebarNav compact boot />
+            <section class="main-panel">
+              <div class="route-stage">
+                <HomeBootSkeleton />
+              </div>
+            </section>
+          </div>
+        </Transition>
         <PlayerBar />
         <ThemeTransitionOverlay />
         <div
@@ -69,6 +92,7 @@ import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, wat
 import { useRoute } from 'vue-router';
 import { darkTheme } from 'naive-ui';
 import SidebarNav from './components/SidebarNav.vue';
+import HomeBootSkeleton from './components/HomeBootSkeleton.vue';
 import TopBar from './components/TopBar.vue';
 import ThemeTransitionOverlay from './components/ThemeTransitionOverlay.vue';
 import WindowControls from './components/WindowControls.vue';
@@ -89,20 +113,26 @@ const LoginModal = defineAsyncComponent(() => import('./components/LoginModal.vu
 const auth = useAuthStore();
 const theme = useThemeStore();
 const route = useRoute();
+const initialRoutePath = getInitialRoutePath();
 theme.initTheme();
 auth.initAuth();
 
 const naiveTheme = computed(() =>
   theme.state.mode === 'dark' ? darkTheme : null,
 );
-const isDesktopLyricsRoute = computed(() => route.meta.desktopLyrics);
-const isImmersiveRoute = computed(() => route.name === 'home');
+const isDesktopLyricsRoute = computed(() =>
+  route.meta.desktopLyrics || (!route.name && initialRoutePath.startsWith('/desktop-lyrics')),
+);
+const isImmersiveRoute = computed(() =>
+  route.name === 'home' || (!route.name && isHomePath(initialRoutePath)),
+);
 const isDesktopApp = computed(() =>
   typeof window !== 'undefined' && Boolean(window.mappicDesktop?.windowControls),
 );
 const routeTransitionName = ref('route-soft');
 const isLayoutSwitching = ref(false);
 const appUpdateAvailable = ref(false);
+const appBootVisible = ref(isHomePath(initialRoutePath));
 const PODCAST_TAB_ROUTE_NAMES = new Set([
   'podcast',
   'podcast-rank',
@@ -142,6 +172,10 @@ function markLayoutSwitching() {
   }, 120);
 }
 
+function markHomeBootReady() {
+  appBootVisible.value = false;
+}
+
 onBeforeUnmount(() => {
   if (typeof window !== 'undefined') {
     window.clearTimeout(layoutSwitchTimer);
@@ -151,6 +185,7 @@ onBeforeUnmount(() => {
 
 onMounted(() => {
   window.addEventListener('lanyin:app-update-available', handleAppUpdateAvailable);
+  notifyRendererReady();
 });
 
 watch(
@@ -216,6 +251,37 @@ function reloadForAppUpdate() {
 
 function dismissAppUpdate() {
   appUpdateAvailable.value = false;
+}
+
+function getInitialRoutePath() {
+  if (typeof window === 'undefined') {
+    return '/';
+  }
+
+  const hashPath = window.location.hash.replace(/^#/, '');
+
+  if (hashPath) {
+    return hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
+  }
+
+  return window.location.pathname || '/';
+}
+
+function isHomePath(path) {
+  return path === '/' || path === '/home' || path.startsWith('/home?') || path.startsWith('/home/');
+}
+
+function notifyRendererReady() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      document.documentElement.dataset.appReady = 'true';
+      window.mappicDesktop?.app?.ready?.();
+    });
+  });
 }
 
 const themeOverrides = computed(() => {

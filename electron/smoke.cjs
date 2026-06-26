@@ -90,7 +90,7 @@ async function waitForSmokeApp(window) {
         Boolean(
           document.readyState !== 'loading' &&
           document.querySelector('#app') &&
-          document.querySelector('#app').children.length > 0
+          document.documentElement.dataset.appReady === 'true'
         )
       `)
       .catch(() => false);

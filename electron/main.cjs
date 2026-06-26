@@ -4,7 +4,11 @@ const path = require('node:path');
 const { createDesktopLyricsManager } = require('./desktopLyricsWindow.cjs');
 const { createAppProtocolRegistrar } = require('./protocolProxy.cjs');
 const { createTaskbarControlsManager } = require('./taskbarControls.cjs');
-const { openExternalUrl, sendToWindow } = require('./windowUtils.cjs');
+const {
+  openExternalUrl,
+  safelyCallWindowMethod,
+  sendToWindow,
+} = require('./windowUtils.cjs');
 const {
   captureFirstScreenSmoke,
   captureFpsSmoke,
@@ -58,6 +62,7 @@ const desktopLyricsStatePath = path.join(
 
 let mainWindow = null;
 let mainWindowIpcRegistered = false;
+let mainWindowShowFallbackTimer = null;
 
 if (isAutomationSmoke) {
   app.commandLine.appendSwitch('disable-gpu');
@@ -129,7 +134,7 @@ async function createMainWindow() {
     title: '澜音',
     backgroundColor: '#0b0d11',
     autoHideMenuBar: true,
-    show: !isFirstScreenSmoke,
+    show: false,
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -142,6 +147,7 @@ async function createMainWindow() {
   attachNavigationGuards(mainWindow);
   attachDebugLogging(mainWindow);
   attachWindowStateEvents(mainWindow);
+  attachMainWindowShowEvents(mainWindow);
   taskbarControls.attachToWindow(mainWindow);
 
   await mainWindow.loadURL(`${APP_PROTOCOL}://app/#/home`);
@@ -167,6 +173,7 @@ async function createMainWindow() {
   }
 
   mainWindow.on('closed', () => {
+    clearMainWindowShowFallback();
     mainWindow = null;
 
     if (desktopLyrics.isOpen()) {
@@ -211,6 +218,11 @@ function registerMainWindowIpc() {
     const window = getMainWindowFromEvent(event);
     return getMainWindowState(window);
   });
+
+  ipcMain.on('app:renderer-ready', (event) => {
+    const window = getMainWindowFromEvent(event);
+    showMainWindow(window);
+  });
 }
 
 function getMainWindowFromEvent(event) {
@@ -241,6 +253,48 @@ function getMainWindowState(window = mainWindow) {
 
 function sendMainWindowState(window = mainWindow) {
   sendToWindow(window, 'main-window:state', getMainWindowState(window));
+}
+
+function attachMainWindowShowEvents(window) {
+  if (isAutomationSmoke) {
+    return;
+  }
+
+  window.once('ready-to-show', () => {
+    setTimeout(() => showMainWindow(window), 80);
+  });
+
+  window.webContents.once('did-finish-load', () => {
+    clearMainWindowShowFallback();
+    mainWindowShowFallbackTimer = setTimeout(() => {
+      showMainWindow(window);
+    }, 1500);
+  });
+}
+
+function clearMainWindowShowFallback() {
+  if (!mainWindowShowFallbackTimer) {
+    return;
+  }
+
+  clearTimeout(mainWindowShowFallbackTimer);
+  mainWindowShowFallbackTimer = null;
+}
+
+function showMainWindow(window = mainWindow) {
+  if (
+    isAutomationSmoke ||
+    !window ||
+    window !== mainWindow ||
+    window.isDestroyed() ||
+    window.isVisible()
+  ) {
+    return;
+  }
+
+  clearMainWindowShowFallback();
+  safelyCallWindowMethod(window, 'show');
+  safelyCallWindowMethod(window, 'focus');
 }
 
 function attachWindowStateEvents(window) {

@@ -105,8 +105,12 @@ import { useAuthStore } from '../stores/auth'
 import { useLibraryStore } from '../stores/library'
 import { createUserPlaylistData, getUserPlaylistLibraryData } from '../services/netease'
 
-defineProps({
+const props = defineProps({
   compact: {
+    type: Boolean,
+    default: false
+  },
+  boot: {
     type: Boolean,
     default: false
   }
@@ -224,6 +228,10 @@ const sidebarGroups = computed(() => [
 watch(
   () => [auth.userId.value, auth.state.isLoggedIn, auth.isGuest.value],
   ([uid, isLoggedIn, isGuest]) => {
+    if (props.boot) {
+      return
+    }
+
     if (!isLoggedIn || isGuest || !uid) {
       library.replaceRemotePlaylists()
       return
@@ -235,6 +243,10 @@ watch(
 )
 
 function isActive(item) {
+  if (props.boot) {
+    return false
+  }
+
   return item.activeMatch ? route.path.startsWith(item.activeMatch) : route.path === item.to
 }
 

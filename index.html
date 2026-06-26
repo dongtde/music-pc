@@ -2,25 +2,1097 @@
 <html lang="zh-CN">
 
 <head>
-
-
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#0b0d11" media="(prefers-color-scheme: dark)" />
   <meta name="theme-color" content="#f5f8f7" media="(prefers-color-scheme: light)" />
-  <meta name="description" content="澜音 音乐播放器" />
+  <meta name="description" content="&#28572;&#38899; &#38899;&#20048;&#25773;&#25918;&#22120;" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="澜音" />
+  <meta name="apple-mobile-web-app-title" content="&#28572;&#38899;" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/pwa/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/pwa/apple-touch-icon.png" />
-  <title>澜音</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      --app-bg: #101011;
+      --sidebar-bg: #1a1a1b;
+      --text-main: #f5f7fb;
+      --text-muted: #8490a0;
+      --text-soft: #c8d2e0;
+      --text-strong: #ffffff;
+      --accent-rgb: 255, 63, 115;
+      --accent: #ff3f73;
+      --control-bg-hover: #27272a;
+      --layout-duration-fast: 320ms;
+      background: #080809;
+      color: var(--text-main);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body,
+    #app {
+      width: 100%;
+      height: 100%;
+    }
+
+    html {
+      overflow: hidden;
+    }
+
+    body {
+      min-width: 1100px;
+      margin: 0;
+      overflow: hidden;
+      background: #080809;
+      color: var(--text-main);
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .app-shell {
+      position: relative;
+      display: grid;
+      width: 100vw;
+      height: 100vh;
+      grid-template-columns: 211px 1fr;
+      grid-template-rows: 1fr 0;
+      background: var(--app-bg);
+    }
+
+    .app-shell--immersive {
+      grid-template-columns: 76px minmax(0, 1fr);
+      background: #080809;
+    }
+
+    .sidebar {
+      grid-row: 1 / 3;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+      overflow: hidden;
+      padding: 24px 10px 16px;
+      border-right: 0;
+      background: var(--sidebar-bg);
+      font-size: 13px;
+      font-weight: 400;
+    }
+
+    .app-shell--immersive .sidebar,
+    .app-boot-overlay .sidebar {
+      grid-row: 1;
+      background: #080809;
+    }
+
+    .profile-card {
+      position: relative;
+      display: grid;
+      width: 100%;
+      min-height: 46px;
+      grid-template-columns: 46px minmax(0, 1fr) 18px;
+      grid-template-rows: auto auto;
+      align-content: center;
+      align-items: center;
+      column-gap: 12px;
+      row-gap: 2px;
+      padding: 0 5px;
+    }
+
+    .profile {
+      position: relative;
+      display: contents;
+      border: 0;
+      color: inherit;
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .sidebar--compact .profile-card {
+      width: 44px;
+      min-height: 46px;
+      grid-template-columns: 44px;
+      grid-template-rows: 46px;
+      margin: 0 0 0 6px;
+      padding: 0;
+    }
+
+    .sidebar--compact .profile__text,
+    .sidebar--compact .profile > svg {
+      position: absolute;
+      width: 0;
+      max-width: 0;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(-8px);
+      visibility: hidden;
+    }
+
+    .profile-avatar {
+      position: relative;
+      display: grid;
+      width: 46px;
+      height: 46px;
+      grid-column: 1;
+      grid-row: 1 / 3;
+      overflow: hidden;
+      place-items: center;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 52% 26%, #ffd8be 0 17%, transparent 18%),
+        radial-gradient(circle at 50% 54%, #2b1b16 0 23%, transparent 24%),
+        linear-gradient(135deg, #c0865c, #43291e);
+      box-shadow: none;
+    }
+
+    .profile-avatar::after {
+      position: absolute;
+      right: -1px;
+      bottom: 2px;
+      width: 9px;
+      height: 9px;
+      border: 2px solid #080809;
+      border-radius: 50%;
+      background: #43d17b;
+      content: "";
+    }
+
+    .sidebar--compact .profile-avatar {
+      grid-column: 1;
+      grid-row: 1;
+      width: 44px;
+      height: 44px;
+    }
+
+    .profile-avatar span {
+      width: 18px;
+      height: 24px;
+      margin-top: 16px;
+      border-radius: 999px 999px 6px 6px;
+      background: #f0b28d;
+    }
+
+    .profile-avatar img {
+      width: 100%;
+      height: 100%;
+      border-radius: inherit;
+      object-fit: cover;
+    }
+
+    .profile__text {
+      display: flex;
+      min-width: 0;
+      max-width: 132px;
+      grid-column: 2;
+      grid-row: 1;
+      align-self: end;
+      overflow: hidden;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .profile-card--text-centered .profile__text {
+      grid-row: 1 / 3;
+      align-self: center;
+    }
+
+    .profile__text strong {
+      overflow: hidden;
+      font-size: 13px;
+      font-weight: 400;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .nav-groups {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding-right: 4px;
+      scrollbar-width: none;
+    }
+
+    .nav-groups::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+    }
+
+    .sidebar--compact .nav-groups {
+      width: 100%;
+      padding: 0 0 0 6px;
+    }
+
+    .nav-group,
+    .sidebar--compact .nav-group {
+      margin-bottom: 24px;
+    }
+
+    .nav-title {
+      display: flex;
+      height: 26px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 400;
+    }
+
+    .sidebar--compact .nav-title {
+      padding: 0;
+    }
+
+    .sidebar--compact .nav-title span {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .nav-item {
+      position: relative;
+      display: flex;
+      width: 100%;
+      height: 44px;
+      align-items: center;
+      gap: 13px;
+      padding: 0 12px 0 19px;
+      border-radius: 8px;
+      color: var(--text-main);
+      font-size: 13px;
+      font-weight: 400;
+    }
+
+    .nav-item > svg {
+      flex: 0 0 auto;
+    }
+
+    .nav-item span,
+    .nav-item em {
+      min-width: 0;
+      max-width: 142px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sidebar--compact .nav-item {
+      width: 44px;
+      height: 44px;
+      justify-content: center;
+      gap: 0;
+      overflow: hidden;
+      margin: 0;
+      padding: 0;
+      color: rgba(255, 255, 255, 0.76);
+    }
+
+    .sidebar--compact .nav-item > svg {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .sidebar--compact .nav-item span,
+    .sidebar--compact .nav-item em {
+      flex: 0 0 0;
+      max-width: 0;
+      margin-left: 0;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(-8px);
+    }
+
+    .nav-item::before {
+      position: absolute;
+      top: 8px;
+      bottom: 8px;
+      left: 0;
+      width: 3px;
+      border-radius: 6px;
+      background: var(--accent);
+      content: "";
+      transform: scaleY(0);
+      transform-origin: center;
+    }
+
+    .sidebar--compact .nav-item::before {
+      top: 11px;
+      bottom: 11px;
+      left: -4px;
+    }
+
+    .main-panel {
+      position: relative;
+      display: flex;
+      min-width: 0;
+      min-height: 0;
+      flex-direction: column;
+      overflow: hidden;
+      background: #080809;
+    }
+
+    .route-stage {
+      position: relative;
+      isolation: isolate;
+      flex: 1 1 auto;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+      background: inherit;
+    }
+
+    .route-stage > .view {
+      width: 100%;
+      height: 100%;
+    }
+
+    .app-boot-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 43;
+      display: grid;
+      grid-template-columns: 76px minmax(0, 1fr);
+      grid-template-rows: 1fr 0;
+      overflow: hidden;
+      pointer-events: none;
+      background: #080809;
+    }
+
+    .window-controls {
+      display: flex;
+      flex: 0 0 auto;
+      height: 36px;
+      align-items: center;
+      gap: 2px;
+      -webkit-app-region: no-drag;
+    }
+
+    .window-control {
+      display: grid;
+      width: 38px;
+      height: 32px;
+      place-items: center;
+      border: 0;
+      border-radius: 6px;
+      color: var(--text-soft);
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .window-controls--floating {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      z-index: 45;
+      height: 36px;
+      padding: 2px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      background: rgba(8, 8, 9, 0.36);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+      backdrop-filter: blur(16px);
+    }
+
+    .window-controls--floating .window-control {
+      color: rgba(255, 255, 255, 0.72);
+    }
+
+    .app-window-drag-strip {
+      position: absolute;
+      top: 0;
+      right: 132px;
+      left: 76px;
+      z-index: 44;
+      height: 14px;
+      -webkit-app-region: drag;
+    }
+
+    .view.home-view,
+    .home-boot-skeleton {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      padding: 0;
+    }
+
+    .home-boot-skeleton {
+      --home-boot-rgb: 112, 97, 158;
+      --soda-cover-image: radial-gradient(circle at 42% 48%, rgba(var(--home-boot-rgb), 0.18), transparent 36%);
+      --soda-cover-tint-rgb: var(--home-boot-rgb);
+      background: #080809;
+      color: #ffffff;
+    }
+
+    .home-boot-skeleton .soda-feed,
+    .home-boot-skeleton .soda-feed__scroller {
+      position: relative;
+      height: 100%;
+      overflow: hidden;
+      background: #080809;
+      color: #ffffff;
+    }
+
+    .home-boot-skeleton .soda-feed__tabs {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      background: rgba(8, 8, 9, 0.32);
+      backdrop-filter: blur(16px);
+      transform: translateX(-50%);
+    }
+
+    .home-boot-skeleton .soda-feed__tabs::before {
+      position: absolute;
+      top: 3px;
+      bottom: 3px;
+      left: 3px;
+      width: calc((100% - 10px) / 2);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.14);
+      content: "";
+      transform: translateX(calc(var(--active-tab-index, 0) * (100% + 4px)));
+    }
+
+    .home-boot-skeleton .soda-feed__tabs button {
+      position: relative;
+      z-index: 1;
+      width: 72px;
+      height: 32px;
+      padding: 0;
+      border: 0;
+      border-radius: 999px;
+      color: rgba(255, 255, 255, 0.42);
+      background: transparent;
+      cursor: default;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .home-boot-skeleton .soda-feed__tabs button.active {
+      color: #ffffff;
+    }
+
+    .home-boot-skeleton .soda-slide {
+      position: relative;
+      display: grid;
+      height: 100%;
+      min-height: 560px;
+      grid-template-columns: minmax(360px, 440px) minmax(360px, 480px);
+      grid-template-rows: minmax(0, 1fr) auto;
+      align-items: center;
+      justify-content: center;
+      column-gap: clamp(72px, 8vw, 148px);
+      row-gap: 18px;
+      overflow: hidden;
+      padding: 88px 160px 26px 120px;
+      background:
+        linear-gradient(90deg, rgba(0, 0, 0, 0.82) 0%, rgba(0, 0, 0, 0.34) 54%, rgba(0, 0, 0, 0.72) 100%),
+        radial-gradient(circle at 42% 48%, rgba(var(--home-boot-rgb), 0.18), transparent 36%),
+        #111113;
+      background-position: center;
+      background-size: cover;
+      contain: layout paint style;
+    }
+
+    .home-boot-skeleton .soda-slide__backdrop {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+    }
+
+    .home-boot-skeleton .soda-slide__backdrop::after {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(180deg, rgba(0, 0, 0, 0.38), rgba(0, 0, 0, 0.8)),
+        linear-gradient(90deg, rgba(0, 0, 0, 0.78), transparent 48%, rgba(0, 0, 0, 0.74));
+      content: "";
+    }
+
+    .home-boot-skeleton .soda-slide__fallback {
+      position: absolute;
+      inset: -8%;
+      width: 116%;
+      height: 116%;
+      filter: blur(34px) saturate(1.18);
+      opacity: 0.58;
+      transform: scale(1.04);
+    }
+
+    .home-boot-skeleton .cover--boot {
+      background:
+        radial-gradient(circle at 42% 46%, rgba(var(--home-boot-rgb), 0.34), transparent 34%),
+        linear-gradient(135deg, #14111b, #080809 62%);
+    }
+
+    .home-boot-skeleton .soda-slide__player {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      width: min(100%, 440px);
+      grid-column: 1;
+      grid-row: 1;
+      align-self: center;
+      justify-self: center;
+      gap: 18px;
+    }
+
+    .home-boot-skeleton .soda-slide__visual {
+      position: relative;
+      z-index: 1;
+      width: min(100%, 430px);
+      aspect-ratio: 1 / 1;
+    }
+
+    .home-boot-skeleton .soda-slide__cover,
+    .home-boot-skeleton .soda-slide__disc {
+      position: absolute;
+      display: block;
+      overflow: hidden;
+    }
+
+    .home-boot-skeleton .soda-slide__cover {
+      inset: 0;
+      z-index: 2;
+      border-radius: 8px;
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.08), rgba(var(--home-boot-rgb), 0.22), rgba(255, 255, 255, 0.08));
+      background-size: 220% 100%;
+      box-shadow: 0 28px 62px rgba(0, 0, 0, 0.46);
+      transform: translateX(-10px) rotate(-1deg);
+      animation: home-boot-shimmer 1.15s ease-in-out infinite;
+    }
+
+    .home-boot-skeleton .soda-slide__disc {
+      top: 8%;
+      right: -20%;
+      z-index: 1;
+      width: 84%;
+      height: 84%;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle, rgba(15, 15, 17, 0.88) 0 9%, transparent 10%),
+        repeating-radial-gradient(circle, rgba(35, 31, 48, 0.86) 0 9px, rgba(62, 54, 86, 0.68) 10px 12px);
+      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.38);
+    }
+
+    .home-boot-skeleton .soda-slide__caption {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      max-width: 100%;
+      gap: 10px;
+    }
+
+    .home-boot-skeleton .soda-slide__tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .home-boot-skeleton .soda-slide__kicker,
+    .home-boot-skeleton .soda-slide__meta-tag {
+      display: inline-flex;
+      width: fit-content;
+      height: 30px;
+      align-items: center;
+      padding: 0 11px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(12px);
+    }
+
+    .home-boot-chip {
+      width: 68px;
+    }
+
+    .home-boot-skeleton .soda-slide__caption h1 {
+      margin: 6px 0 0;
+      color: #ffffff;
+      font-size: 40px;
+      letter-spacing: 0;
+      line-height: 1.08;
+      text-shadow: 0 8px 28px rgba(0, 0, 0, 0.48);
+    }
+
+    .home-boot-skeleton .soda-slide__caption p {
+      max-width: 100%;
+      overflow: hidden;
+      margin: 0;
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 16px;
+      line-height: 1.5;
+      text-overflow: ellipsis;
+      text-shadow: 0 6px 22px rgba(0, 0, 0, 0.38);
+      white-space: nowrap;
+    }
+
+    .home-boot-skeleton .soda-slide__position {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .home-boot-pill,
+    .home-boot-title,
+    .home-boot-line,
+    .home-boot-action {
+      display: block;
+      border-radius: 999px;
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.08), rgba(var(--home-boot-rgb), 0.22), rgba(255, 255, 255, 0.08));
+      background-size: 220% 100%;
+      animation: home-boot-shimmer 1.15s ease-in-out infinite;
+    }
+
+    .home-boot-pill {
+      width: 118px;
+      height: 100%;
+    }
+
+    .home-boot-title {
+      width: min(100%, 340px);
+      height: 42px;
+    }
+
+    .home-boot-line {
+      width: 100%;
+      height: 18px;
+    }
+
+    .home-boot-line--wide {
+      width: min(100%, 390px);
+    }
+
+    .home-boot-line--mid {
+      width: 74%;
+    }
+
+    .home-boot-line--short {
+      width: 44%;
+    }
+
+    .home-boot-skeleton .soda-lyrics-panel {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      width: min(100%, 480px);
+      height: min(62vh, 560px);
+      min-height: 340px;
+      grid-column: 2;
+      grid-row: 1;
+      align-self: center;
+      justify-self: center;
+      gap: 10px;
+      overflow: hidden;
+      padding: 0;
+      border-left: 0;
+      isolation: isolate;
+    }
+
+    .home-boot-skeleton .soda-lyrics-panel::before {
+      position: absolute;
+      inset: 8% -8%;
+      z-index: 0;
+      pointer-events: none;
+      backdrop-filter: blur(4px) saturate(1.08);
+      background:
+        radial-gradient(ellipse at center, rgba(var(--home-boot-rgb), 0.24) 0%, rgba(var(--home-boot-rgb), 0.16) 38%, rgba(var(--home-boot-rgb), 0) 70%),
+        radial-gradient(ellipse at center, rgba(8, 8, 9, 0.42) 0%, rgba(8, 8, 9, 0.34) 44%, rgba(8, 8, 9, 0) 78%);
+      content: "";
+      mask-image: radial-gradient(ellipse at center, #000 0%, rgba(0, 0, 0, 0.9) 46%, transparent 82%);
+    }
+
+    .home-boot-skeleton .soda-lyrics-list {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      height: 100%;
+      min-height: 0;
+      gap: 6px;
+      overflow: hidden;
+      padding: clamp(136px, calc(31vh - 31px), 249px) 4px;
+      mask-image: linear-gradient(180deg, transparent 0%, #000 7%, #000 90%, transparent 100%);
+      scrollbar-width: none;
+      user-select: none;
+    }
+
+    .home-boot-skeleton .soda-lyrics-list button {
+      display: grid;
+      width: 100%;
+      min-width: 0;
+      min-height: 62px;
+      gap: 4px;
+      padding: 13px 16px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      transform: scale(0.98);
+    }
+
+    .home-boot-skeleton .soda-lyrics-list button.active {
+      transform: scale(1);
+    }
+
+    .home-boot-skeleton .soda-lyrics-list button.active .home-boot-line {
+      height: 24px;
+    }
+
+    .home-boot-skeleton .soda-action-rail {
+      position: absolute;
+      right: 64px;
+      bottom: 78px;
+      z-index: 3;
+      display: grid;
+      justify-items: center;
+      gap: 14px;
+    }
+
+    .home-boot-skeleton .soda-action-rail button {
+      position: relative;
+      display: grid;
+      min-width: 56px;
+      justify-items: center;
+      gap: 6px;
+      border: 0;
+      color: rgba(255, 255, 255, 0.68);
+      background: transparent;
+      cursor: default;
+      font: inherit;
+    }
+
+    .home-boot-action {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background-color: rgba(255, 255, 255, 0.11);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+      backdrop-filter: blur(16px);
+    }
+
+    .soda-action-rail__play .home-boot-action {
+      background-color: #ff3f73;
+    }
+
+    .home-boot-skeleton .soda-slide__footer {
+      z-index: 2;
+      display: grid;
+      grid-column: 1 / -1;
+      grid-row: 2;
+      align-self: end;
+    }
+
+    .home-boot-skeleton .soda-slide__progress {
+      display: grid;
+      width: 100%;
+      grid-template-columns: 42px minmax(0, 1fr) 42px;
+      align-items: center;
+      gap: 10px;
+      color: rgba(255, 255, 255, 0.62);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .home-boot-skeleton .soda-slide__progress-time:last-child {
+      text-align: right;
+    }
+
+    .home-boot-skeleton .soda-slide__progress-rail {
+      display: block;
+      width: 100%;
+      height: 5px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .home-boot-skeleton .soda-slide__progress-rail span {
+      display: block;
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background: #ff3f73;
+      box-shadow: 0 0 16px rgba(255, 63, 115, 0.58);
+    }
+
+    @keyframes home-boot-shimmer {
+      from {
+        background-position: 160% 0;
+      }
+
+      to {
+        background-position: -60% 0;
+      }
+    }
+
+    @media (max-width: 1400px) {
+      .home-boot-skeleton .soda-slide {
+        grid-template-columns: minmax(320px, 390px) minmax(320px, 420px);
+        column-gap: 68px;
+        padding: 84px 128px 22px 72px;
+      }
+
+      .home-boot-skeleton .soda-slide__player {
+        width: min(100%, 390px);
+      }
+
+      .home-boot-skeleton .soda-slide__visual {
+        width: min(100%, 380px);
+      }
+
+      .home-boot-skeleton .soda-slide__caption h1 {
+        font-size: 34px;
+      }
+
+      .home-boot-skeleton .soda-lyrics-panel {
+        width: min(100%, 420px);
+      }
+
+      .home-boot-skeleton .soda-action-rail {
+        right: 48px;
+        bottom: 72px;
+      }
+    }
+
+    @media (max-width: 1160px) {
+      .home-boot-skeleton .soda-slide {
+        grid-template-columns: minmax(280px, 340px) minmax(280px, 360px);
+        column-gap: 38px;
+        padding: 78px 112px 20px 40px;
+      }
+
+      .home-boot-skeleton .soda-slide__player {
+        width: min(100%, 340px);
+      }
+
+      .home-boot-skeleton .soda-lyrics-panel {
+        width: min(100%, 360px);
+      }
+
+      .home-boot-skeleton .soda-action-rail {
+        right: 34px;
+        bottom: 68px;
+        gap: 12px;
+      }
+    }
+  </style>
+  <link rel="stylesheet" href="/src/styles/main.css" />
+  <link rel="stylesheet" href="/src/styles/home.css" />
+  <title>&#28572;&#38899;</title>
 </head>
 
 <body>
-  <div id="app"></div>
+  <div id="app">
+    <main class="app-shell app-shell--immersive app-shell--boot-static">
+      <div id="boot-window-drag-strip" class="app-window-drag-strip" aria-hidden="true" hidden></div>
+      <div id="boot-window-controls" class="window-controls window-controls--floating app-window-controls" hidden>
+        <button class="window-control" type="button" title="&#26368;&#23567;&#21270;" aria-label="&#26368;&#23567;&#21270;&#31383;&#21475;" data-window-action="minimize">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-minus-icon"><path d="M5 12h14" /></svg>
+        </button>
+        <button class="window-control" type="button" title="&#26368;&#22823;&#21270;" aria-label="&#26368;&#22823;&#21270;&#31383;&#21475;" data-window-action="toggleMaximize">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-maximize-2-icon"><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" x2="14" y1="3" y2="10" /><line x1="3" x2="10" y1="21" y2="14" /></svg>
+        </button>
+        <button class="window-control window-control--close" type="button" title="&#20851;&#38381;" aria-label="&#20851;&#38381;&#31383;&#21475;" data-window-action="close">
+          <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-icon"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+        </button>
+      </div>
+      <div class="app-boot-overlay" aria-hidden="true" inert>
+        <aside class="sidebar sidebar--compact">
+          <div class="profile-card profile-card--text-centered">
+            <button class="profile" type="button">
+              <span class="profile-avatar" aria-hidden="true">
+                <img id="boot-avatar-image" alt="" hidden />
+                <span id="boot-avatar-fallback"></span>
+              </span>
+              <span class="profile__text">
+                <strong>&#28857;&#20987;&#30331;&#24405;</strong>
+              </span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right-icon"><path d="m9 18 6-6-6-6" /></svg>
+            </button>
+          </div>
+
+          <nav class="nav-groups" aria-label="&#38899;&#20048;&#23548;&#33322;">
+            <section class="nav-group">
+              <div class="nav-title"><span>&#21457;&#29616;</span></div>
+              <a href="/home" class="nav-item" aria-label="&#21457;&#29616;&#38899;&#20048;" title="&#21457;&#29616;&#38899;&#20048;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-house-icon"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" /><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
+                <span>&#21457;&#29616;&#38899;&#20048;</span>
+              </a>
+              <a href="/discover/recommend" class="nav-item" aria-label="&#38899;&#20048;&#39302;" title="&#38899;&#20048;&#39302;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-compass-icon"><path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z" /><circle cx="12" cy="12" r="10" /></svg>
+                <span>&#38899;&#20048;&#39302;</span>
+              </a>
+              <a href="/podcast" class="nav-item" aria-label="&#30005;&#21488;" title="&#30005;&#21488;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-radio-tower-icon"><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9" /><path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5" /><circle cx="12" cy="9" r="2" /><path d="M16.2 4.8c2 2 2.26 5.11.8 7.47" /><path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1" /><path d="M9.5 18h5" /><path d="m8 22 4-11 4 11" /></svg>
+                <span>&#30005;&#21488;</span>
+              </a>
+              <a href="/mv" class="nav-item" aria-label="&#35270;&#39057;" title="&#35270;&#39057;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-video-icon"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" /><rect x="2" y="6" width="14" height="12" rx="2" /></svg>
+                <span>&#35270;&#39057;</span>
+              </a>
+              <a href="/friends" class="nav-item" aria-label="&#26379;&#21451;" title="&#26379;&#21451;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-users-icon"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+                <span>&#26379;&#21451;</span>
+              </a>
+            </section>
+
+            <section class="nav-group">
+              <div class="nav-title"><span>&#25105;&#30340;&#38899;&#20048;</span></div>
+              <a href="/library/local" class="nav-item" aria-label="&#26412;&#22320;&#19982;&#19979;&#36733;" title="&#26412;&#22320;&#19982;&#19979;&#36733;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-cloud-download-icon"><path d="M12 13v8l-4-4" /><path d="m12 21 4-4" /><path d="M4.393 15.269A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.436 8.284" /></svg>
+                <span>&#26412;&#22320;&#19982;&#19979;&#36733;</span>
+              </a>
+              <a href="/library/recent" class="nav-item" aria-label="&#26368;&#36817;&#25773;&#25918;" title="&#26368;&#36817;&#25773;&#25918;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-history-icon"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l4 2" /></svg>
+                <span>&#26368;&#36817;&#25773;&#25918;</span>
+              </a>
+              <a href="/library/liked" class="nav-item" aria-label="&#25105;&#21916;&#27426;&#30340;&#38899;&#20048;" title="&#25105;&#21916;&#27426;&#30340;&#38899;&#20048;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-heart-icon"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" /></svg>
+                <span>&#25105;&#21916;&#27426;&#30340;&#38899;&#20048;</span>
+                <em>6</em>
+              </a>
+            </section>
+          </nav>
+        </aside>
+
+        <section class="main-panel">
+          <div class="route-stage">
+            <div class="view home-view home-boot-skeleton">
+              <nav class="soda-feed__tabs" aria-label="&#39318;&#39029;&#20998;&#31867;" style="--active-tab-index: 0">
+                <button type="button" class="active">&#38899;&#20048;</button>
+                <button type="button">&#35270;&#39057;</button>
+              </nav>
+              <section class="soda-feed">
+                <div class="soda-feed__scroller">
+                  <article class="soda-slide home-boot-slide">
+                    <div class="soda-slide__backdrop" aria-hidden="true">
+                      <span class="soda-slide__fallback cover--boot"></span>
+                    </div>
+                    <div class="soda-slide__player">
+                      <div class="soda-slide__visual" aria-hidden="true">
+                        <span class="soda-slide__disc"></span>
+                        <span class="soda-slide__cover"></span>
+                      </div>
+                      <section class="soda-slide__caption">
+                        <div class="soda-slide__tag-row">
+                          <span class="soda-slide__kicker home-boot-pill"></span>
+                          <span class="soda-slide__meta-tag home-boot-chip"></span>
+                        </div>
+                        <h1><span class="home-boot-title"></span></h1>
+                        <p><span class="home-boot-line home-boot-line--wide"></span></p>
+                        <div class="soda-slide__position">
+                          <span class="home-boot-line home-boot-line--short"></span>
+                        </div>
+                      </section>
+                    </div>
+                    <section class="soda-lyrics-panel home-boot-lyrics">
+                      <div class="soda-lyrics-list">
+                        <button type="button" class="placeholder">
+                          <span class="home-boot-line"></span>
+                        </button>
+                        <button type="button" class="placeholder active">
+                          <span class="home-boot-line home-boot-line--wide"></span>
+                        </button>
+                        <button type="button" class="placeholder">
+                          <span class="home-boot-line home-boot-line--mid"></span>
+                        </button>
+                      </div>
+                    </section>
+                    <aside class="soda-action-rail" aria-hidden="true">
+                      <button type="button"><span class="home-boot-action"></span></button>
+                      <button type="button"><span class="home-boot-action"></span></button>
+                      <button type="button"><span class="home-boot-action"></span></button>
+                      <button type="button" class="soda-action-rail__play">
+                        <span class="home-boot-action"></span>
+                      </button>
+                    </aside>
+                    <footer class="soda-slide__footer">
+                      <div class="soda-slide__progress">
+                        <span class="soda-slide__progress-time">0:00</span>
+                        <span class="soda-slide__progress-rail" aria-hidden="true">
+                          <span></span>
+                        </span>
+                        <span class="soda-slide__progress-time">0:00</span>
+                      </div>
+                    </footer>
+                  </article>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+  <script>
+    (() => {
+      try {
+        const desktopWindowControls = window.mappicDesktop?.windowControls;
+        const controls = document.getElementById('boot-window-controls');
+        const dragStrip = document.getElementById('boot-window-drag-strip');
+
+        if (desktopWindowControls && controls) {
+          controls.hidden = false;
+          dragStrip?.removeAttribute('hidden');
+          controls.addEventListener('click', (event) => {
+            const action = event.target?.closest?.('[data-window-action]')?.dataset?.windowAction;
+            desktopWindowControls[action]?.();
+          });
+        }
+
+        const session = JSON.parse(localStorage.getItem('mappic:netease-session') || '{}');
+        const avatarUrl = session?.profile?.avatarUrl || '';
+
+        if (!avatarUrl) {
+          return;
+        }
+
+        const image = document.getElementById('boot-avatar-image');
+        const fallback = document.getElementById('boot-avatar-fallback');
+
+        if (image) {
+          image.src = avatarUrl;
+          image.hidden = false;
+        }
+
+        if (fallback) {
+          fallback.hidden = true;
+        }
+      } catch {
+      }
+    })();
+  </script>
   <script type="module" src="/src/main.js"></script>
 </body>
 

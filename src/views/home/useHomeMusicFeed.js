@@ -45,6 +45,7 @@ export function useHomeMusicFeed({ active }) {
   const activeIndex = ref(0)
   const musicFeedSettling = ref(false)
   const recommendationsLoading = ref(false)
+  const recommendationsSettled = ref(false)
   const recommendationsError = ref('')
   const autoPlayAfterGesture = ref(false)
   const allSongs = shallowRef(prepareQueue(recommendedSingles))
@@ -214,9 +215,11 @@ export function useHomeMusicFeed({ active }) {
       syncPlayerQueue()
       hydrateVisibleCoverTints()
       await snapFeedToActiveIndex('auto')
+      recommendationsSettled.value = true
     } catch (error) {
       if (requestId === recommendationsRequestId) {
         console.warn('Failed to load home recommendations:', error)
+        recommendationsSettled.value = true
         recommendationsError.value = error?.message || '首页推荐加载失败'
       }
     } finally {
@@ -753,6 +756,7 @@ export function useHomeMusicFeed({ active }) {
     feedScroller,
     musicFeedSettling,
     recommendationsLoading,
+    recommendationsSettled,
     recommendationsError,
     feedDragging,
     recommendationQueue,

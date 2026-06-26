@@ -16,7 +16,10 @@
       </button>
     </nav>
 
-    <HomeMusicFeed :active="activeHomeSection === 'music'" />
+    <HomeMusicFeed
+      :active="activeHomeSection === 'music'"
+      @first-data-ready="markHomeDataReady"
+    />
     <HomeVideoFeed :active="activeHomeSection === 'video'" />
   </div>
 </template>
@@ -26,9 +29,10 @@ import { computed, ref } from 'vue'
 import HomeMusicFeed from './home/HomeMusicFeed.vue'
 import HomeVideoFeed from './home/HomeVideoFeed.vue'
 import { HOME_SECTIONS as homeSections } from './home/homeConstants'
-import '../styles/home.css'
 
 const activeHomeSection = ref('music')
+const homeDataReady = ref(false)
+const emit = defineEmits(['home-ready'])
 
 const activeHomeSectionIndex = computed(() =>
   Math.max(0, homeSections.findIndex((section) => section.value === activeHomeSection.value))
@@ -40,5 +44,14 @@ function setHomeSection(value) {
   }
 
   activeHomeSection.value = value
+}
+
+function markHomeDataReady() {
+  if (homeDataReady.value) {
+    return
+  }
+
+  homeDataReady.value = true
+  emit('home-ready')
 }
 </script>

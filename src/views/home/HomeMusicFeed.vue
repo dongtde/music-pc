@@ -229,7 +229,7 @@
 </template>
 
 <script setup>
-import { defineAsyncComponent, toRef } from 'vue'
+import { defineAsyncComponent, toRef, watch } from 'vue'
 import {
   AudioLines,
   ChevronDown,
@@ -255,11 +255,13 @@ const props = defineProps({
     default: false
   }
 })
+const emit = defineEmits(['first-data-ready'])
 const active = toRef(props, 'active')
 
 const {
   feedScroller,
   musicFeedSettling,
+  recommendationsSettled,
   recommendationsError,
   feedDragging,
   recommendationQueue,
@@ -310,4 +312,10 @@ const {
   getSongProgress,
   getDurationLabel
 } = useHomeMusicFeed({ active })
+
+watch(recommendationsSettled, (settled) => {
+  if (settled) {
+    emit('first-data-ready')
+  }
+}, { immediate: true })
 </script>

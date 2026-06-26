@@ -77,6 +77,9 @@ contextBridge.exposeInMainWorld('mappicDesktop', {
     chrome: process.versions.chrome,
     node: process.versions.node,
   },
+  app: {
+    ready: () => ipcRenderer.send('app:renderer-ready'),
+  },
   windowControls: {
     minimize: () => ipcRenderer.send('main-window:minimize'),
     toggleMaximize: () => ipcRenderer.send('main-window:toggle-maximize'),
