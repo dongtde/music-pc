@@ -37,7 +37,7 @@
 </template>
 
 <script setup>
-import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import '../styles/danmaku.css'
 
 const emit = defineEmits(['needMore'])
@@ -113,7 +113,9 @@ const launchWarmupIntervalMs = computed(() => {
   return value > 36 ? 1800 : 1540
 })
 const layerVisible = ref(false)
-const layerPaused = computed(() => props.paused || !layerVisible.value)
+const pageActive = ref(isPageActive())
+const streamPaused = computed(() => props.paused || !pageActive.value)
+const layerPaused = computed(() => streamPaused.value || !layerVisible.value)
 const danmakuItems = shallowRef([])
 const pendingComments = shallowRef([])
 const activeLaunchSlots = ref(0)
@@ -166,12 +168,15 @@ watch(maxVisibleItems, () => {
 })
 
 watch(
-  () => [props.enabled, props.paused, props.hasMore, props.loading],
-  ([enabled, paused]) => {
+  () => [props.enabled, props.paused, pageActive.value, props.hasMore, props.loading],
+  ([enabled, propPaused, active]) => {
     clearResumeFrame()
+
+    const paused = Boolean(propPaused || !active)
 
     if (enabled && !paused) {
       if (layerVisible.value) {
+        startStreamClock()
         scheduleSourceCommentsSync()
         scheduleVisibleItems()
         scheduleLaunchWarmup()
@@ -180,7 +185,11 @@ watch(
       }
     } else {
       pauseStreamClock()
-      layerVisible.value = false
+
+      if (!enabled || propPaused) {
+        layerVisible.value = false
+      }
+
       clearFillTimer()
       clearLaunchWarmupTimer()
       clearSlotTimers()
@@ -191,13 +200,47 @@ watch(
   { immediate: true }
 )
 
+onMounted(() => {
+  if (typeof document === 'undefined') {
+    return
+  }
+
+  pageActive.value = isPageActive()
+  document.addEventListener('visibilitychange', handlePageActivityChange)
+  window.addEventListener('blur', handlePageActivityChange)
+  window.addEventListener('focus', handlePageActivityChange)
+})
+
 onUnmounted(() => {
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', handlePageActivityChange)
+  }
+
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('blur', handlePageActivityChange)
+    window.removeEventListener('focus', handlePageActivityChange)
+  }
+
   clearSourceSyncTimer()
   clearFillTimer()
   clearLaunchWarmupTimer()
   clearResumeFrame()
   clearSlotTimers()
 })
+
+function isPageActive() {
+  if (typeof document === 'undefined') {
+    return true
+  }
+
+  const focused = typeof document.hasFocus === 'function' ? document.hasFocus() : true
+
+  return document.visibilityState !== 'hidden' && focused
+}
+
+function handlePageActivityChange() {
+  pageActive.value = isPageActive()
+}
 
 function getSourceComments() {
   const hotComments = props.hotComments.map((comment, index) =>
@@ -274,7 +317,7 @@ function resetDanmakuStream() {
 
 function resetStreamClock() {
   streamClockMs = 0
-  streamStartedAt = props.enabled && !props.paused && layerVisible.value
+  streamStartedAt = props.enabled && !streamPaused.value && layerVisible.value
     ? performance.now()
     : 0
 }
@@ -286,7 +329,7 @@ function prepareStreamResume() {
   resumeFrame = window.requestAnimationFrame(() => {
     resumeFrame = 0
 
-    if (!props.enabled || props.paused) {
+    if (!props.enabled || streamPaused.value) {
       return
     }
 
@@ -313,6 +356,7 @@ function startStreamClock() {
 
 function pauseStreamClock() {
   if (!streamStartedAt) {
+    refreshDanmakuItemStyles(streamClockMs)
     return
   }
 
@@ -349,7 +393,7 @@ function refreshDanmakuItemStyles(clockMs = getStreamClockMs()) {
 function scheduleSourceCommentsSync() {
   clearSourceSyncTimer()
 
-  if (!props.enabled || props.paused) {
+  if (!props.enabled || streamPaused.value) {
     return
   }
 
@@ -367,7 +411,7 @@ function clearSourceSyncTimer() {
 }
 
 function syncSourceComments() {
-  if (!props.enabled || props.paused) {
+  if (!props.enabled || streamPaused.value) {
     return
   }
 
@@ -463,14 +507,14 @@ function fillDanmakuSlots() {
 }
 
 function scheduleFillDanmakuSlots() {
-  if (fillTimer || !props.enabled || props.paused) {
+  if (fillTimer || !props.enabled || streamPaused.value) {
     return
   }
 
   fillTimer = window.setTimeout(() => {
     fillTimer = 0
 
-    if (!props.enabled || props.paused) {
+    if (!props.enabled || streamPaused.value) {
       return
     }
 
@@ -521,7 +565,7 @@ function scheduleLaunchWarmup() {
     showingFallback ||
     !pendingComments.value.length ||
     !props.enabled ||
-    props.paused ||
+    streamPaused.value ||
     getCurrentLaunchSlotLimit() >= maxVisibleItems.value
   ) {
     return
@@ -530,7 +574,7 @@ function scheduleLaunchWarmup() {
   launchWarmupTimer = window.setTimeout(() => {
     launchWarmupTimer = 0
 
-    if (!props.enabled || props.paused || showingFallback) {
+    if (!props.enabled || streamPaused.value || showingFallback) {
       return
     }
 
@@ -569,7 +613,7 @@ function cycleDanmakuItem(index) {
 }
 
 function requestMoreIfNeeded() {
-  if (!props.enabled || props.paused || props.loading || !props.hasMore) {
+  if (!props.enabled || streamPaused.value || props.loading || !props.hasMore) {
     return
   }
 
@@ -668,7 +712,7 @@ function clearOverflowSlotTimers() {
 }
 
 function isLayerRunning() {
-  return Boolean(props.enabled && !props.paused && layerVisible.value)
+  return Boolean(props.enabled && !streamPaused.value && layerVisible.value)
 }
 
 function createDanmakuTiming(content, index) {
@@ -690,11 +734,16 @@ function createDanmakuTiming(content, index) {
 
 function createDanmakuStyle(timing, isHot, clockMs = 0) {
   const phaseMs = getDanmakuPhaseMs(timing, clockMs)
+  const durationMs = getTimingDurationMs(timing)
+  const progress = durationMs > 0 ? phaseMs / durationMs : 0
+  const pausedVw = 18 - 138 * progress
+  const pausedPercent = 100 * progress
 
   return {
     '--danmaku-top': `${timing.top}%`,
     '--danmaku-duration': `${timing.duration.toFixed(2)}s`,
     '--danmaku-delay': `${(-phaseMs / 1000).toFixed(2)}s`,
+    '--danmaku-paused-x': `calc(${pausedVw.toFixed(4)}vw - ${pausedPercent.toFixed(4)}%)`,
     '--danmaku-scale': isHot ? 1.04 : 1,
     '--danmaku-lane': timing.lane
   }

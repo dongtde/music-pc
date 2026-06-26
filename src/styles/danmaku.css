@@ -48,7 +48,8 @@
 }
 
 .soda-danmaku--paused .soda-danmaku__item {
-  animation-play-state: paused;
+  transform: translate3d(var(--danmaku-paused-x, 18vw), 0, 0) scale(var(--danmaku-scale, 1));
+  animation: none;
 }
 
 .soda-danmaku__item--hot {
