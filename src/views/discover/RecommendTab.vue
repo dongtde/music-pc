@@ -662,15 +662,6 @@ async function playHeroSong(slide) {
     return;
   }
 
-  const queue = [
-    track,
-    ...homeRecommendedSingles.value.filter(
-      (song) => String(song.id) !== String(track.id)
-    ),
-  ];
-
-  player.setQueue(queue, { type: 'discover-hero', id: slide.id });
-
   if (String(player.state.currentTrack.id) === String(track.id)) {
     await player.togglePlay();
     return;
@@ -680,6 +671,9 @@ async function playHeroSong(slide) {
 
   try {
     const played = await player.playTrack(track);
+    if (played) {
+      player.appendToQueue(track, { type: 'discover-hero', id: slide.id });
+    }
 
     if (!played) {
       message.error(getPlaybackErrorDisplay(player.state.error, '当前歌曲暂时无法播放'));

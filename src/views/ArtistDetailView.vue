@@ -1290,22 +1290,24 @@ function loadMoreForActiveTab() {
 }
 
 function playFeaturedTrack(track) {
-  playArtistTrack(track, artistTracks.value, { type: 'artist-featured', id: route.params.id })
+  playArtistTrack(track, { type: 'artist-featured', id: route.params.id })
 }
 
 function playSongTrack(track) {
-  playArtistTrack(track, rankedArtistSongs.value, { type: 'artist-songs', id: route.params.id })
+  playArtistTrack(track, { type: 'artist-songs', id: route.params.id })
 }
 
-async function playArtistTrack(track, queue, source) {
-  player.setQueue(queue, source)
-
+async function playArtistTrack(track, source) {
   if (String(player.state.currentTrack.id) === String(track.id)) {
     await player.togglePlay()
     return
   }
 
   const played = await player.playTrack(track)
+  if (played) {
+    player.appendToQueue(track, source)
+  }
+
   if (!played) {
     message.error(getPlaybackErrorDisplay(player.state.error, '当前歌曲暂无可播放链接'))
   }

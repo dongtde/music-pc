@@ -298,7 +298,6 @@ async function fetchFmTracks({ reset = false, autoplay = false } = {}) {
     }
 
     tracks.value = reset ? nextTracks : uniqueTracks([...tracks.value, ...nextTracks])
-    player.setQueue(tracks.value, getFmQueueSource())
     await loadLikeStates(nextTracks)
 
     if (autoplay && activeTrack.value) {
@@ -323,8 +322,6 @@ async function loadLikeStates(nextTracks) {
 }
 
 async function playTrack(track) {
-  player.setQueue(tracks.value, getFmQueueSource())
-
   if (String(player.state.currentTrack.id) === String(track.id)) {
     await player.togglePlay()
     return
@@ -332,6 +329,10 @@ async function playTrack(track) {
 
   activeIndex.value = Math.max(0, tracks.value.findIndex((item) => String(item.id) === String(track.id)))
   const played = await player.playTrack(track)
+  if (played) {
+    player.appendToQueue(track, getFmQueueSource())
+  }
+
   if (!played) {
     message.error(getPlaybackErrorDisplay(player.state.error, '当前歌曲暂无可播放链接'))
   }
@@ -420,7 +421,6 @@ async function trashCurrentTrack() {
     if (activeIndex.value >= tracks.value.length) {
       activeIndex.value = Math.max(0, tracks.value.length - 1)
     }
-    player.setQueue(tracks.value, getFmQueueSource())
     message.success('已从私人 FM 移除')
     if (tracks.value.length) {
       await playTrack(activeTrack.value)

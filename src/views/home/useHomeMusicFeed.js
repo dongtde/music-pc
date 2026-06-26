@@ -67,7 +67,6 @@ export function useHomeMusicFeed({ active }) {
   let sectionSwitchSnapTimer = 0
   let removeTrackEndedListener = null
   let feedScrollLocked = false
-  let syncedQueue = null
   let feedSnapRequestId = 0
   let recommendationsRequestId = 0
   let homeViewEffectsBound = false
@@ -196,7 +195,6 @@ export function useHomeMusicFeed({ active }) {
     }
 
     restoreActiveTrackPosition()
-    syncPlayerQueue()
     hydrateVisibleCoverTints()
 
     if (active.value) {
@@ -221,7 +219,6 @@ export function useHomeMusicFeed({ active }) {
       allSongs.value = prepareQueue(songs)
       recommendationQueue.value = applyMoodQueue(allSongs.value, activeMood.value)
       restoreActiveTrackPosition()
-      syncPlayerQueue()
       hydrateVisibleCoverTints()
       await snapFeedToActiveIndex('auto')
       recommendationsSettled.value = true
@@ -429,26 +426,6 @@ export function useHomeMusicFeed({ active }) {
     scrollToIndex(activeIndex.value + (event.key === 'ArrowDown' ? 1 : -1), 'smooth')
   }
 
-  function syncPlayerQueue(options = {}) {
-    const queueChanged = syncedQueue !== recommendationQueue.value
-    const ownsHomeQueue = isHomeQueueSource()
-
-    if (!queueChanged && ownsHomeQueue) {
-      return
-    }
-
-    if (!options.force && !ownsHomeQueue) {
-      syncedQueue = recommendationQueue.value
-
-      if (!active.value || hasCurrentTrack()) {
-        return
-      }
-    }
-
-    syncedQueue = recommendationQueue.value
-    player.setQueue(syncedQueue, getHomeMusicQueueSource())
-  }
-
   function getHomeMusicQueueSource() {
     return {
       type: 'home-music',
@@ -458,10 +435,6 @@ export function useHomeMusicFeed({ active }) {
 
   function isHomeQueueSource() {
     return player.state.queueSource?.type === 'home-music'
-  }
-
-  function hasCurrentTrack() {
-    return Boolean(player.state.currentTrack?.id)
   }
 
   function restoreActiveTrackPosition() {
@@ -596,8 +569,6 @@ export function useHomeMusicFeed({ active }) {
 
     const shouldToggleCurrentHomeTrack = isHomePlaybackSong(song)
 
-    syncPlayerQueue({ force: true })
-
     if (shouldToggleCurrentHomeTrack) {
       await resumeOrToggleActiveSong(song, options)
       return
@@ -607,6 +578,9 @@ export function useHomeMusicFeed({ active }) {
 
     try {
       const played = await player.playTrack(song)
+      if (played) {
+        player.appendToQueue(song, getHomeMusicQueueSource())
+      }
       showPlaybackError(played)
     } finally {
       if (homePendingTrackId.value === String(song.id)) {

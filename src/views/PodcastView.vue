@@ -864,8 +864,10 @@ function getPodcastRankCacheKey(type) {
 }
 
 async function playProgram(track, queue) {
-  player.setQueue(queue, getPodcastProgramQueueSource())
   const played = await player.playTrack(track)
+  if (played) {
+    player.appendToQueue(track, getPodcastProgramQueueSource())
+  }
 
   if (!played) {
     message.error(getPlaybackErrorDisplay(player.state.error, '当前歌曲暂无可播放链接'))

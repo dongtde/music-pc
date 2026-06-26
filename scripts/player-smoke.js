@@ -77,6 +77,8 @@ const vite = await createServer({
 const { usePlayerStore } = await vite.ssrLoadModule('/src/stores/player.js')
 const { getPlaybackErrorDisplay, PLAYBACK_ERROR_CODES } = await vite.ssrLoadModule('/src/utils/playbackError.js')
 
+globalThis.document = createDocumentMock()
+
 const checks = []
 const player = usePlayerStore()
 const tracks = [
@@ -89,12 +91,41 @@ await runCheck('plays a local track without API lookup', async () => {
   player.setQueue(tracks, { type: 'smoke', id: 'player' })
   const played = await player.playTrack(tracks[0])
 
-  assert(played, 'playTrack should resolve true for localUrl tracks')
+  assert(played, `playTrack should resolve true for localUrl tracks: ${stringifyPlaybackError(player.state.error)}`)
   assert(player.state.currentTrack.id === 'smoke-1', 'currentTrack should be smoke-1')
   assert(player.state.isPlaying, 'state.isPlaying should be true after play')
 })
 
+await runCheck('adds tracks to the front without replacing the queue', async () => {
+  const appendedTrack = createLocalTrack('smoke-4', 'Smoke Track 4')
+
+  player.setQueue([tracks[0]], { type: 'smoke', id: 'replace' })
+  const queueVersion = player.state.queueVersion
+  player.appendToQueue(appendedTrack, { type: 'smoke-append', id: 'manual' })
+
+  assert(player.state.queue.length === 2, 'appendToQueue should add one track')
+  assert(player.state.queue[0].id === 'smoke-4', 'appendToQueue should put the new track first')
+  assert(player.state.queue[1].id === 'smoke-1', 'appendToQueue should keep the existing queue after the new track')
+  assert(player.state.queueVersion > queueVersion, 'appendToQueue should bump queueVersion')
+
+  player.setQueue(tracks, { type: 'smoke', id: 'move-existing' })
+  player.appendToQueue(tracks[2], { type: 'smoke-append', id: 'manual' })
+
+  assert(player.state.queue.length === 3, 'appendToQueue should move existing tracks without duplicating')
+  assert(player.state.queue[0].id === 'smoke-3', 'appendToQueue should move existing tracks to the front')
+  assert(player.state.queue[1].id === 'smoke-1', 'appendToQueue should preserve the remaining queue order')
+  assert(player.state.queue[2].id === 'smoke-2', 'appendToQueue should remove the old existing position')
+
+  const duplicateVersion = player.state.queueVersion
+  player.appendToQueue(tracks[2], { type: 'smoke-append', id: 'manual' })
+
+  assert(player.state.queue.length === 3, 'appendToQueue should avoid duplicate tracks')
+  assert(player.state.queueVersion === duplicateVersion, 'duplicate front add should keep queueVersion')
+})
+
 await runCheck('resolves list and order queue navigation', async () => {
+  player.setQueue(tracks, { type: 'smoke', id: 'player' })
+  await player.playTrack(tracks[0])
   player.setPlayMode('list')
   assert(player.getRelativeQueueTrack(1)?.id === 'smoke-2', 'list next should wrap through queue')
   assert(player.getRelativeQueueTrack(-1)?.id === 'smoke-3', 'list previous should wrap to queue tail')
@@ -193,6 +224,18 @@ function assert(condition, message) {
   }
 }
 
+function stringifyPlaybackError(error) {
+  if (!error) {
+    return 'no error'
+  }
+
+  return JSON.stringify({
+    code: error.code,
+    message: error.message,
+    userMessage: error.userMessage
+  })
+}
+
 function createWindowMock() {
   const storage = new Map()
 
@@ -208,8 +251,18 @@ function createWindowMock() {
     },
     addEventListener: () => {},
     removeEventListener: () => {},
+    setTimeout,
+    clearTimeout,
     requestAnimationFrame: () => 0,
     cancelAnimationFrame: () => {}
+  }
+}
+
+function createDocumentMock() {
+  return {
+    visibilityState: 'visible',
+    addEventListener: () => {},
+    removeEventListener: () => {}
   }
 }
 

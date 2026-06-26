@@ -366,12 +366,21 @@ async function playAll() {
     return
   }
 
-  await playProgram(rankedPrograms.value[0])
+  const track = rankedPrograms.value[0]
+
+  player.setQueue(rankedPrograms.value, { type: 'podcast-detail', id: route.params.id })
+  const played = await player.playTrack(track)
+
+  if (!played) {
+    message.error(getPlaybackErrorDisplay(player.state.error, '当前歌曲暂无可播放链接'))
+  }
 }
 
 async function playProgram(track) {
-  player.setQueue(rankedPrograms.value, { type: 'podcast-detail', id: route.params.id })
   const played = await player.playTrack(track)
+  if (played) {
+    player.appendToQueue(track, { type: 'podcast-detail', id: route.params.id })
+  }
 
   if (!played) {
     message.error(getPlaybackErrorDisplay(player.state.error, '当前歌曲暂无可播放链接'))

@@ -382,17 +382,15 @@ function handleResultSelect(item) {
 }
 
 async function playSearchSong(song) {
-  player.setQueue(
-    displayItems.value.filter((item) => item.type === 'song'),
-    { type: 'search-detail', id: keyword.value }
-  )
-
   if (String(player.state.currentTrack.id) === String(song.id)) {
     await player.togglePlay()
     return
   }
 
   const played = await player.playTrack(song)
+  if (played) {
+    player.appendToQueue(song, { type: 'search-detail', id: keyword.value })
+  }
 
   if (!played) {
     message.error(getPlaybackErrorDisplay(player.state.error, '当前歌曲暂无可播放链接'))

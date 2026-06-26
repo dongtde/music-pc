@@ -29,14 +29,20 @@ export function useQueuePlayback(options = {}) {
   }
 
   async function playTrack(track) {
-    player.setQueue(tracks.value, resolveQueueSource())
+    const source = resolveQueueSource()
 
     if (String(player.state.currentTrack.id) === String(track?.id)) {
       await player.togglePlay()
       return true
     }
 
-    return playWithFeedback(track)
+    const played = await playWithFeedback(track)
+
+    if (played) {
+      player.appendToQueue(track, source)
+    }
+
+    return played
   }
 
   async function playWithFeedback(track) {

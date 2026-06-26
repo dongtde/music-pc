@@ -682,13 +682,10 @@ function handleSearchSongPlay(song) {
 }
 
 async function playSong(song, queue = []) {
-  const playableQueue = queue.filter((item) => item.type === 'song')
-
-  if (playableQueue.length) {
-    player.setQueue(playableQueue, { type: 'topbar-search', id: searchKeyword.value })
-  }
-
   const played = await player.playTrack(song)
+  if (played) {
+    player.appendToQueue(song, { type: 'topbar-search', id: searchKeyword.value })
+  }
 
   if (!played) {
     message.error(getPlaybackErrorDisplay(player.state.error, '当前歌曲暂无可播放链接'))

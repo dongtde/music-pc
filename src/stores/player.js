@@ -1,7 +1,7 @@
 import { reactive } from 'vue'
 import { getSongUrl, registerAnonymous } from '../api/modules/netease'
 import { STORAGE_KEYS } from '../config/app'
-import { currentTrack as fallbackTrack, newSongs } from '../data/music'
+import { currentTrack as fallbackTrack } from '../data/music'
 import { useAuthStore } from './auth'
 import { useLibraryStore } from './library'
 import {
@@ -48,11 +48,7 @@ initialTrack.elapsed = formatTime(initialCurrentTime)
 
 const state = reactive({
   currentTrack: initialTrack,
-  queue: newSongs.map((song, index) => ({
-    ...song,
-    id: song.id ?? `queue-${song.rank}`,
-    rank: String(index + 1).padStart(2, '0')
-  })),
+  queue: [],
   queueSource: DEFAULT_QUEUE_SOURCE,
   queueVersion: queueVersionSeed,
   isPlaying: false,
@@ -234,8 +230,54 @@ export function usePlayerStore() {
   }
 
   function setQueue(tracks, source) {
-    state.queue = Array.isArray(tracks) ? tracks.filter(Boolean) : []
+    state.queue = normalizeQueueTracks(tracks)
     state.queueSource = normalizeQueueSource(source, state.queueSource)
+    state.queueVersion = ++queueVersionSeed
+
+    return state.queueVersion
+  }
+
+  function appendToQueue(tracks, source) {
+    const nextTracks = normalizeQueueTracks(tracks)
+    const nextSource = normalizeQueueSource(source, state.queueSource)
+    const nextTrackKeys = new Set()
+    const uniqueNextTracks = []
+
+    nextTracks.forEach((track) => {
+      const trackKey = getQueueTrackIdentity(track)
+
+      if (trackKey && nextTrackKeys.has(trackKey)) {
+        return
+      }
+
+      uniqueNextTracks.push(track)
+
+      if (trackKey) {
+        nextTrackKeys.add(trackKey)
+      }
+    })
+
+    if (!uniqueNextTracks.length) {
+      state.queueSource = nextSource
+      return state.queueVersion
+    }
+
+    const mergedQueue = [
+      ...uniqueNextTracks,
+      ...state.queue.filter((track) => {
+        const trackKey = getQueueTrackIdentity(track)
+
+        return !trackKey || !nextTrackKeys.has(trackKey)
+      })
+    ]
+
+    if (!hasQueueOrderChanged(state.queue, mergedQueue)) {
+      state.queueSource = nextSource
+      return state.queueVersion
+    }
+
+    state.queue = mergedQueue
+    state.queueSource = nextSource
     state.queueVersion = ++queueVersionSeed
 
     return state.queueVersion
@@ -403,6 +445,7 @@ export function usePlayerStore() {
     togglePlay,
     restartCurrentTrack,
     setQueue,
+    appendToQueue,
     setPlayMode,
     getRelativeQueueTrack,
     shouldRestartCurrentTrackOnEnded,
@@ -665,8 +708,61 @@ function normalizeCoverPaletteUrl(coverUrl) {
   return typeof coverUrl === 'string' ? coverUrl.trim() : ''
 }
 
+function normalizeQueueTracks(tracks) {
+  const queueTracks = Array.isArray(tracks) ? tracks : [tracks]
+
+  return queueTracks.filter(Boolean)
+}
+
 function getCurrentQueueIndex() {
-  return state.queue.findIndex((track) => String(track.id) === String(state.currentTrack.id))
+  const currentTrackKey = getQueueTrackIdentity(state.currentTrack)
+
+  if (!currentTrackKey) {
+    return -1
+  }
+
+  return state.queue.findIndex((track) => getQueueTrackIdentity(track) === currentTrackKey)
+}
+
+function getQueueTrackIdentity(track = {}) {
+  const id = cleanQueueIdentityValue(track.id)
+
+  if (id) {
+    return `id:${id}`
+  }
+
+  const hash = cleanQueueIdentityValue(track.hash)
+
+  if (hash) {
+    return `hash:${hash}`
+  }
+
+  const albumAudioId = cleanQueueIdentityValue(
+    track.album_audio_id ?? track.mixsongid ?? track.audio_id
+  )
+
+  if (albumAudioId) {
+    return `album-audio:${albumAudioId}`
+  }
+
+  const name = cleanQueueIdentityValue(track.name)
+  const artist = cleanQueueIdentityValue(track.artist)
+
+  return name ? `meta:${name}:${artist}` : ''
+}
+
+function cleanQueueIdentityValue(value) {
+  return value === undefined || value === null ? '' : String(value).trim()
+}
+
+function hasQueueOrderChanged(currentQueue, nextQueue) {
+  if (currentQueue.length !== nextQueue.length) {
+    return true
+  }
+
+  return currentQueue.some((track, index) =>
+    getQueueTrackIdentity(track) !== getQueueTrackIdentity(nextQueue[index])
+  )
 }
 
 function getRelativeQueueTrackByMode(queue, currentIndex, direction, playMode) {
