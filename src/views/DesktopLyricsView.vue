@@ -34,12 +34,6 @@
     <section
       class="desktop-lyrics__line-wrap"
       aria-live="polite"
-      @pointerenter="handlePointerEnter"
-      @pointermove="handleLyricPointerMove"
-      @pointerleave="handlePointerLeave"
-      @pointerdown="startLyricDrag"
-      @pointerup="stopLyricDrag"
-      @pointercancel="stopLyricDrag"
     >
       <p
         class="desktop-lyrics__line"
@@ -47,6 +41,12 @@
           'desktop-lyrics__line--placeholder': activeLine.placeholder,
           'desktop-lyrics__line--worded': activeLine.words?.length,
         }"
+        @pointerenter="handlePointerEnter"
+        @pointermove="handleLyricPointerMove"
+        @pointerleave="handlePointerLeave"
+        @pointerdown="startLyricDrag"
+        @pointerup="stopLyricDrag"
+        @pointercancel="stopLyricDrag"
       >
         <template v-if="activeLine.words?.length">
           <span class="desktop-lyrics__line-base desktop-lyrics__line-base--words">
@@ -223,6 +223,12 @@ const fallbackPalette = {
   tertiary: '#ffd166',
 }
 const controlsHideDelay = 2600
+const clickThroughInteractiveSelector = [
+  '.desktop-lyrics__line',
+  '.desktop-lyrics__toolbar',
+  '.desktop-lyrics__settings',
+  '.desktop-lyrics__unlock-button',
+].join(',')
 
 const pointerInside = ref(false)
 const controlsVisible = ref(true)
@@ -259,6 +265,8 @@ let controlsHideTimer = 0
 let lyricDragFrame = 0
 let lyricPlaybackFrame = 0
 let lyricDragPointerId = null
+let desktopLyricsClickThrough = null
+let desktopLyricsMousePoint = null
 
 const activeLine = computed(() => lyrics.activeLine || createPlaceholderLine('暂无歌词'))
 const lyricProgressWidth = computed(() => `${Math.round((lyrics.progress || 0) * 1000) / 10}%`)
@@ -281,6 +289,7 @@ const paletteStyle = computed(() => {
 onMounted(() => {
   scheduleControlsHide()
   syncDesktopLyricsLayout()
+  bindDesktopLyricsHitTesting()
 
   const desktopLyrics = window.mappicDesktop?.desktopLyrics
 
@@ -305,9 +314,90 @@ onBeforeUnmount(() => {
   clearControlsHideTimer()
   stopLyricDrag()
   stopLyricPlaybackClock()
+  unbindDesktopLyricsHitTesting()
   removeStateListener?.()
   removeWindowStateListener?.()
 })
+
+function bindDesktopLyricsHitTesting() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return
+  }
+
+  document.addEventListener('mousemove', handleDesktopLyricsMouseMove, true)
+  document.addEventListener('mousedown', handleDesktopLyricsMouseMove, true)
+  window.addEventListener('mouseleave', handleDesktopLyricsMouseLeave)
+  window.requestAnimationFrame(() => {
+    refreshDesktopLyricsClickThrough()
+  })
+}
+
+function unbindDesktopLyricsHitTesting() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return
+  }
+
+  document.removeEventListener('mousemove', handleDesktopLyricsMouseMove, true)
+  document.removeEventListener('mousedown', handleDesktopLyricsMouseMove, true)
+  window.removeEventListener('mouseleave', handleDesktopLyricsMouseLeave)
+  setDesktopLyricsClickThrough(false)
+  desktopLyricsClickThrough = null
+}
+
+function handleDesktopLyricsMouseMove(event) {
+  desktopLyricsMousePoint = {
+    x: event.clientX,
+    y: event.clientY,
+  }
+  handlePointerMove()
+  refreshDesktopLyricsClickThrough()
+}
+
+function handleDesktopLyricsMouseLeave() {
+  desktopLyricsMousePoint = null
+  handlePointerLeave()
+  refreshDesktopLyricsClickThrough()
+}
+
+function refreshDesktopLyricsClickThrough() {
+  if (lyricDragPointerId || !locked.value) {
+    setDesktopLyricsClickThrough(false)
+    return
+  }
+
+  if (!desktopLyricsMousePoint) {
+    setDesktopLyricsClickThrough(true)
+    return
+  }
+
+  setDesktopLyricsClickThrough(
+    !isDesktopLyricsInteractivePoint(
+      desktopLyricsMousePoint.x,
+      desktopLyricsMousePoint.y
+    )
+  )
+}
+
+function isDesktopLyricsInteractivePoint(clientX, clientY) {
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+    return false
+  }
+
+  const target = document.elementFromPoint(clientX, clientY)
+
+  return Boolean(target?.closest?.(clickThroughInteractiveSelector))
+}
+
+function setDesktopLyricsClickThrough(clickThrough) {
+  const nextClickThrough = Boolean(clickThrough)
+
+  if (desktopLyricsClickThrough === nextClickThrough) {
+    return
+  }
+
+  desktopLyricsClickThrough = nextClickThrough
+  window.mappicDesktop?.desktopLyrics?.setClickThrough?.(nextClickThrough)
+}
 
 function applyDesktopLyricsState(payload = {}) {
   const payloadPlayback = payload.playback || {}
@@ -430,6 +520,7 @@ function applyWindowState(state = {}) {
   }
 
   showControls()
+  refreshDesktopLyricsClickThrough()
 }
 
 function toggleLocked() {
@@ -445,6 +536,7 @@ function setLocked(nextLocked) {
 
   showControls()
   window.mappicDesktop?.desktopLyrics?.setLocked(locked.value)
+  refreshDesktopLyricsClickThrough()
 }
 
 function toggleSettings() {
@@ -501,6 +593,7 @@ function startLyricDrag(event) {
   lyricDragPointerId = event.pointerId
   event.currentTarget.setPointerCapture?.(event.pointerId)
   showControls()
+  setDesktopLyricsClickThrough(false)
   window.mappicDesktop?.desktopLyrics?.startDrag?.()
 }
 
@@ -516,6 +609,13 @@ function stopLyricDrag(event) {
 
   event?.currentTarget?.releasePointerCapture?.(lyricDragPointerId)
   lyricDragPointerId = null
+  if (event) {
+    desktopLyricsMousePoint = {
+      x: event.clientX,
+      y: event.clientY,
+    }
+    refreshDesktopLyricsClickThrough()
+  }
   window.mappicDesktop?.desktopLyrics?.endDrag?.()
 }
 

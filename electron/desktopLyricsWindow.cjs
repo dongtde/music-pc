@@ -26,6 +26,7 @@ function createDesktopLyricsManager({
 } = {}) {
   let desktopLyricsWindow = null;
   let desktopLyricsLocked = false;
+  let desktopLyricsClickThrough = false;
   let lastDesktopLyricsPayload = null;
   let desktopLyricsDragState = null;
   let desktopLyricsTopGuardTimer = null;
@@ -133,6 +134,7 @@ function createDesktopLyricsManager({
       stopTopGuard();
       desktopLyricsWindow = null;
       desktopLyricsLocked = false;
+      desktopLyricsClickThrough = false;
       broadcastWindowState();
     });
 
@@ -330,6 +332,32 @@ function createDesktopLyricsManager({
     );
   }
 
+  function setClickThrough(clickThrough) {
+    const nextClickThrough = Boolean(clickThrough);
+
+    if (!isOpen()) {
+      desktopLyricsClickThrough = false;
+      return;
+    }
+
+    if (desktopLyricsClickThrough === nextClickThrough) {
+      return;
+    }
+
+    desktopLyricsClickThrough = nextClickThrough;
+
+    try {
+      if (nextClickThrough) {
+        desktopLyricsWindow.setIgnoreMouseEvents(true, { forward: true });
+        return;
+      }
+
+      desktopLyricsWindow.setIgnoreMouseEvents(false);
+    } catch (error) {
+      console.warn('[desktop-lyrics:click-through]', error);
+    }
+  }
+
   function sendWindowState(targetWindow = desktopLyricsWindow) {
     if (!targetWindow || targetWindow.isDestroyed()) {
       return;
@@ -428,6 +456,20 @@ function createDesktopLyricsManager({
       resizeForFontSize(layout.fontSize);
     });
 
+    ipcMain.on('desktop-lyrics:set-click-through', (event, clickThrough) => {
+      const senderWindow = BrowserWindow.fromWebContents(event.sender);
+
+      if (
+        !senderWindow ||
+        senderWindow !== desktopLyricsWindow ||
+        senderWindow.isDestroyed()
+      ) {
+        return;
+      }
+
+      setClickThrough(clickThrough);
+    });
+
     ipcMain.on('desktop-lyrics:start-drag', (event) => {
       const senderWindow = BrowserWindow.fromWebContents(event.sender);
 
@@ -447,6 +489,7 @@ function createDesktopLyricsManager({
         startCursor: cursorPoint,
         startBounds: windowBounds,
       };
+      setClickThrough(false);
     });
 
     ipcMain.on('desktop-lyrics:drag-move', (event) => {

@@ -100,6 +100,11 @@ contextBridge.exposeInMainWorld('mappicDesktop', {
       ipcRenderer.send('desktop-lyrics:set-locked', Boolean(locked)),
     setLayout: (layout) =>
       ipcRenderer.send('desktop-lyrics:set-layout', layout),
+    setClickThrough: (clickThrough) =>
+      ipcRenderer.send(
+        'desktop-lyrics:set-click-through',
+        Boolean(clickThrough),
+      ),
     startDrag: () => ipcRenderer.send('desktop-lyrics:start-drag'),
     dragMove: () => ipcRenderer.send('desktop-lyrics:drag-move'),
     endDrag: () => ipcRenderer.send('desktop-lyrics:end-drag'),
