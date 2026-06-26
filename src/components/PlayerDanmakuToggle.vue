@@ -1,7 +1,7 @@
 <template>
   <button
     v-if="visible"
-    class="icon-button"
+    class="icon-button player-danmaku-toggle"
     type="button"
     :aria-label="enabled ? '关闭弹幕' : '开启弹幕'"
     :title="enabled ? '关闭弹幕' : '开启弹幕'"

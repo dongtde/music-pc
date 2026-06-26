@@ -986,6 +986,15 @@
   background: rgba(var(--accent-rgb), 0.14);
 }
 
+.player-tools > .icon-button.player-danmaku-toggle.active,
+.player-tools > .icon-button.player-danmaku-toggle.active:hover,
+.player.player--full-screen > .player-tools > .icon-button.player-danmaku-toggle.active,
+.player.player--full-screen > .player-tools > .icon-button.player-danmaku-toggle.active:hover {
+  color: var(--accent);
+  background: transparent;
+  box-shadow: none;
+}
+
 .player-tools > .icon-button.desktop-lyrics-button.active,
 .player-tools > .icon-button.desktop-lyrics-button.active:hover,
 .player.player--full-screen > .player-tools > .icon-button.desktop-lyrics-button.active,

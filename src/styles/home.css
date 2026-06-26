@@ -831,6 +831,14 @@
   transform: translateY(-2px);
 }
 
+.soda-action-rail button.soda-action-rail__danmaku-toggle.active > svg,
+.soda-action-rail button.soda-action-rail__danmaku-toggle.active:hover > svg {
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.11);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+  transform: none;
+}
+
 .soda-action-rail__play:hover > svg,
 .soda-action-rail__play.active > svg {
   background: var(--accent-hover);

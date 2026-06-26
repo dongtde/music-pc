@@ -158,6 +158,7 @@
               </span>
             </button>
             <button
+              class="soda-action-rail__danmaku-toggle"
               type="button"
               :aria-label="danmakuEnabled ? '关闭弹幕' : '开启弹幕'"
               :title="danmakuEnabled ? '关闭弹幕' : '开启弹幕'"

@@ -96,7 +96,6 @@
         @toggle="toggleVisualizerMenu"
         @select="selectVisualizerMode"
       />
-      <button class="icon-button" type="button" aria-label="麦克风"><Mic2 :size="19" /></button>
       <PlayerQualityPopover
         :open="qualityMenuOpen"
         :button-label="qualityButtonLabel"
@@ -141,7 +140,7 @@
 
 <script setup>
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
-import { AudioLines, Gauge, Mic2, Orbit, Repeat, Repeat1, Repeat2, Shuffle, Sparkles, Volume2, VolumeX, Waves } from 'lucide-vue-next'
+import { AudioLines, Gauge, Orbit, Repeat, Repeat1, Repeat2, Shuffle, Sparkles, Volume2, VolumeX, Waves } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import PlayerDanmakuToggle from './PlayerDanmakuToggle.vue'
 import PlayerDesktopLyricsButton from './PlayerDesktopLyricsButton.vue'
