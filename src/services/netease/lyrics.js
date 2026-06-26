@@ -117,14 +117,14 @@ function parseKrc(lyric = '') {
       const durationMs = Number(lineMatch[2])
       const payload = line.slice(lineMatch[0].length).trim()
 
-      if (!Number.isFinite(startMs) || !payload || isLyricMetadata(payload)) {
+      if (!Number.isFinite(startMs) || !payload || shouldSkipLyricLine(payload, startMs / 1000)) {
         return []
       }
 
       const words = parseKrcWords(payload, startMs)
       const text = words.map((word) => word.text).join('').trim()
 
-      if (!text || isLyricMetadata(text)) {
+      if (!text || shouldSkipLyricLine(text, startMs / 1000)) {
         return []
       }
 
@@ -172,7 +172,7 @@ function parseLrc(lyric = '') {
       const timestamps = [...line.matchAll(/\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/g)]
       const text = line.replace(/\[[^\]]+\]/g, '').trim()
 
-      if (!timestamps.length || !text || isLyricMetadata(text)) {
+      if (!timestamps.length || !text || shouldSkipLyricLine(text)) {
         return []
       }
 
@@ -197,6 +197,42 @@ function formatLyricTime(value) {
   const seconds = String(Math.floor(value % 60)).padStart(2, '0')
 
   return `${minutes}:${seconds}`
+}
+
+const englishLyricMetadataPattern = /^(?:lyric(?:s)?\s*by|lyricist(?:s)?|written\s*by|composer(?:s)?|composed\s*by|arranger(?:s)?|arranged\s*by|producer(?:s)?|produced\s*by|vocal(?:s)?|record(?:ed|ing)(?:\s*by)?|mix(?:ed|ing)(?:\s*by)?|master(?:ed|ing)(?:\s*by)?|publisher(?:s)?|copyright|label|op|sp)\s*[:：]/i
+const lyricSpeakerCuePattern = /^[\p{L}\p{N}\s.'&/-]{1,48}\s*[:：]$/u
+
+function shouldSkipLyricLine(text, seconds = Number.POSITIVE_INFINITY) {
+  const normalizedText = stripKrcWordTags(text).replace(/\s+/g, ' ').trim()
+
+  if (!normalizedText) {
+    return true
+  }
+
+  return (
+    isLyricMetadata(normalizedText) ||
+    englishLyricMetadataPattern.test(normalizedText) ||
+    isIntroTitleCredit(normalizedText, seconds) ||
+    lyricSpeakerCuePattern.test(normalizedText)
+  )
+}
+
+function isIntroTitleCredit(text, seconds) {
+  return (
+    Number.isFinite(seconds) &&
+    seconds <= 3 &&
+    /[-–—]/.test(text) &&
+    (
+      /\bfeat\.?\b/i.test(text) ||
+      text.includes('/') ||
+      /\)\s*[-–—]/.test(text) ||
+      /\s[-–—]\s/.test(text)
+    )
+  )
+}
+
+function stripKrcWordTags(text) {
+  return String(text ?? '').replace(/<\d+\s*,\s*\d+\s*,\s*\d+>/g, '')
 }
 
 function isLyricMetadata(text) {
