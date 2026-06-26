@@ -194,7 +194,15 @@
       :class="{ 'topbar__spacer--search-active': searchExpanded }"
       @pointerdown="handleTopbarSpacerPointerDown"
     />
-    <button class="icon-button" type="button" title="消息" aria-label="消息"><Mail :size="18" /></button>
+    <button
+      class="icon-button"
+      type="button"
+      title="消息"
+      aria-label="消息"
+      @click="featureModalVisible = true"
+    >
+      <Mail :size="18" />
+    </button>
     <button
       class="icon-button"
       type="button"
@@ -209,6 +217,54 @@
       <Settings :size="18" />
     </router-link>
     <WindowControls class="topbar__window-controls" />
+
+    <n-modal
+      v-model:show="featureModalVisible"
+      preset="card"
+      class="feature-modal"
+      :bordered="false"
+      :mask-closable="true"
+      transform-origin="center"
+    >
+      <template #header>
+        <div class="feature-modal__title">
+          <span>项目功能总览</span>
+          <small>当前版本已经开发的主要能力</small>
+        </div>
+      </template>
+
+      <section class="feature-modal__intro">
+        <strong>澜音音乐播放器</strong>
+        <p>基于 Vue 3、Vite 和 Electron 构建的桌面音乐应用，覆盖发现、搜索、播放、账号与桌面体验。</p>
+      </section>
+
+      <div class="feature-modal__grid">
+        <article
+          v-for="section in featureModalSections"
+          :key="section.title"
+          class="feature-modal__section"
+        >
+          <header>
+            <span class="feature-modal__icon" aria-hidden="true">
+              <component :is="section.icon" :size="17" />
+            </span>
+            <strong>{{ section.title }}</strong>
+          </header>
+          <ul>
+            <li v-for="item in section.items" :key="item">{{ item }}</li>
+          </ul>
+        </article>
+      </div>
+
+      <template #footer>
+        <div class="feature-modal__footer">
+          <span>后续功能可以继续补充到这里，作为项目进度入口。</span>
+          <button type="button" class="feature-modal__close" @click="featureModalVisible = false">
+            知道了
+          </button>
+        </div>
+      </template>
+    </n-modal>
   </header>
 </template>
 
@@ -287,11 +343,60 @@ const searchTabs = [
   { label: 'MV', type: 1004, icon: Video }
 ]
 
+const featureModalSections = [
+  {
+    title: '发现与搜索',
+    icon: Search,
+    items: [
+      '首页音乐流、视频流和热门内容推荐',
+      '搜索历史、热门搜索、联想建议和分类结果',
+      '发现页推荐、歌单、榜单、新歌、歌手与专辑'
+    ]
+  },
+  {
+    title: '播放体验',
+    icon: Music,
+    items: [
+      '底部播放器、播放队列、播放模式和音质切换',
+      '歌词滚动、全屏播放、弹幕开关与评论入口',
+      '播放进度、音量控制、视觉效果和状态缓存'
+    ]
+  },
+  {
+    title: '内容详情',
+    icon: ListMusic,
+    items: [
+      '歌单、专辑、歌手详情页',
+      '歌曲评论、MV 评论和分页加载',
+      'MV / 视频播放与酷狗 MV 通道'
+    ]
+  },
+  {
+    title: '账号与资料库',
+    icon: User,
+    items: [
+      '扫码登录、验证码登录和账号资料展示',
+      '喜欢、最近播放、本地与下载入口',
+      '用户创建歌单、收藏歌单同步与新建歌单'
+    ]
+  },
+  {
+    title: '桌面与应用能力',
+    icon: Settings,
+    items: [
+      'Electron 桌面窗口控制、任务栏控制和接口代理',
+      '桌面歌词独立窗口与沉浸式首页布局',
+      '深浅色主题切换、PWA、Service Worker 和更新提示'
+    ]
+  }
+]
+
 const theme = useThemeStore()
 const player = usePlayerStore()
 const router = useRouter()
 const message = useMessage()
 const searchWrap = ref(null)
+const featureModalVisible = ref(false)
 const searchExpanded = ref(false)
 const searchPanelVisible = ref(false)
 const searchKeyword = ref('')
