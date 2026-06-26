@@ -176,6 +176,14 @@ function markHomeBootReady() {
   appBootVisible.value = false;
 }
 
+function clearBootRouteMarker() {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  delete document.documentElement.dataset.bootRoute;
+}
+
 onBeforeUnmount(() => {
   if (typeof window !== 'undefined') {
     window.clearTimeout(layoutSwitchTimer);
@@ -184,6 +192,7 @@ onBeforeUnmount(() => {
 });
 
 onMounted(() => {
+  clearBootRouteMarker();
   window.addEventListener('lanyin:app-update-available', handleAppUpdateAvailable);
   notifyRendererReady();
 });
