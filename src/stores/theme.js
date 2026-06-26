@@ -1,71 +1,29 @@
 import { nextTick, reactive } from 'vue'
-import { STORAGE_KEYS } from '../config/app'
+import {
+  QUEUE_TRANSITION_EFFECTS,
+  SETTINGS_DEFAULTS,
+  STORAGE_KEYS,
+  THEME_COLOR_PRESETS,
+  THEME_MODE_OPTIONS,
+  THEME_TRANSITION_EFFECTS
+} from '../config/app'
 import { readJsonStorage, writeJsonStorage } from '../utils/storage'
 
-export const defaultThemeColor = '#ff3f73'
-
-export const themeColorPresets = [
-  { label: '玫瑰粉', value: '#ff3f73' },
-  { label: '电音紫', value: '#8a5cff' },
-  { label: '湖水青', value: '#1dbf9f' },
-  { label: '海岸蓝', value: '#3f8cff' },
-  { label: '日落橙', value: '#ff8a3d' },
-  { label: '荧光绿', value: '#52c96f' }
-]
-
-export const transitionEffects = [
-  {
-    label: '柔和淡入',
-    value: 'fade',
-    desc: '用透明度变化完成切换'
-  },
-  {
-    label: '横向幕布',
-    value: 'wipe',
-    desc: '从左到右扫过页面，适合干净利落的切换'
-  },
-  {
-    label: '圆形扩散',
-    value: 'circle',
-    desc: '从右上角向外扩散，强调开关触发点'
-  },
-  {
-    label: '滑动翻页',
-    value: 'slide',
-    desc: '像切换唱片页一样横向滑过'
-  },
-  {
-    label: '模糊光晕',
-    value: 'blur',
-    desc: '用短暂模糊和光晕弱化颜色跳变'
-  }
-]
-
-export const queueTransitionEffects = [
-  {
-    label: '右侧滑入',
-    value: 'slide-left',
-    desc: '播放列表从右侧进入'
-  },
-  {
-    label: '柔和淡入',
-    value: 'fade',
-    desc: '用透明度显示播放列表'
-  },
-  {
-    label: '轻微上浮',
-    value: 'rise',
-    desc: '从底部轻轻浮出'
-  },
-  {
-    label: '缩放展开',
-    value: 'scale',
-    desc: '从右下角展开面板'
-  }
-]
+export const defaultThemeColor = SETTINGS_DEFAULTS.theme.primaryColor
+export const themeColorPresets = THEME_COLOR_PRESETS
+export const transitionEffects = THEME_TRANSITION_EFFECTS
+export const queueTransitionEffects = QUEUE_TRANSITION_EFFECTS
 
 function readPreferences() {
   return readJsonStorage(STORAGE_KEYS.themePreferences, {})
+}
+
+function includesValue(options, value) {
+  return options.some((option) => option.value === value)
+}
+
+function normalizeChoice(value, options, fallback) {
+  return includesValue(options, value) ? value : fallback
 }
 
 function normalizeHex(color) {
@@ -98,13 +56,14 @@ function mixColor(color, target, amount) {
 }
 
 const saved = readPreferences()
+const themeDefaults = SETTINGS_DEFAULTS.theme
 
 const state = reactive({
-  mode: saved.mode || 'dark',
-  transition: saved.transition || 'fade',
-  queueTransition: saved.queueTransition || 'slide-left',
-  primaryColor: normalizeHex(saved.primaryColor || defaultThemeColor),
-  reducedMotion: Boolean(saved.reducedMotion),
+  mode: normalizeChoice(saved.mode, THEME_MODE_OPTIONS, themeDefaults.mode),
+  transition: normalizeChoice(saved.transition, transitionEffects, themeDefaults.transition),
+  queueTransition: normalizeChoice(saved.queueTransition, queueTransitionEffects, themeDefaults.queueTransition),
+  primaryColor: normalizeHex(saved.primaryColor || themeDefaults.primaryColor),
+  reducedMotion: Boolean(saved.reducedMotion ?? themeDefaults.reducedMotion),
   animating: false,
   usingViewTransition: false,
   animationKey: 0

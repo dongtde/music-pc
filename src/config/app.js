@@ -30,6 +30,81 @@ export const STORAGE_KEYS = {
   fullPlayerVisualizerMode: 'mappic:full-player:visualizer-mode',
 };
 
+export const SETTINGS_DEFAULTS = {
+  theme: {
+    mode: 'dark',
+    transition: 'fade',
+    queueTransition: 'slide-left',
+    primaryColor: '#ff3f73',
+    reducedMotion: false,
+  },
+};
+
+export const THEME_MODE_OPTIONS = [
+  { value: 'dark' },
+  { value: 'light' },
+];
+
+export const THEME_COLOR_PRESETS = [
+  { label: '玫瑰粉', value: '#ff3f73' },
+  { label: '电音紫', value: '#8a5cff' },
+  { label: '湖水青', value: '#1dbf9f' },
+  { label: '海岸蓝', value: '#3f8cff' },
+  { label: '日落橙', value: '#ff8a3d' },
+  { label: '荧光绿', value: '#52c96f' },
+];
+
+export const THEME_TRANSITION_EFFECTS = [
+  {
+    label: '柔和淡入',
+    value: 'fade',
+    desc: '用透明度变化完成切换',
+  },
+  {
+    label: '横向幕布',
+    value: 'wipe',
+    desc: '从左到右扫过页面，适合干净利落的切换',
+  },
+  {
+    label: '圆形扩散',
+    value: 'circle',
+    desc: '从右上角向外扩散，强调开关触发点',
+  },
+  {
+    label: '滑动翻页',
+    value: 'slide',
+    desc: '像切换唱片页一样横向滑过',
+  },
+  {
+    label: '模糊光晕',
+    value: 'blur',
+    desc: '用短暂模糊和光晕弱化颜色跳变',
+  },
+];
+
+export const QUEUE_TRANSITION_EFFECTS = [
+  {
+    label: '右侧滑入',
+    value: 'slide-left',
+    desc: '播放列表从右侧进入',
+  },
+  {
+    label: '柔和淡入',
+    value: 'fade',
+    desc: '用透明度显示播放列表',
+  },
+  {
+    label: '轻微上浮',
+    value: 'rise',
+    desc: '从底部轻轻浮出',
+  },
+  {
+    label: '缩放展开',
+    value: 'scale',
+    desc: '从右下角展开面板',
+  },
+];
+
 export const CACHE_TTL = {
   comments: 60 * 1000,
   discovery: 2 * 60 * 1000,
