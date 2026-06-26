@@ -150,6 +150,135 @@ export function normalizeArtistName(song = {}) {
   )
 }
 
+function normalizeSongArtists(song = {}) {
+  const source = mergeSongFields(song)
+  const artists = getNormalizedArtistList(source)
+
+  if (artists.length) {
+    return artists
+  }
+
+  const fallbackName = normalizeArtistName(source)
+  const fallbackId = pickField(source, [
+    'author_id',
+    'authorId',
+    'singerid',
+    'singer_id',
+    'singerId',
+    'artist_id',
+    'artistId',
+    'userid',
+    'userId'
+  ])
+  const fallbackNames = splitArtistNames(fallbackName)
+
+  if (fallbackNames.length > 1) {
+    return fallbackNames.map((name, index) => ({
+      id: index === 0 ? fallbackId ?? '' : '',
+      name
+    }))
+  }
+
+  return fallbackName
+    ? [{
+        id: fallbackId ?? '',
+        name: fallbackName
+      }]
+    : []
+}
+
+function getNormalizedArtistList(source = {}) {
+  const candidates = [
+    source.authors,
+    source.singerinfo,
+    source.singer_info,
+    source.singers,
+    source.ar,
+    source.artists
+  ]
+
+  for (const candidate of candidates) {
+    const artists = (Array.isArray(candidate) ? candidate : [])
+      .map(normalizeSongArtist)
+      .filter(Boolean)
+
+    if (artists.length) {
+      return uniqueArtists(artists)
+    }
+  }
+
+  return []
+}
+
+function normalizeSongArtist(artist = {}) {
+  if (typeof artist === 'string') {
+    const name = cleanKugouText(artist)
+
+    return name ? { id: '', name } : null
+  }
+
+  if (!artist || typeof artist !== 'object' || Array.isArray(artist)) {
+    return null
+  }
+
+  const id = pickField(artist, [
+    'id',
+    'author_id',
+    'authorId',
+    'AuthorID',
+    'singerid',
+    'singer_id',
+    'singerId',
+    'artist_id',
+    'artistId',
+    'userid',
+    'userId'
+  ])
+  const name = cleanKugouText(
+    pickField(artist, [
+      'name',
+      'author_name',
+      'authorName',
+      'AuthorName',
+      'singername',
+      'singer_name',
+      'singerName',
+      'artist_name',
+      'artistName',
+      'nickname'
+    ])
+  )
+
+  return name
+    ? {
+        id: id ?? '',
+        name
+      }
+    : null
+}
+
+function uniqueArtists(artists = []) {
+  const seen = new Set()
+
+  return artists.filter((artist) => {
+    const key = artist.id ? `id:${artist.id}` : `name:${artist.name}`
+
+    if (seen.has(key)) {
+      return false
+    }
+
+    seen.add(key)
+    return true
+  })
+}
+
+function splitArtistNames(value = '') {
+  return cleanKugouText(value)
+    .split(/\s+\/\s+/)
+    .map((name) => name.trim())
+    .filter(Boolean)
+}
+
 export function normalizeSongName(song = {}) {
   const source = mergeSongFields(song)
   const title = source.filename || source.audio_name || source.songname || source.name || source.remark || source.title
@@ -161,8 +290,15 @@ export function normalizeSongName(song = {}) {
 
 export function normalizeSong(song = {}, index = 0) {
   const source = mergeSongFields(song)
-  const artistName = normalizeArtistName(source)
-  const artistId = source.author_id ?? source.authors?.[0]?.author_id ?? source.authors?.[0]?.id ?? source.singerinfo?.[0]?.id ?? ''
+  const artists = normalizeSongArtists(source)
+  const artistName = artists.map((artist) => artist.name).filter(Boolean).join(' / ') || normalizeArtistName(source)
+  const artistId =
+    artists[0]?.id ??
+    source.author_id ??
+    source.authors?.[0]?.author_id ??
+    source.authors?.[0]?.id ??
+    source.singerinfo?.[0]?.id ??
+    ''
   const albumId = source.album_id ?? source.albuminfo?.id ?? source.album_info?.album_id ?? source.album_info?.id ?? ''
   const albumName = source.album_name ?? source.albuminfo?.name ?? source.album_info?.album_name ?? source.album_info?.name ?? source.remark ?? ''
   const cover = normalizeKugouImage(
@@ -246,11 +382,11 @@ export function normalizeSong(song = {}, index = 0) {
     accessType: access.accessType,
     accessBadges: access.badges,
     songAccess: access,
-    ar: [{
+    ar: artists.length ? artists : [{
       id: artistId,
       name: artistName
     }],
-    artists: [{
+    artists: artists.length ? artists : [{
       id: artistId,
       name: artistName
     }],

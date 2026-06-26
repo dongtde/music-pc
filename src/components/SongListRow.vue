@@ -61,14 +61,37 @@
             <Video :size="11" />
           </RouterLink>
         </span>
-        <RouterLink
-          v-if="artistTarget"
-          class="song-list-row__artist"
-          :to="artistTarget"
-          @click.stop
+        <span
+          v-if="artistLinks.length"
+          class="song-list-row__artists"
         >
-          {{ track.artist }}
-        </RouterLink>
+          <template
+            v-for="(artist, index) in artistLinks"
+            :key="artist.key"
+          >
+            <RouterLink
+              v-if="artist.to"
+              class="song-list-row__artist"
+              :to="artist.to"
+              @click.stop
+            >
+              {{ artist.name }}
+            </RouterLink>
+            <small
+              v-else
+              class="song-list-row__artist song-list-row__artist--plain"
+            >
+              {{ artist.name }}
+            </small>
+            <span
+              v-if="index < artistLinks.length - 1"
+              class="song-list-row__artist-separator"
+              aria-hidden="true"
+            >
+              /
+            </span>
+          </template>
+        </span>
         <small v-else>{{ track.artist }}</small>
       </span>
     </span>
@@ -117,7 +140,7 @@ const props = defineProps({
 
 const emit = defineEmits(['play'])
 
-const artistTarget = computed(() => getArtistTarget(props.track))
+const artistLinks = computed(() => getArtistLinks(props.track))
 const albumTarget = computed(() => getAlbumTarget(props.track))
 const videoTarget = computed(() => getVideoTarget(props.track))
 const accessBadges = computed(() => getSongAccessBadges(props.track))
@@ -167,12 +190,94 @@ function isInteractiveTarget(target) {
   return Boolean(target?.closest?.('a, button'))
 }
 
-function getArtistTarget(track) {
-  const id = normalizeRouteId(
-    track.artistId ?? track.artistIds?.[0] ?? track.artists?.[0]?.id ?? track.ar?.[0]?.id
-  )
+function getArtistLinks(track = {}) {
+  return getTrackArtists(track).map((artist, index) => {
+    const id = normalizeRouteId(artist.id)
 
-  return id ? `/artist/${id}` : ''
+    return {
+      ...artist,
+      id,
+      key: `${id || 'artist'}-${artist.name}-${index}`,
+      to: id ? `/artist/${id}` : ''
+    }
+  })
+}
+
+function getTrackArtists(track = {}) {
+  const artists = getExplicitArtists(track)
+  const artistIds = getArtistIds(track, artists)
+  const displayNames = splitArtistNames(track.artist || artists[0]?.name)
+
+  if (artists.length > 1) {
+    return artists
+  }
+
+  if (displayNames.length > 1) {
+    return displayNames.map((name, index) => ({
+      name,
+      id: artistIds[index] ?? (index === 0 ? artists[0]?.id : '')
+    }))
+  }
+
+  if (artists.length) {
+    return artists
+  }
+
+  const fallbackName = displayNames[0] || String(track.artist ?? '').trim()
+
+  return fallbackName
+    ? [{
+        name: fallbackName,
+        id: artistIds[0] ?? track.artistId ?? ''
+      }]
+    : []
+}
+
+function getExplicitArtists(track = {}) {
+  const source = Array.isArray(track.artists) && track.artists.length ? track.artists : track.ar
+
+  return (Array.isArray(source) ? source : [])
+    .map((artist) => ({
+      id:
+        artist?.id ??
+        artist?.author_id ??
+        artist?.authorId ??
+        artist?.singerid ??
+        artist?.singer_id ??
+        artist?.singerId ??
+        artist?.artist_id ??
+        artist?.artistId ??
+        '',
+      name: String(
+        artist?.name ??
+          artist?.author_name ??
+          artist?.authorName ??
+          artist?.singername ??
+          artist?.singer_name ??
+          artist?.singerName ??
+          artist?.artist_name ??
+          artist?.artistName ??
+          ''
+      ).trim()
+    }))
+    .filter((artist) => artist.name)
+}
+
+function getArtistIds(track = {}, artists = []) {
+  const ids = Array.isArray(track.artistIds)
+    ? track.artistIds
+    : artists.map((artist) => artist.id)
+
+  return ids
+    .map(normalizeRouteId)
+    .filter(Boolean)
+}
+
+function splitArtistNames(value) {
+  return String(value ?? '')
+    .split(/\s+\/\s+/)
+    .map((name) => name.trim())
+    .filter(Boolean)
 }
 
 function getAlbumTarget(track) {
@@ -258,6 +363,7 @@ function normalizeRouteId(value) {
 .song-list-row:hover .song-list-row__title strong,
 .song-list-row.is-playing .song-list-row__title strong,
 .song-list-row.is-playing .song-list-row__title small,
+.song-list-row.is-playing .song-list-row__artists,
 .song-list-row.is-playing .song-list-row__artist,
 .song-list-row.is-playing .song-list-row__album,
 .song-list-row.is-playing .song-list-row__time,
@@ -274,6 +380,7 @@ function normalizeRouteId(value) {
 }
 
 .song-list-row__album,
+.song-list-row__artists,
 .song-list-row__artist,
 .song-list-row__time,
 .song-list-row__title small {
@@ -293,14 +400,53 @@ function normalizeRouteId(value) {
 
 .song-list-row__album:hover,
 .song-list-row__artist:hover,
+.song-list-row__artist:focus-visible,
 .song-list-row__video:hover {
   color: var(--accent);
+}
+
+.song-list-row__artists {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  align-self: flex-start;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .song-list-row__artist,
 .song-list-row__title small {
   align-self: flex-start;
   max-width: 100%;
+}
+
+.song-list-row__artist {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  cursor: pointer;
+  outline: none;
+}
+
+.song-list-row__artist:hover,
+.song-list-row__artist:focus-visible {
+  color: var(--accent);
+}
+
+.song-list-row__artist--plain {
+  cursor: default;
+}
+
+.song-list-row__artist--plain:hover {
+  color: var(--text-muted);
+}
+
+.song-list-row__artist-separator {
+  flex: 0 0 auto;
+  padding: 0 6px 0 2px;
+  color: var(--text-subtle);
 }
 
 .song-list-row__main {
