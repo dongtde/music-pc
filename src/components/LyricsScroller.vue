@@ -45,7 +45,7 @@
         :key="`${line.index}-${line.time}-${line.text}`"
         type="button"
         :class="getLineClass(line)"
-        :aria-disabled="line.placeholder || undefined"
+        :aria-disabled="line.placeholder || !seekable || undefined"
         :data-lyric-index="line.index"
         @click="selectLyric(line.index)"
       >
@@ -104,6 +104,10 @@ const props = defineProps({
   playing: {
     type: Boolean,
     default: false
+  },
+  seekable: {
+    type: Boolean,
+    default: true
   },
   danmakuActive: {
     type: Boolean,
@@ -337,6 +341,10 @@ function seekToPreviewLyric() {
 }
 
 function seekToLine(index) {
+  if (!canInteract()) {
+    return
+  }
+
   const line = normalizedLines.value.find((item) => item.index === index)
 
   if (!line || line.placeholder) {
@@ -519,7 +527,7 @@ function clearWheelTimer() {
 }
 
 function canInteract() {
-  return !props.requireSeekable || hasSeekableLines.value
+  return props.seekable && (!props.requireSeekable || hasSeekableLines.value)
 }
 
 function edgePaddingVar() {

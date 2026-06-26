@@ -109,8 +109,9 @@
             variant="home"
             :lines="displayLyricLines"
             :active-index="activeLyricIndex"
-            :current-time="player.state.currentTime"
+            :current-time="homePlaybackTime"
             :loading="isLyricLoading"
+            :seekable="activeHomePlayback"
             require-seekable
             @seek="seekToLyric"
           />
@@ -175,11 +176,11 @@
               type="button"
               :aria-label="getPlayLabel(song)"
               :title="getPlayLabel(song)"
-              :disabled="player.state.isLoading && isActiveSong(song)"
+              :disabled="isHomeTrackLoading(song)"
               @click.stop="playSongFromGesture(index)"
             >
               <Loader2
-                v-if="player.state.isLoading && isActiveSong(song)"
+                v-if="isHomeTrackLoading(song)"
                 class="soda-spin"
                 :size="26"
               />
@@ -193,9 +194,9 @@
             <div
               class="soda-slide__progress"
               role="slider"
-              :tabindex="isActiveSong(song) ? 0 : -1"
+              :tabindex="isSongSeekable(song) ? 0 : -1"
               :aria-valuemin="0"
-              :aria-valuemax="Math.floor(player.state.duration || 0)"
+              :aria-valuemax="getSongProgressMax(song)"
               :aria-valuenow="getSongProgressNow(song)"
               :aria-label="`${song.name} 播放进度`"
               @pointerdown="seekFromProgress($event, song)"
@@ -267,6 +268,8 @@ const {
   recommendationQueue,
   activeIndex,
   player,
+  activeHomePlayback,
+  homePlaybackTime,
   displayLyricLines,
   activeLyricIndex,
   isLyricLoading,
@@ -301,6 +304,8 @@ const {
   isSlideHydrated,
   getSlideStyle,
   isSongPlaying,
+  isHomeTrackLoading,
+  isSongSeekable,
   getMoodSignal,
   isLiked,
   getSongLikeLabel,
@@ -310,6 +315,7 @@ const {
   getSongProgressNow,
   getCurrentTimeLabel,
   getSongProgress,
+  getSongProgressMax,
   getDurationLabel
 } = useHomeMusicFeed({ active })
 

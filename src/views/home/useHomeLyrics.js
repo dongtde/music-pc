@@ -9,13 +9,18 @@ import {
   LYRICS_LOAD_TIMEOUT_MS as lyricsLoadTimeoutMs
 } from './homeConstants'
 
-export function useHomeLyrics({ player }) {
+export function useHomeLyrics({ player, playbackTime }) {
   const lyricLines = shallowRef(createLyricPlaceholder('点击播放后显示歌词'))
   const isLyricLoading = shallowRef(false)
   let lyricRequestId = 0
 
+  const lyricPlaybackTime = computed(() => {
+    const rawTime = Number(playbackTime?.value ?? player.state.currentTime)
+
+    return Number.isFinite(rawTime) ? rawTime : 0
+  })
   const activeLyricIndex = computed(() =>
-    findCurrentLyricIndex(lyricLines.value, player.state.currentTime)
+    findCurrentLyricIndex(lyricLines.value, lyricPlaybackTime.value)
   )
   const displayLyricLines = computed(() =>
     (lyricLines.value.length ? lyricLines.value : createLyricPlaceholder('暂无歌词'))
@@ -72,6 +77,7 @@ export function useHomeLyrics({ player }) {
     lyricLines,
     isLyricLoading,
     displayLyricLines,
+    lyricPlaybackTime,
     activeLyricIndex,
     loadActiveLyrics,
     seekToLyric,

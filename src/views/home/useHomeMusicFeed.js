@@ -48,6 +48,7 @@ export function useHomeMusicFeed({ active }) {
   const recommendationsSettled = ref(false)
   const recommendationsError = ref('')
   const autoPlayAfterGesture = ref(false)
+  const homePendingTrackId = ref('')
   const allSongs = shallowRef(prepareQueue(recommendedSingles))
   const recommendationQueue = shallowRef(applyMoodQueue(allSongs.value, activeMood.value))
   const coverTintVersion = ref(0)
@@ -71,10 +72,14 @@ export function useHomeMusicFeed({ active }) {
   let recommendationsRequestId = 0
   let homeViewEffectsBound = false
 
-  const lyrics = useHomeLyrics({ player })
   const activeSong = computed(() => recommendationQueue.value[activeIndex.value])
   const activeSongId = computed(() => String(activeSong.value?.id ?? ''))
   const currentTrackId = computed(() => String(player.state.currentTrack.id ?? ''))
+  const activeHomePlayback = computed(() => isHomePlaybackSong(activeSong.value))
+  const homePlaybackTime = computed(() =>
+    activeHomePlayback.value ? player.state.currentTime : 0
+  )
+  const lyrics = useHomeLyrics({ player, playbackTime: homePlaybackTime })
   const hydratedSlideBounds = computed(() => ({
     start: Math.max(0, activeIndex.value - slideHydrateRadius),
     end: Math.min(recommendationQueue.value.length - 1, activeIndex.value + slideHydrateRadius)
@@ -89,6 +94,10 @@ export function useHomeMusicFeed({ active }) {
   watch(
     () => player.state.currentTrack.id,
     async (trackId) => {
+      if (!isHomeQueueSource()) {
+        return
+      }
+
       const nextIndex = recommendationQueue.value.findIndex((song) => String(song.id) === String(trackId))
 
       if (nextIndex >= 0 && nextIndex !== activeIndex.value) {
@@ -422,15 +431,18 @@ export function useHomeMusicFeed({ active }) {
 
   function syncPlayerQueue(options = {}) {
     const queueChanged = syncedQueue !== recommendationQueue.value
-    const ownsHomeQueue = player.state.queueSource?.type === 'home-music'
+    const ownsHomeQueue = isHomeQueueSource()
 
     if (!queueChanged && ownsHomeQueue) {
       return
     }
 
-    if (!options.force && !active.value && !ownsHomeQueue) {
+    if (!options.force && !ownsHomeQueue) {
       syncedQueue = recommendationQueue.value
-      return
+
+      if (!active.value || hasCurrentTrack()) {
+        return
+      }
     }
 
     syncedQueue = recommendationQueue.value
@@ -444,7 +456,20 @@ export function useHomeMusicFeed({ active }) {
     }
   }
 
+  function isHomeQueueSource() {
+    return player.state.queueSource?.type === 'home-music'
+  }
+
+  function hasCurrentTrack() {
+    return Boolean(player.state.currentTrack?.id)
+  }
+
   function restoreActiveTrackPosition() {
+    if (!isHomeQueueSource()) {
+      activeIndex.value = clampSongIndex(activeIndex.value)
+      return
+    }
+
     const currentId = currentTrackId.value
     const nextIndex = recommendationQueue.value.findIndex((song) => String(song.id) === currentId)
 
@@ -551,8 +576,8 @@ export function useHomeMusicFeed({ active }) {
     await playActiveSong()
   }
 
-  async function handleTrackEnded() {
-    if (!recommendationQueue.value.length) {
+  async function handleTrackEnded(track) {
+    if (!recommendationQueue.value.length || !isHomePlaybackSong(track)) {
       return
     }
 
@@ -569,15 +594,25 @@ export function useHomeMusicFeed({ active }) {
       return
     }
 
+    const shouldToggleCurrentHomeTrack = isHomePlaybackSong(song)
+
     syncPlayerQueue({ force: true })
 
-    if (String(player.state.currentTrack.id) === String(song.id)) {
+    if (shouldToggleCurrentHomeTrack) {
       await resumeOrToggleActiveSong(song, options)
       return
     }
 
-    const played = await player.playTrack(song)
-    showPlaybackError(played)
+    homePendingTrackId.value = String(song.id)
+
+    try {
+      const played = await player.playTrack(song)
+      showPlaybackError(played)
+    } finally {
+      if (homePendingTrackId.value === String(song.id)) {
+        homePendingTrackId.value = ''
+      }
+    }
   }
 
   async function resumeOrToggleActiveSong(song, options) {
@@ -613,16 +648,39 @@ export function useHomeMusicFeed({ active }) {
     return Boolean(song?.id && activeSongId.value === String(song.id))
   }
 
-  function isSongPlaying(song) {
+  function isHomePlaybackSong(song) {
     return Boolean(
       song?.id &&
-      currentTrackId.value === String(song.id) &&
+      isHomeQueueSource() &&
+      currentTrackId.value === String(song.id)
+    )
+  }
+
+  function isHomeTrackLoading(song) {
+    return Boolean(
+      song?.id &&
+      player.state.isLoading &&
+      homePendingTrackId.value === String(song.id)
+    )
+  }
+
+  function isSongSeekable(song) {
+    return Boolean(isHomePlaybackSong(song) && player.state.duration)
+  }
+
+  function getSongProgressMax(song) {
+    return isSongSeekable(song) ? Math.floor(player.state.duration || 0) : 0
+  }
+
+  function isSongPlaying(song) {
+    return Boolean(
+      isHomePlaybackSong(song) &&
       player.state.isPlaying
     )
   }
 
   function getPlayLabel(song) {
-    if (player.state.isLoading && isActiveSong(song)) {
+    if (isHomeTrackLoading(song)) {
       return '音乐加载中'
     }
 
@@ -630,7 +688,7 @@ export function useHomeMusicFeed({ active }) {
   }
 
   function getSongProgress(song) {
-    if (!isActiveSong(song) || !player.state.duration) {
+    if (!isHomePlaybackSong(song) || !player.state.duration) {
       return 0
     }
 
@@ -638,15 +696,15 @@ export function useHomeMusicFeed({ active }) {
   }
 
   function getSongProgressNow(song) {
-    return isActiveSong(song) ? Math.floor(player.state.currentTime || 0) : 0
+    return isHomePlaybackSong(song) ? Math.floor(player.state.currentTime || 0) : 0
   }
 
   function getCurrentTimeLabel(song) {
-    return isActiveSong(song) ? formatTime(player.state.currentTime) : '0:00'
+    return isHomePlaybackSong(song) ? formatTime(player.state.currentTime) : '0:00'
   }
 
   function getDurationLabel(song) {
-    if (isActiveSong(song) && player.state.duration) {
+    if (isHomePlaybackSong(song) && player.state.duration) {
       return formatTime(player.state.duration)
     }
 
@@ -654,7 +712,7 @@ export function useHomeMusicFeed({ active }) {
   }
 
   function seekFromProgress(event, song) {
-    if (!isActiveSong(song) || !player.state.duration) {
+    if (!isHomePlaybackSong(song) || !player.state.duration) {
       return
     }
 
@@ -665,7 +723,7 @@ export function useHomeMusicFeed({ active }) {
   }
 
   function handleProgressKeydown(event, song) {
-    if (!isActiveSong(song) || !player.state.duration) {
+    if (!isHomePlaybackSong(song) || !player.state.duration) {
       return
     }
 
@@ -675,6 +733,14 @@ export function useHomeMusicFeed({ active }) {
 
     event.preventDefault()
     player.seekTo(player.state.currentTime + (event.key === 'ArrowRight' ? 5 : -5))
+  }
+
+  function seekToLyric(payload) {
+    if (!activeHomePlayback.value) {
+      return
+    }
+
+    lyrics.seekToLyric(payload)
   }
 
   function getMoodSignal(index) {
@@ -762,6 +828,8 @@ export function useHomeMusicFeed({ active }) {
     recommendationQueue,
     activeIndex,
     player,
+    activeHomePlayback,
+    homePlaybackTime,
     homeDanmakuMaxItems,
     homeDanmakuPrefetchThreshold,
     handleFeedScroll,
@@ -776,14 +844,18 @@ export function useHomeMusicFeed({ active }) {
     isSlideHydrated,
     getSlideStyle,
     isSongPlaying,
+    isHomeTrackLoading,
+    isSongSeekable,
     getMoodSignal,
     getPlayLabel,
     isActiveSong,
     getSongProgressNow,
     getCurrentTimeLabel,
     getSongProgress,
+    getSongProgressMax,
     getDurationLabel,
     ...engagement,
-    ...lyrics
+    ...lyrics,
+    seekToLyric
   }
 }
