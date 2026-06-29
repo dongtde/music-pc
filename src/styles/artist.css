@@ -106,19 +106,21 @@
 .artist-detail-description-wrap {
   position: relative;
   max-width: 860px;
-  margin: 10px 0 0;
+  margin: 12px 0 0;
 }
 
 .artist-detail-description {
-  display: block;
+  display: -webkit-box;
   width: 100%;
   margin: 0;
   overflow: hidden;
   color: var(--text-muted);
   font-size: 14px;
-  line-height: 1.8;
+  line-height: 1.7;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .artist-detail-description-wrap:hover::after {
@@ -126,7 +128,7 @@
   top: calc(100% + 8px);
   left: 0;
   z-index: 8;
-  width: min(860px, calc(100vw - 420px));
+  width: min(760px, calc(100vw - 64px));
   max-height: 240px;
   overflow: auto;
   padding: 10px 12px;
@@ -164,6 +166,20 @@
 
 .artist-detail-meta svg {
   color: var(--accent);
+}
+
+.artist-detail-meta--profile {
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.artist-detail-meta--profile span {
+  max-width: 240px;
+}
+
+.artist-detail-meta--profile span:first-child {
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--accent) 16%, var(--control-bg));
 }
 
 .artist-detail-tags {

@@ -13,6 +13,15 @@ import {
   resizeNeteaseImage
 } from './shared'
 
+const ARTIST_AREA_NAMES = {
+  1: '华语',
+  2: '欧美',
+  3: '日韩',
+  4: '其他',
+  5: '日本',
+  6: '韩国'
+}
+
 export function mapArtist(artist = {}, index = 0) {
   const details = [
     artist.alias?.length ? artist.alias.join(' / ') : '',
@@ -47,6 +56,12 @@ export function mapArtistDetail(artist = {}, detail = {}, fallbackArtist = {}) {
   const dynamic = detail.dynamic ?? {}
   const dynamicVideoCount = getArtistDynamicVideoCount(dynamic.videoNum)
   const aliases = artist.alias ?? fallbackArtist.alias ?? []
+  const longIntro = Array.isArray(artist.longIntro)
+    ? artist.longIntro
+    : Array.isArray(detail.long_intro)
+      ? detail.long_intro
+      : []
+  const basicProfile = getArtistBasicProfile(longIntro)
   const identities = [
     ...(artist.identities ?? []),
     ...(detail.secondaryExpertIdentiy ?? [])
@@ -55,6 +70,10 @@ export function mapArtistDetail(artist = {}, detail = {}, fallbackArtist = {}) {
   ].filter(Boolean)
   const description = artist.briefDesc || fallbackArtist.briefDesc || '这位歌手暂时没有简介。'
   const rank = artist.rank?.rank ?? detail.rank?.rank ?? 0
+  const birthday = artist.birthday || fallbackArtist.birthday || detail.birthday || ''
+  const areaName = getArtistAreaName(
+    artist.area_id ?? artist.areaId ?? fallbackArtist.area_id ?? detail.area_id
+  )
 
   return {
     id: artist.id ?? fallbackArtist.id,
@@ -69,10 +88,51 @@ export function mapArtistDetail(artist = {}, detail = {}, fallbackArtist = {}) {
     musicSize: artist.musicSize ?? fallbackArtist.musicSize ?? 0,
     mvSize: artist.mvSize ?? fallbackArtist.mvSize ?? dynamicVideoCount ?? detail.videoCount ?? 0,
     videoCount: dynamicVideoCount ?? detail.videoCount ?? artist.mvSize ?? fallbackArtist.mvSize ?? 0,
+    fansCount: artist.fansCount ?? fallbackArtist.fansCount ?? artist.followeds ?? 0,
+    birthday,
+    areaName,
+    occupation: getProfileValue(basicProfile, ['职业']),
+    origin: getProfileValue(basicProfile, ['出生地', '地区']),
+    score: artist.score ?? fallbackArtist.score ?? 0,
+    pinyinInitial: artist.pinyin_initial ?? artist.pinyinInitial ?? detail.pinyin_initial ?? '',
     rank,
     followed: Boolean(dynamic.followed ?? artist.followed ?? fallbackArtist.followed),
     type: coverType(Number(artist.id ?? fallbackArtist.id) || 0)
   }
+}
+
+function getArtistAreaName(value) {
+  const key = String(value ?? '').trim()
+
+  return ARTIST_AREA_NAMES[key] || ''
+}
+
+function getArtistBasicProfile(longIntro = []) {
+  const section = longIntro.find((item) => /基本资料/.test(item?.title || item?.ti || ''))
+  const content = section?.content || section?.txt || ''
+
+  return content.split(/\r?\n/).reduce((profile, line) => {
+    const [key, ...valueParts] = line.split(/[：:]/)
+    const value = valueParts.join(':').trim()
+
+    if (key && value) {
+      profile[key.trim()] = value
+    }
+
+    return profile
+  }, {})
+}
+
+function getProfileValue(profile = {}, keys = []) {
+  for (const key of keys) {
+    const value = profile[key]
+
+    if (value) {
+      return value
+    }
+  }
+
+  return ''
 }
 
 export function getArtistDynamicVideoCount(videoNum = []) {

@@ -51,22 +51,18 @@
             {{ artist.aliases.join(' / ') }}
           </div>
 
-          <div class="artist-detail-meta">
-            <span>
-              <Music :size="14" />
-              {{ formatStat(artist.musicSize) }} 首歌
-            </span>
-            <span>
-              <Disc3 :size="14" />
-              {{ formatStat(artist.albumSize) }} 张专辑
-            </span>
-            <span>
-              <Video :size="14" />
-              {{ formatStat(artist.videoCount || artist.mvSize) }} 个视频
-            </span>
-            <span v-if="artist.rank">
-              <BadgeCheck :size="14" />
-              榜单第 {{ artist.rank }}
+          <div
+            v-if="artist.description"
+            class="artist-detail-description-wrap"
+            :data-full-text="artist.description"
+          >
+            <p class="artist-detail-description">{{ artist.description }}</p>
+          </div>
+
+          <div v-if="artistProfileItems.length" class="artist-detail-meta artist-detail-meta--profile">
+            <span v-for="item in artistProfileItems" :key="item.key">
+              <component :is="item.icon" :size="14" />
+              {{ item.text }}
             </span>
           </div>
 
@@ -398,9 +394,10 @@ import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   BadgeCheck,
-  Disc3,
-  Music,
-  Video
+  CalendarDays,
+  Flame,
+  MapPin,
+  Users
 } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import ArtistVideoCard from '../components/ArtistVideoCard.vue'
@@ -506,6 +503,12 @@ const artist = computed(() =>
     musicSize: 0,
     mvSize: 0,
     videoCount: 0,
+    fansCount: 0,
+    birthday: '',
+    areaName: '',
+    occupation: '',
+    origin: '',
+    score: 0,
     rank: 0,
     followed: false,
     type: 'sunset'
@@ -519,6 +522,37 @@ const artistTabs = computed(() => [
   { value: 'videos', label: '视频', count: artist.value.videoCount || artist.value.mvSize },
   { value: 'details', label: '详情' }
 ])
+
+const artistProfileItems = computed(() => {
+  const info = artist.value
+  const fansCount = Number(info.fansCount) || 0
+  const score = Number(info.score) || 0
+  const items = [
+    fansCount
+      ? { key: 'fans', icon: Users, text: `${formatStat(fansCount)} 粉丝` }
+      : null,
+    info.birthday
+      ? { key: 'birthday', icon: CalendarDays, text: `生日 ${formatArtistDate(info.birthday)}` }
+      : null,
+    info.origin
+      ? { key: 'origin', icon: MapPin, text: info.origin }
+      : null,
+    info.occupation
+      ? { key: 'occupation', icon: BadgeCheck, text: info.occupation }
+      : null,
+    info.areaName
+      ? { key: 'area', icon: MapPin, text: info.areaName }
+      : null,
+    score
+      ? { key: 'score', icon: Flame, text: `${formatStat(score)} 热度` }
+      : null,
+    info.rank
+      ? { key: 'rank', icon: BadgeCheck, text: `榜单第 ${info.rank}` }
+      : null
+  ].filter(Boolean)
+
+  return items.slice(0, 6)
+})
 
 const artistTracks = computed(() =>
   remoteTracks.value.map((track, index) => ({
@@ -1325,6 +1359,14 @@ function formatStat(value = 0) {
   }
 
   return String(count)
+}
+
+function formatArtistDate(value = '') {
+  if (typeof value === 'string' && /^\d{4}-\d{1,2}-\d{1,2}/.test(value)) {
+    return value.slice(0, 10)
+  }
+
+  return value
 }
 
 function trimNumber(number) {
