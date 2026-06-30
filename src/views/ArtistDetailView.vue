@@ -89,30 +89,24 @@
             {{ tab.label }}<template v-if="tab.count">{{ formatStat(tab.count) }}</template>
           </button>
         </nav>
-
-        <div v-if="activeTab === 'songs'" class="artist-sort-tabs" aria-label="歌曲排序">
-          <button
-            type="button"
-            :class="{ active: artistSongOrder === 'hot' }"
-            @click="setArtistSongOrder('hot')"
-          >
-            热门
-          </button>
-          <button
-            type="button"
-            :class="{ active: artistSongOrder === 'time' }"
-            @click="setArtistSongOrder('time')"
-          >
-            时间
-          </button>
-        </div>
       </div>
 
       <section class="artist-tab-panel">
         <template v-if="activeTab === 'featured'">
           <section class="artist-detail-section artist-detail-section--featured-tracks">
             <header class="artist-detail-section__head">
-              <h2>热门歌曲</h2>
+              <div class="artist-detail-section__title-row">
+                <h2>热门歌曲</h2>
+                <button
+                  class="artist-play-all artist-play-all--compact"
+                  type="button"
+                  :disabled="!artistTracks.length"
+                  @click="playAllFeaturedTracks"
+                >
+                  <Play :size="15" fill="currentColor" />
+                  <span>播放全部</span>
+                </button>
+              </div>
               <small>{{ artistTracks.length }} 首</small>
             </header>
 
@@ -212,6 +206,35 @@
 
         <template v-else-if="activeTab === 'songs'">
           <section class="artist-detail-section">
+            <div class="artist-song-toolbar">
+              <button
+                class="artist-play-all"
+                type="button"
+                :disabled="!rankedArtistSongs.length"
+                @click="playLoadedArtistSongs"
+              >
+                <Play :size="16" fill="currentColor" />
+                <span>播放全部</span>
+              </button>
+
+              <div class="artist-sort-tabs" aria-label="歌曲排序">
+                <button
+                  type="button"
+                  :class="{ active: artistSongOrder === 'hot' }"
+                  @click="setArtistSongOrder('hot')"
+                >
+                  热门
+                </button>
+                <button
+                  type="button"
+                  :class="{ active: artistSongOrder === 'time' }"
+                  @click="setArtistSongOrder('time')"
+                >
+                  时间
+                </button>
+              </div>
+            </div>
+
             <section class="playlist-table artist-track-table" aria-label="歌手全部歌曲列表">
               <header class="playlist-table__head">
                 <span>标题</span>
@@ -397,12 +420,14 @@ import {
   CalendarDays,
   Flame,
   MapPin,
+  Play,
   Users
 } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import ArtistVideoCard from '../components/ArtistVideoCard.vue'
 import SongListRow from '../components/SongListRow.vue'
 import { useLoadMoreTrigger } from '../composables/useLoadMoreTrigger'
+import { useQueuePlayback } from '../composables/useQueuePlayback'
 import { useVirtualRows } from '../composables/useVirtualRows'
 import {
   getArtistAlbumsData,
@@ -411,9 +436,7 @@ import {
   getArtistSongsData,
   getArtistVideosData
 } from '../services/netease'
-import { usePlayerStore } from '../stores/player'
 import { createLruCache } from '../utils/lruCache'
-import { getPlaybackErrorDisplay } from '../utils/playbackError'
 import { isAbortError } from '../utils/request'
 import '../styles/artist.css'
 import '../styles/playlist.css'
@@ -429,7 +452,6 @@ const ARTIST_TAB_CACHE_SIZE = 48
 const TRACK_ROW_HEIGHT = 58
 
 const route = useRoute()
-const player = usePlayerStore()
 const message = useMessage()
 
 const pageRoot = ref(null)
@@ -583,6 +605,32 @@ const featuredVideos = computed(() => artistVideos.value.slice(0, 6))
 const hasArtistIntro = computed(() =>
   Boolean(artistIntro.value.briefDesc || artistIntro.value.sections.length || artist.value.description)
 )
+
+const {
+  playAll: playAllFeaturedTracks,
+  playTrack: playFeaturedTrack
+} = useQueuePlayback({
+  queue: artistTracks,
+  queueSource: () => ({ type: 'artist-featured', id: route.params.id }),
+  message,
+  emptyMessage: '当前歌手暂无热门歌曲',
+  errorMessage: '当前歌曲暂无可播放链接'
+})
+const {
+  playAll: playLoadedArtistSongs,
+  playTrack: playSongTrack
+} = useQueuePlayback({
+  queue: rankedArtistSongs,
+  queueSource: () => ({
+    type: 'artist-songs',
+    id: route.params.id,
+    label: `artist-songs-${artistSongOrder.value}`
+  }),
+  message,
+  emptyMessage: '当前歌手暂无歌曲',
+  errorMessage: '当前歌曲暂无可播放链接'
+})
+
 const activeTabHasMore = computed(() => {
   if (activeTab.value === 'songs') {
     return artistSongsHasMore.value
@@ -1320,30 +1368,6 @@ function loadMoreForActiveTab() {
 
   if (activeTab.value === 'videos') {
     loadArtistVideos()
-  }
-}
-
-function playFeaturedTrack(track) {
-  playArtistTrack(track, { type: 'artist-featured', id: route.params.id })
-}
-
-function playSongTrack(track) {
-  playArtistTrack(track, { type: 'artist-songs', id: route.params.id })
-}
-
-async function playArtistTrack(track, source) {
-  if (String(player.state.currentTrack.id) === String(track.id)) {
-    await player.togglePlay()
-    return
-  }
-
-  const played = await player.playTrack(track)
-  if (played) {
-    player.appendToQueue(track, source)
-  }
-
-  if (!played) {
-    message.error(getPlaybackErrorDisplay(player.state.error, '当前歌曲暂无可播放链接'))
   }
 }
 

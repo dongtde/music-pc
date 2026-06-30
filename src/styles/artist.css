@@ -215,6 +215,13 @@
   gap: 16px;
 }
 
+.artist-detail-section__title-row {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
 .artist-detail-section__head h2 {
   margin: 0;
   color: var(--text-strong);
@@ -230,6 +237,55 @@
 .artist-track-table {
   margin-top: 12px;
   padding-bottom: 28px;
+}
+
+.artist-song-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.artist-play-all {
+  display: inline-flex;
+  height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: #ffffff;
+  background: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.artist-play-all:hover:not(:disabled) {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.artist-play-all:disabled {
+  cursor: not-allowed;
+  opacity: 0.54;
+  transform: none;
+}
+
+.artist-play-all--compact {
+  height: 28px;
+  gap: 5px;
+  padding: 0 11px;
+  font-size: 12px;
 }
 
 .artist-detail-section--featured-tracks .artist-track-table {
@@ -863,6 +919,18 @@
 
   .artist-sort-tabs {
     align-self: flex-end;
+  }
+
+  .artist-song-toolbar {
+    width: 100%;
+  }
+
+  .artist-song-toolbar .artist-sort-tabs {
+    align-self: auto;
+  }
+
+  .artist-detail-section__head {
+    align-items: flex-start;
   }
 
   .artist-detail .playlist-table__head {
