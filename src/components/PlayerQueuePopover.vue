@@ -16,7 +16,7 @@
             <strong>播放列表</strong>
             <small>{{ tracks.length }} 首歌曲</small>
           </div>
-          <button type="button">清空</button>
+          <button type="button" @click="$emit('clear')">清空</button>
         </header>
         <div class="queue-popover__list">
           <SongListRow
@@ -52,5 +52,5 @@ defineProps({
   }
 })
 
-defineEmits(['toggle', 'play-track'])
+defineEmits(['toggle', 'play-track', 'clear'])
 </script>

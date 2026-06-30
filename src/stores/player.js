@@ -33,23 +33,29 @@ const DEFAULT_QUEUE_SOURCE = {
   id: 'new-songs',
   label: 'new-songs'
 }
+const PLAYER_QUEUE_SNAPSHOT_VERSION = 1
 let queueVersionSeed = 0
 const restoredSnapshot = readPlaybackSnapshot()
 const initialPlayMode = readPlayMode()
 const initialPlaybackQuality = readPlaybackQuality()
 const initialVolume = readPlaybackVolume()
+const restoredQueueSnapshot = readQueueSnapshot()
 const initialTrack = restoredSnapshot?.track
   ? normalizeRestoredTrack(restoredSnapshot.track)
   : createEmptyTrack()
 const initialDuration = restoredSnapshot?.duration ?? parseDuration(initialTrack.duration)
 const initialCurrentTime = clampTime(restoredSnapshot?.currentTime ?? 0, initialDuration)
 
+if (restoredQueueSnapshot?.queue?.length) {
+  queueVersionSeed = 1
+}
+
 initialTrack.elapsed = formatTime(initialCurrentTime)
 
 const state = reactive({
   currentTrack: initialTrack,
-  queue: [],
-  queueSource: DEFAULT_QUEUE_SOURCE,
+  queue: restoredQueueSnapshot?.queue ?? [],
+  queueSource: restoredQueueSnapshot?.source ?? DEFAULT_QUEUE_SOURCE,
   queueVersion: queueVersionSeed,
   isPlaying: false,
   isLoading: false,
@@ -233,6 +239,7 @@ export function usePlayerStore() {
     state.queue = normalizeQueueTracks(tracks)
     state.queueSource = normalizeQueueSource(source, state.queueSource)
     state.queueVersion = ++queueVersionSeed
+    persistQueueSnapshot()
 
     return state.queueVersion
   }
@@ -259,6 +266,7 @@ export function usePlayerStore() {
 
     if (!uniqueNextTracks.length) {
       state.queueSource = nextSource
+      persistQueueSnapshot()
       return state.queueVersion
     }
 
@@ -273,12 +281,28 @@ export function usePlayerStore() {
 
     if (!hasQueueOrderChanged(state.queue, mergedQueue)) {
       state.queueSource = nextSource
+      persistQueueSnapshot()
       return state.queueVersion
     }
 
     state.queue = mergedQueue
     state.queueSource = nextSource
     state.queueVersion = ++queueVersionSeed
+    persistQueueSnapshot()
+
+    return state.queueVersion
+  }
+
+  function clearQueue() {
+    if (!state.queue.length && isSameQueueSource(state.queueSource, DEFAULT_QUEUE_SOURCE)) {
+      persistQueueSnapshot()
+      return state.queueVersion
+    }
+
+    state.queue = []
+    state.queueSource = DEFAULT_QUEUE_SOURCE
+    state.queueVersion = ++queueVersionSeed
+    persistQueueSnapshot()
 
     return state.queueVersion
   }
@@ -446,6 +470,7 @@ export function usePlayerStore() {
     restartCurrentTrack,
     setQueue,
     appendToQueue,
+    clearQueue,
     setPlayMode,
     getRelativeQueueTrack,
     shouldRestartCurrentTrackOnEnded,
@@ -765,6 +790,17 @@ function hasQueueOrderChanged(currentQueue, nextQueue) {
   )
 }
 
+function isSameQueueSource(left, right) {
+  const normalizedLeft = normalizeQueueSource(left)
+  const normalizedRight = normalizeQueueSource(right)
+
+  return (
+    normalizedLeft.type === normalizedRight.type &&
+    normalizedLeft.id === normalizedRight.id &&
+    normalizedLeft.label === normalizedRight.label
+  )
+}
+
 function getRelativeQueueTrackByMode(queue, currentIndex, direction, playMode) {
   if (!Array.isArray(queue) || !queue.length) {
     return null
@@ -838,7 +874,7 @@ function cleanQueueSourceValue(value) {
 }
 
 function normalizeRestoredTrack(track) {
-  const { url, elapsed, ...restoredTrack } = track
+  const { url, localUrl, elapsed, ...restoredTrack } = track
 
   return {
     ...restoredTrack,
@@ -846,6 +882,10 @@ function normalizeRestoredTrack(track) {
     duration: restoredTrack.duration ?? restoredTrack.time ?? '0:00',
     coverPalette: normalizeCoverPalette(restoredTrack.coverPalette ?? fallbackTrack.coverPalette)
   }
+}
+
+function normalizeRestoredQueueTrack(track) {
+  return normalizeRestoredTrack(track)
 }
 
 function createEmptyTrack() {
@@ -886,6 +926,27 @@ function readPlaybackSnapshot() {
   }
 }
 
+function readQueueSnapshot() {
+  try {
+    const snapshot = readJsonStorage(STORAGE_KEYS.playerQueue, null)
+    const queue = normalizeQueueTracks(snapshot?.queue)
+      .map(normalizeRestoredQueueTrack)
+      .filter(isRestorableTrack)
+
+    if (!queue.length) {
+      return null
+    }
+
+    return {
+      queue,
+      source: normalizeQueueSource(snapshot?.source, DEFAULT_QUEUE_SOURCE)
+    }
+  } catch (error) {
+    console.warn('Failed to restore playback queue snapshot:', error)
+    return null
+  }
+}
+
 function persistPlaybackSnapshotThrottled() {
   const currentSecond = Math.floor(state.currentTime)
 
@@ -912,6 +973,28 @@ function persistPlaybackSnapshot() {
     })
   } catch (error) {
     console.warn('Failed to persist playback snapshot:', error)
+  }
+}
+
+function persistQueueSnapshot() {
+  try {
+    const queue = state.queue
+      .filter(isRestorableTrack)
+      .map(serializeTrack)
+
+    if (!queue.length) {
+      writeJsonStorage(STORAGE_KEYS.playerQueue, null)
+      return
+    }
+
+    writeJsonStorage(STORAGE_KEYS.playerQueue, {
+      version: PLAYER_QUEUE_SNAPSHOT_VERSION,
+      queue,
+      source: normalizeQueueSource(state.queueSource, DEFAULT_QUEUE_SOURCE),
+      updatedAt: Date.now()
+    })
+  } catch (error) {
+    console.warn('Failed to persist playback queue snapshot:', error)
   }
 }
 

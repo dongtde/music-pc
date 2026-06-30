@@ -9,10 +9,7 @@ const {
   safelyCallWindowMethod,
   sendToWindow,
 } = require('./windowUtils.cjs');
-const {
-  captureFirstScreenSmoke,
-  captureFpsSmoke,
-} = require('./smoke.cjs');
+const { captureFirstScreenSmoke, captureFpsSmoke } = require('./smoke.cjs');
 
 const projectRoot = path.join(__dirname, '..');
 const initialEnvKeys = new Set(Object.keys(process.env));
@@ -54,7 +51,10 @@ const neteaseApiTarget = readEnv(
 const preloadPath = path.join(__dirname, 'preload.cjs');
 const distRoot = path.join(__dirname, '..', 'dist');
 const appIconPath = path.join(__dirname, '..', 'build', 'icon.ico');
-const cookieJarPath = path.join(app.getPath('userData'), 'kugou-proxy-cookies.json');
+const cookieJarPath = path.join(
+  app.getPath('userData'),
+  'kugou-proxy-cookies.json',
+);
 const desktopLyricsStatePath = path.join(
   app.getPath('userData'),
   'desktop-lyrics-state.json',
@@ -127,8 +127,8 @@ async function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
-    minWidth: 960,
-    minHeight: 640,
+    minWidth: 1080,
+    minHeight: 692,
     frame: false,
     icon: appIconPath,
     title: '澜音',
@@ -449,7 +449,8 @@ function getRuntimeEnvPaths() {
   return paths;
 }
 
-app.whenReady()
+app
+  .whenReady()
   .then(async () => {
     protocolRegistrar.registerAppProtocol();
     registerMainWindowIpc();

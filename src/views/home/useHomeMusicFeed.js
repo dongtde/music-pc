@@ -219,6 +219,7 @@ export function useHomeMusicFeed({ active }) {
       allSongs.value = prepareQueue(songs)
       recommendationQueue.value = applyMoodQueue(allSongs.value, activeMood.value)
       restoreActiveTrackPosition()
+      syncHomeMusicQueueIfActive()
       hydrateVisibleCoverTints()
       await snapFeedToActiveIndex('auto')
       recommendationsSettled.value = true
@@ -437,6 +438,16 @@ export function useHomeMusicFeed({ active }) {
     return player.state.queueSource?.type === 'home-music'
   }
 
+  function syncHomeMusicQueue(source = getHomeMusicQueueSource()) {
+    player.setQueue(recommendationQueue.value, source)
+  }
+
+  function syncHomeMusicQueueIfActive() {
+    if (isHomeQueueSource()) {
+      syncHomeMusicQueue()
+    }
+  }
+
   function restoreActiveTrackPosition() {
     if (!isHomeQueueSource()) {
       activeIndex.value = clampSongIndex(activeIndex.value)
@@ -568,6 +579,9 @@ export function useHomeMusicFeed({ active }) {
     }
 
     const shouldToggleCurrentHomeTrack = isHomePlaybackSong(song)
+    const queueSource = getHomeMusicQueueSource()
+
+    syncHomeMusicQueue(queueSource)
 
     if (shouldToggleCurrentHomeTrack) {
       await resumeOrToggleActiveSong(song, options)
@@ -578,9 +592,6 @@ export function useHomeMusicFeed({ active }) {
 
     try {
       const played = await player.playTrack(song)
-      if (played) {
-        player.appendToQueue(song, getHomeMusicQueueSource())
-      }
       showPlaybackError(played)
     } finally {
       if (homePendingTrackId.value === String(song.id)) {

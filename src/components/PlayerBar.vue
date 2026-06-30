@@ -119,6 +119,7 @@
         :transition-name="`queue-${theme.state.queueTransition}`"
         @toggle="toggleQueueMenu"
         @play-track="playQueueTrack"
+        @clear="clearQueue"
       />
     </div>
   </footer>
@@ -636,6 +637,10 @@ function closePlayerPopovers() {
   queueMenuOpen.value = false
   qualityMenuOpen.value = false
   visualizerMenuOpen.value = false
+}
+
+function clearQueue() {
+  player.clearQueue()
 }
 
 async function toggleCurrentTrackLike() {

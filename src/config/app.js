@@ -22,6 +22,7 @@ export const STORAGE_KEYS = {
   dailyVipAutoStatusCheck: 'mappic:daily-vip-auto-status-check',
   libraryData: 'mappic:library:data',
   playerSnapshot: 'mappic:player:last-track',
+  playerQueue: 'mappic:player:queue',
   playerPlayMode: 'mappic:player:play-mode',
   playbackQuality: 'mappic:player:quality',
   playerVolume: 'mappic:player:volume',
