@@ -220,6 +220,7 @@
             :key="`watch-${mv.id}`"
             class="mv-video-card"
             type="button"
+            @pointerdown="stopMvPreview(mv, getMvPreviewCardKey('watch', mv))"
             @click="selectMv(mv, { autoplay: true })"
             @mouseenter="queueMvPreview(mv, getMvPreviewCardKey('watch', mv))"
             @mouseleave="stopMvPreview(mv, getMvPreviewCardKey('watch', mv))"
@@ -307,6 +308,7 @@
             :key="`hero-${mv.id}`"
             class="mv-hero-card"
             type="button"
+            @pointerdown="stopMvPreview(mv, getMvPreviewCardKey('hero', mv))"
             @click="selectMv(mv, { autoplay: true })"
             @mouseenter="queueMvPreview(mv, getMvPreviewCardKey('hero', mv))"
             @mouseleave="stopMvPreview(mv, getMvPreviewCardKey('hero', mv))"
@@ -360,6 +362,7 @@
                 :key="`${section.id}-${mv.id}`"
                 class="mv-video-card"
                 type="button"
+                @pointerdown="stopMvPreview(mv, getMvPreviewCardKey(section.id, mv))"
                 @click="selectMv(mv, { autoplay: true })"
                 @mouseenter="queueMvPreview(mv, getMvPreviewCardKey(section.id, mv))"
                 @mouseleave="stopMvPreview(mv, getMvPreviewCardKey(section.id, mv))"
@@ -444,6 +447,7 @@
                 :key="`all-${mv.id}`"
                 class="mv-video-card"
                 type="button"
+                @pointerdown="stopMvPreview(mv, getMvPreviewCardKey('library', mv))"
                 @click="selectMv(mv, { autoplay: true })"
                 @mouseenter="queueMvPreview(mv, getMvPreviewCardKey('library', mv))"
                 @mouseleave="stopMvPreview(mv, getMvPreviewCardKey('library', mv))"
@@ -1424,14 +1428,10 @@ async function loadBootData() {
   errorMessage.value = ''
 
   try {
-    if (isKugouMvRoute.value) {
-      const routeMv = getCurrentRouteMv()
+    const initialRouteMv = getCurrentRouteMv()
 
-      if (routeMv?.id) {
-        await selectMv(routeMv, { replace: true, silent: true, autoplay: true })
-      } else {
-        errorMessage.value = 'MV id is empty'
-      }
+    if (initialRouteMv?.id) {
+      await selectMv(initialRouteMv, { replace: true, silent: true, autoplay: true })
       return
     }
 
@@ -1463,7 +1463,7 @@ async function loadBootData() {
     scheduleFilteredGridMetrics()
 
     const routeMv = getCurrentRouteMv()
-    if (routeMv?.id) {
+    if (routeMv?.id && hasActiveRouteMvChanged(routeMv)) {
       await selectMv(routeMv, { replace: true, silent: true, autoplay: true })
     } else if (data.active?.mv) {
       setActivePayload(data.active)
@@ -1589,8 +1589,16 @@ async function selectMv(mv, options = {}) {
   releaseActiveVideo()
   resetVideoState()
   shouldPlayAfterLoad.value = Boolean(options.autoplay)
+  setActivePayload(createPendingPlaybackPayload(sourceMv))
 
   try {
+    if (!options.replace) {
+      await router.replace(createMvRouteTarget(sourceMv))
+    }
+    if (!options.silent) {
+      scrollToPlayer()
+    }
+
     const quality = options.quality || 1080
     const prefetchedPlaybackUrl = getCachedMvPlaybackUrl(id, quality, sourceMv)
     const applyDetailPayload = (detailData) => {
@@ -1614,9 +1622,6 @@ async function selectMv(mv, options = {}) {
     if (!options.replace) {
       router.replace(createMvRouteTarget(payload.mv ?? sourceMv))
     }
-    if (!options.silent) {
-      scrollToPlayer()
-    }
     await nextTick()
     applyVideoVolume()
     if (options.autoplay) {
@@ -1637,6 +1642,30 @@ async function selectMv(mv, options = {}) {
 
     if (playbackRequestController === controller) {
       playbackRequestController = null
+    }
+  }
+}
+
+function createPendingPlaybackPayload(sourceMv = {}) {
+  const title = sourceMv.title || sourceMv.name || 'MV 播放'
+
+  return {
+    mv: {
+      ...sourceMv,
+      title,
+      name: sourceMv.name || title,
+      artist: sourceMv.artist || '未知艺人',
+      description: sourceMv.description || sourceMv.desc || '',
+      stats: sourceMv.stats ?? {},
+      encyclopedia: sourceMv.encyclopedia ?? {}
+    },
+    similar: [],
+    artistMvs: [],
+    comments: {
+      hotComments: [],
+      comments: [],
+      total: 0,
+      more: false
     }
   }
 }

@@ -288,6 +288,8 @@
           :key="mv.id"
           :to="getRecommendedMvRouteTarget(mv)"
           class="mv-card"
+          @pointerdown="stopRecommendedMvPreview(mv)"
+          @click="stopRecommendedMvPreview(mv)"
           @mouseenter="queueRecommendedMvPreview(mv)"
           @mouseleave="stopRecommendedMvPreview(mv)"
         >
