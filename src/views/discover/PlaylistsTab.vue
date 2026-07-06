@@ -22,15 +22,13 @@
         {{ category.name }}
       </button>
       <button
-        class="playlist-category-chip playlist-category-chip--more"
+        class="playlist-category-chip"
         type="button"
         :aria-expanded="categoryModalOpen"
         :class="{ active: categoryModalOpen || moreCategoryActive }"
         @click="openCategoryModal"
       >
-        <ListFilter :size="16" />
-        <span>更多分类</span>
-        <ChevronDown :size="15" :class="{ open: categoryModalOpen }" />
+        更多分类
       </button>
     </nav>
 
@@ -49,8 +47,7 @@
           >
             <header class="playlist-category-modal__head">
               <div>
-                <span>歌单分类</span>
-                <strong id="playlist-category-modal-title">更多分类</strong>
+                <strong id="playlist-category-modal-title">歌单分类</strong>
               </div>
               <button
                 class="playlist-category-modal__close"
@@ -134,7 +131,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { ChevronDown, ListFilter, X } from 'lucide-vue-next'
+import { X } from 'lucide-vue-next'
 import PlaylistCard from '../../components/PlaylistCard.vue'
 import SectionTitle from '../../components/SectionTitle.vue'
 import { useLoadMoreTrigger } from '../../composables/useLoadMoreTrigger'
