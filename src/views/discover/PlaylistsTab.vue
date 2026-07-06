@@ -119,10 +119,14 @@
       <div class="playlist-grid playlist-grid--dense">
         <PlaylistCard v-for="playlist in playlists" :key="playlist.id" :playlist="playlist" />
       </div>
-      <div ref="loadMoreTrigger" class="playlist-load-more" aria-live="polite">
+      <div
+        v-if="hasMore || loadingMore || (error && playlists.length)"
+        ref="loadMoreTrigger"
+        class="playlist-load-more"
+        aria-live="polite"
+      >
         <span v-if="loadingMore">正在加载更多歌单...</span>
         <button v-else-if="error && playlists.length" type="button" @click="loadMore({ force: true })">加载失败，重试</button>
-        <span v-else-if="!hasMore && playlists.length">没有更多歌单了</span>
       </div>
     </template>
   </section>

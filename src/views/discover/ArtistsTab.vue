@@ -137,22 +137,28 @@
               </small>
             </span>
           </router-link>
-        </div>
-        <div ref="loadMoreTrigger" class="artist-load-more" aria-live="polite">
-          <div
-            v-if="loadingMore"
-            class="artist-grid artist-grid--real artist-grid--loading"
+          <article
+            v-for="item in loadingMore ? ARTIST_LOAD_MORE_SKELETON_COUNT : 0"
+            :key="`artist-load-more-skeleton-${item}`"
+            class="skeleton-artist-card"
           >
-            <article
-              v-for="item in ARTIST_LOAD_MORE_SKELETON_COUNT"
-              :key="`artist-load-more-skeleton-${item}`"
-              class="skeleton-artist-card"
-            >
-              <span class="skeleton-artist-avatar" />
-              <span class="skeleton-line skeleton-line--artist-name" />
-              <span class="skeleton-line skeleton-line--artist-meta" />
-            </article>
-          </div>
+            <span class="skeleton-artist-avatar" />
+            <span class="skeleton-line skeleton-line--artist-name" />
+            <span class="skeleton-line skeleton-line--artist-meta" />
+          </article>
+        </div>
+        <div
+          ref="loadMoreTrigger"
+          class="artist-load-more"
+          :class="{ 'artist-load-more--sentinel': loadingMore && !error }"
+          aria-live="polite"
+        >
+          <span
+            v-if="loadingMore"
+            class="artist-load-more__status"
+          >
+            正在加载更多歌手...
+          </span>
           <button
             v-else-if="error && artists.length"
             type="button"
