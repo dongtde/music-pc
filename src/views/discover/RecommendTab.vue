@@ -428,6 +428,9 @@ import { getPlaybackErrorDisplay } from '../../utils/playbackError';
 import { isAbortError } from '../../utils/request';
 
 const HOME_SKELETON_MIN_MS = 360;
+const HOME_PARTIAL_RETRY_DELAY_MS = 900;
+const HOME_PARTIAL_RETRY_TIMEOUT_MS = 12000;
+const HOME_PARTIAL_RETRY_LIMIT = 2;
 const RECOMMENDED_SINGLE_DISPLAY_LIMIT = 12;
 const HERO_SLIDES_PER_PAGE = 2;
 const RECOMMEND_CAROUSEL_ROWS = 2;
@@ -562,6 +565,10 @@ let recommendedMvPreviewTimer = 0;
 let recommendedMvPreviewController = null;
 let recommendedMvPreviewElement = null;
 let isRecommendTabActive = false;
+let hasAppliedHomeData = false;
+let homeDataLoadSequence = 0;
+let partialHomeRetryTimer = 0;
+let partialHomeRetryCount = 0;
 const recommendedMvPreviewCache = createLruCache(18);
 const RECOMMENDED_MV_PREVIEW_DELAY_MS = 420;
 const RECOMMENDED_MV_PREVIEW_QUALITY = 720;
@@ -1145,40 +1152,131 @@ function schedulePlaylistCarouselColumnSync(width = getPlaylistCarouselContainer
   });
 }
 
-async function loadHomeData() {
+async function loadHomeData(options = {}) {
+  const loadSequence = ++homeDataLoadSequence;
   const startedAt = Date.now();
+  const preserveExisting = options.preserveExisting ?? hasAppliedHomeData;
 
+  clearPartialHomeDataRetry();
   stopRecommendedMvPreview();
-  isHomeLoading.value = true;
+
+  if (!preserveExisting) {
+    isHomeLoading.value = true;
+  }
 
   try {
-    const data = await getHomeDiscoverData();
-    heroSlides.value = data.heroSlides.length
-      ? data.heroSlides
-      : fallbackHeroSlides;
-    recommendPlaylists.value = data.recommendPlaylists.length
-      ? data.recommendPlaylists
-      : fallbackRecommendPlaylists;
-    latestPlaylistCards.value = data.latestPlaylistCards.length
-      ? data.latestPlaylistCards
-      : fallbackLatestPlaylistCards;
-    homeRecommendedSingles.value = data.recommendedSingles.length
-      ? data.recommendedSingles
-      : recommendedSingles;
-    homeRecommendedMvs.value = data.recommendedMvs.length
-      ? data.recommendedMvs
-      : recommendedMvs;
-    homeRecommendedRadios.value = data.recommendedRadios?.length
-      ? data.recommendedRadios
-      : recommendedRadios;
-    activeHeroIndex.value = 0;
-    clampPlaylistCarouselPages();
+    const data = await getHomeDiscoverData({ timeoutMs: options.timeoutMs });
+
+    if (loadSequence !== homeDataLoadSequence) {
+      return;
+    }
+
+    applyHomeData(data, { preserveExisting });
+    hasAppliedHomeData = true;
+
+    if (data.partial) {
+      schedulePartialHomeDataRetry();
+    } else {
+      partialHomeRetryCount = 0;
+    }
   } catch (error) {
     console.warn('Failed to load home data from Netease API:', error);
   } finally {
-    await waitForSkeleton(startedAt);
+    if (loadSequence !== homeDataLoadSequence) {
+      return;
+    }
+
+    if (!preserveExisting) {
+      await waitForSkeleton(startedAt);
+    }
+
     isHomeLoading.value = false;
     syncPlaylistCarouselScrollPositions();
+  }
+}
+
+function applyHomeData(data = {}, { preserveExisting = false } = {}) {
+  const hasIncomingHeroSlides = data.heroSlides?.length;
+
+  heroSlides.value = pickHomeDataSection(
+    data.heroSlides,
+    fallbackHeroSlides,
+    heroSlides.value,
+    preserveExisting
+  );
+  recommendPlaylists.value = pickHomeDataSection(
+    data.recommendPlaylists,
+    fallbackRecommendPlaylists,
+    recommendPlaylists.value,
+    preserveExisting
+  );
+  latestPlaylistCards.value = pickHomeDataSection(
+    data.latestPlaylistCards,
+    fallbackLatestPlaylistCards,
+    latestPlaylistCards.value,
+    preserveExisting
+  );
+  homeRecommendedSingles.value = pickHomeDataSection(
+    data.recommendedSingles,
+    recommendedSingles,
+    homeRecommendedSingles.value,
+    preserveExisting
+  );
+  homeRecommendedMvs.value = pickHomeDataSection(
+    data.recommendedMvs,
+    recommendedMvs,
+    homeRecommendedMvs.value,
+    preserveExisting
+  );
+  homeRecommendedRadios.value = pickHomeDataSection(
+    data.recommendedRadios,
+    recommendedRadios,
+    homeRecommendedRadios.value,
+    preserveExisting
+  );
+
+  if (!preserveExisting || hasIncomingHeroSlides) {
+    activeHeroIndex.value = 0;
+  }
+
+  clampPlaylistCarouselPages();
+}
+
+function pickHomeDataSection(incomingItems, fallbackItems, currentItems, preserveExisting) {
+  if (Array.isArray(incomingItems) && incomingItems.length) {
+    return incomingItems;
+  }
+
+  if (preserveExisting && Array.isArray(currentItems) && currentItems.length) {
+    return currentItems;
+  }
+
+  return fallbackItems;
+}
+
+function schedulePartialHomeDataRetry() {
+  if (
+    typeof window === 'undefined' ||
+    !isRecommendTabActive ||
+    partialHomeRetryCount >= HOME_PARTIAL_RETRY_LIMIT
+  ) {
+    return;
+  }
+
+  partialHomeRetryCount += 1;
+  partialHomeRetryTimer = window.setTimeout(() => {
+    partialHomeRetryTimer = 0;
+    loadHomeData({
+      preserveExisting: true,
+      timeoutMs: HOME_PARTIAL_RETRY_TIMEOUT_MS
+    });
+  }, HOME_PARTIAL_RETRY_DELAY_MS);
+}
+
+function clearPartialHomeDataRetry() {
+  if (partialHomeRetryTimer && typeof window !== 'undefined') {
+    window.clearTimeout(partialHomeRetryTimer);
+    partialHomeRetryTimer = 0;
   }
 }
 
@@ -1215,6 +1313,7 @@ function deactivateRecommendTab() {
   isRecommendTabActive = false;
   stopHeroAutoplay();
   stopRecommendedMvPreview();
+  clearPartialHomeDataRetry();
 }
 
 onMounted(() => {
@@ -1230,6 +1329,7 @@ onDeactivated(() => {
   deactivateRecommendTab();
 });
 onUnmounted(() => {
+  homeDataLoadSequence += 1;
   deactivateRecommendTab();
   teardownPlaylistCarouselColumns();
 });
