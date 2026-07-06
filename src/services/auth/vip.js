@@ -68,12 +68,47 @@ export function isYouthVipActive(response = {}) {
   })
 }
 
+export function shouldClaimYouthVipForDate(response = {}, receiveDay = getLocalDateString()) {
+  const expireDate = getYouthVipExpireDate(response)
+
+  if (!expireDate) {
+    return true
+  }
+
+  return expireDate <= receiveDay
+}
+
 export function getLocalDateString(date = new Date()) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
 
   return `${year}-${month}-${day}`
+}
+
+function getYouthVipExpireDate(response = {}) {
+  return collectVipStatusObjects(response)
+    .map(({ object }) =>
+      normalizeVipDate(
+        firstDefined(
+          object.expire_time,
+          object.expireTime,
+          object.end_time,
+          object.endTime,
+          object.vip_end_time,
+          object.vipEndTime,
+          object.deadline
+        )
+      )
+    )
+    .filter(Boolean)
+    .sort()
+    .at(-1) || ''
+}
+
+function normalizeVipDate(value) {
+  const time = normalizeVipTime(value)
+  return time ? getLocalDateString(new Date(time)) : ''
 }
 
 function assertVipStepSucceeded(response, fallbackMessage) {

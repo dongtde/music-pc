@@ -27,6 +27,7 @@ app.component('NTooltip', NTooltip)
 
 app.use(router)
 
+syncStoredKugouBrowserCookies()
 app.mount('#app')
 
 afterFirstPaint(() => {

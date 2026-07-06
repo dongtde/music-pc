@@ -29,7 +29,8 @@ import {
   claimAndUpgradeYouthVipData,
   getLocalDateString,
   getYouthVipStatusData,
-  isYouthVipActive
+  isYouthVipActive,
+  shouldClaimYouthVipForDate
 } from '../services/auth/vip'
 
 const initialAuth = readInitialAuthSession()
@@ -553,6 +554,11 @@ function ensureDailyVipClaim() {
   const claimRecord = readDailyVipClaim()
 
   if (claimRecord?.date === receiveDay && claimRecord?.identity === identity) {
+    return null
+  }
+
+  if (!shouldClaimYouthVipForDate(state.vip.raw, receiveDay)) {
+    markDailyVipClaim(receiveDay, identity)
     return null
   }
 
