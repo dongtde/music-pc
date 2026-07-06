@@ -550,23 +550,29 @@
 .chart-summary-card__cover em,
 .region-chart-card em {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
+  right: 10px;
+  bottom: 10px;
   z-index: 2;
   display: inline-flex;
-  height: 26px;
+  height: 20px;
   align-items: center;
-  gap: 4px;
-  padding: 0 9px;
+  gap: 3px;
+  padding: 0 7px;
   border-radius: 999px;
   color: #ffffff;
-  background: rgba(0, 0, 0, 0.78);
-  font-size: 12px;
+  background: rgba(0, 0, 0, 0.68);
+  font-size: 11px;
   font-style: normal;
-  font-weight: 800;
+  font-weight: 700;
+  line-height: 1.2;
   transition:
     opacity 220ms ease,
     transform 220ms ease;
+}
+
+.chart-summary-card__cover em svg,
+.region-chart-card em svg {
+  flex: 0 0 auto;
 }
 
 .chart-summary-card__body {
@@ -1901,6 +1907,10 @@
   overflow: hidden;
 }
 
+.radio-carousel {
+  overflow: hidden;
+}
+
 .recommend-carousel__track,
 .recommend-carousel__skeleton-track {
   display: grid;
@@ -1926,6 +1936,25 @@
 .recommend-carousel__track--latest,
 .recommend-carousel__skeleton-track--latest {
   grid-template-rows: 1fr;
+}
+
+.radio-grid.radio-grid--carousel {
+  grid-auto-columns: var(
+    --recommend-carousel-column-width,
+    calc(16.6667% - 18.333px)
+  );
+  grid-auto-flow: column;
+  grid-template-columns: none;
+  column-gap: var(--recommend-carousel-column-gap, 22px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+
+.radio-grid.radio-grid--carousel::-webkit-scrollbar {
+  display: none;
 }
 
 .recommend-carousel-actions--skeleton {
@@ -2083,22 +2112,27 @@
 
 .listeners {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
+  right: 10px;
+  bottom: 10px;
   z-index: 2;
   display: inline-flex;
-  height: 26px;
-  gap: 4px;
+  height: 20px;
+  gap: 3px;
   align-items: center;
-  padding: 0 9px;
+  padding: 0 7px;
   border-radius: 999px;
   color: #ffffff;
-  background: rgba(0, 0, 0, 0.78);
-  font-size: 12px;
-  font-weight: 800;
+  background: rgba(0, 0, 0, 0.68);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
   transition:
     opacity 220ms ease,
     transform 220ms ease;
+}
+
+.listeners svg {
+  flex: 0 0 auto;
 }
 
 .playlist-card:hover .listeners {

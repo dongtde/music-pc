@@ -60,7 +60,7 @@
                 sizes="(max-width: 1400px) 168px, 184px"
               />
               <span v-else class="song-thumb" :class="`cover--${board.type}`" />
-              <em><Headphones :size="14" /> {{ board.listeners }}</em>
+              <em><Headphones :size="12" /> {{ board.listeners }}</em>
             </span>
             <span class="chart-summary-card__body">
               <strong>{{ board.title }}</strong>
@@ -112,7 +112,7 @@
                 sizes="(max-width: 720px) 33vw, (max-width: 1400px) 20vw, 14vw"
               />
               <span v-else class="song-thumb" :class="`cover--${chart.type}`" />
-              <em><Headphones :size="14" /> {{ chart.listeners }}</em>
+              <em><Headphones :size="12" /> {{ chart.listeners }}</em>
             </router-link>
 
             <button

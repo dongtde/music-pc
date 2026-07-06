@@ -357,34 +357,66 @@
     </section>
 
     <section class="latest-section">
-      <SectionTitle title="推荐电台" />
-      <div class="radio-grid">
-        <router-link
-          v-for="radio in visibleRecommendedRadios"
-          :key="radio.id"
-          :to="radio.to || `/podcast/${radio.id}`"
-          class="radio-card"
+      <div class="section-head recommend-carousel-head">
+        <SectionTitle title="推荐电台" compact />
+        <div
+          v-if="radioCarouselNeeded"
+          class="recommend-carousel-actions"
+          aria-label="推荐电台翻页"
         >
-          <span class="radio-cover" :class="`cover--${radio.type}`">
-            <img
-              v-if="radio.coverUrl"
-              class="radio-cover__image"
-              :src="radio.coverUrl"
-              :alt="radio.title"
-              loading="lazy"
-              decoding="async"
-            />
-            <span v-else class="radio-cover__fallback" aria-hidden="true">
-              <Radio :size="28" />
+          <button
+            v-if="radioCarouselPageIndex > 0"
+            class="recommend-carousel-button"
+            type="button"
+            aria-label="上一组推荐电台"
+            @click="moveRadioCarousel(-1)"
+          >
+            <ChevronLeft :size="18" />
+          </button>
+          <button
+            v-if="radioCarouselPageIndex < radioCarouselLastPage"
+            class="recommend-carousel-button"
+            type="button"
+            aria-label="下一组推荐电台"
+            @click="moveRadioCarousel(1)"
+          >
+            <ChevronRight :size="18" />
+          </button>
+        </div>
+      </div>
+      <div class="radio-carousel">
+        <div
+          ref="recommendedRadioTrack"
+          class="radio-grid radio-grid--carousel"
+          aria-label="推荐电台列表"
+        >
+          <router-link
+            v-for="radio in homeRecommendedRadios"
+            :key="radio.id"
+            :to="radio.to || `/podcast/${radio.id}`"
+            class="radio-card"
+          >
+            <span class="radio-cover" :class="`cover--${radio.type}`">
+              <img
+                v-if="radio.coverUrl"
+                class="radio-cover__image"
+                :src="radio.coverUrl"
+                :alt="radio.title"
+                loading="lazy"
+                decoding="async"
+              />
+              <span v-else class="radio-cover__fallback" aria-hidden="true">
+                <Radio :size="28" />
+              </span>
+              <span class="radio-hover-bg" aria-hidden="true" />
+              <span class="radio-play">
+                <Play :size="18" fill="currentColor" />
+              </span>
             </span>
-            <span class="radio-hover-bg" aria-hidden="true" />
-            <span class="radio-play">
-              <Play :size="18" fill="currentColor" />
-            </span>
-          </span>
-          <strong>{{ radio.title }}</strong>
-          <small>{{ radio.description || radio.desc }}</small>
-        </router-link>
+            <strong>{{ radio.title }}</strong>
+            <small>{{ radio.description || radio.desc }}</small>
+          </router-link>
+        </div>
       </div>
     </section>
     </template>
@@ -477,13 +509,12 @@ const playlistCarouselStyle = computed(() => {
   };
 });
 const visibleRecommendedRadioLimit = computed(() => playlistCarouselColumns.value);
-const visibleRecommendedRadios = computed(() =>
-  homeRecommendedRadios.value.slice(0, visibleRecommendedRadioLimit.value)
-);
 const recommendCarouselPageIndex = ref(0);
 const latestCarouselPageIndex = ref(0);
+const radioCarouselPageIndex = ref(0);
 const recommendPlaylistTrack = ref(null);
 const latestPlaylistTrack = ref(null);
+const recommendedRadioTrack = ref(null);
 const fallbackHeroSlides = [
   {
     id: 'exclusive',
@@ -540,6 +571,17 @@ const latestCarouselLastPage = computed(() =>
   Math.max(latestCarouselPageStarts.value.length - 1, 0)
 );
 const latestCarouselNeeded = computed(() => latestCarouselLastPage.value > 0);
+const radioCarouselPageStarts = computed(() =>
+  getPlaylistCarouselPageStarts(
+    homeRecommendedRadios.value.length,
+    LATEST_CAROUSEL_ROWS,
+    playlistCarouselColumns.value
+  )
+);
+const radioCarouselLastPage = computed(() =>
+  Math.max(radioCarouselPageStarts.value.length - 1, 0)
+);
+const radioCarouselNeeded = computed(() => radioCarouselLastPage.value > 0);
 const recommendSkeletonCarouselNeeded = computed(
   () =>
     getPlaylistCarouselPageStarts(12, RECOMMEND_CAROUSEL_ROWS, playlistCarouselColumns.value)
@@ -1025,6 +1067,10 @@ function clampPlaylistCarouselPages() {
     latestCarouselPageIndex.value,
     latestCarouselLastPage.value
   );
+  radioCarouselPageIndex.value = Math.min(
+    radioCarouselPageIndex.value,
+    radioCarouselLastPage.value
+  );
 }
 
 function moveRecommendCarousel(direction) {
@@ -1049,6 +1095,19 @@ function moveLatestCarousel(direction) {
     latestPlaylistTrack.value,
     latestCarouselPageStarts.value,
     latestCarouselPageIndex.value,
+    true
+  );
+}
+
+function moveRadioCarousel(direction) {
+  radioCarouselPageIndex.value = Math.min(
+    Math.max(radioCarouselPageIndex.value + direction, 0),
+    radioCarouselLastPage.value
+  );
+  scrollPlaylistCarouselToPage(
+    recommendedRadioTrack.value,
+    radioCarouselPageStarts.value,
+    radioCarouselPageIndex.value,
     true
   );
 }
@@ -1086,6 +1145,12 @@ function syncPlaylistCarouselScrollPositions(smooth = false) {
       latestPlaylistTrack.value,
       latestCarouselPageStarts.value,
       latestCarouselPageIndex.value,
+      smooth
+    );
+    scrollPlaylistCarouselToPage(
+      recommendedRadioTrack.value,
+      radioCarouselPageStarts.value,
+      radioCarouselPageIndex.value,
       smooth
     );
   });

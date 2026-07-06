@@ -32,7 +32,7 @@
             <span v-if="playlist.type === 'piano'" class="piano" />
           </div>
           <span class="cover-hover-bg" aria-hidden="true" />
-          <span class="listeners"><Headphones :size="15" /> {{ playlist.listeners }}</span>
+          <span class="listeners"><Headphones :size="12" /> {{ playlist.listeners }}</span>
         </div>
       </router-link>
       <button
