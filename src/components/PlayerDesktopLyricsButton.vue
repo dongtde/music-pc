@@ -42,10 +42,10 @@ defineEmits(['toggle'])
   width: 19px;
   height: 19px;
   place-items: center;
-  border: 1.5px solid var(--theme-badge-border);
+  border: 1.5px solid color-mix(in srgb, var(--text-muted) 48%, transparent);
   border-radius: 5px;
-  color: var(--theme-badge-color);
-  background: var(--theme-badge-bg);
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--control-bg) 54%, transparent);
   font-family:
     'Microsoft YaHei',
     'PingFang SC',
@@ -54,6 +54,22 @@ defineEmits(['toggle'])
   font-size: 12px;
   font-weight: 800;
   line-height: 1;
+  transition:
+    border-color 180ms ease,
+    color 180ms ease,
+    background-color 180ms ease;
+}
+
+.desktop-lyrics-button:hover .desktop-lyrics-button__icon {
+  border-color: rgba(var(--accent-rgb), 0.42);
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
+.desktop-lyrics-button.active .desktop-lyrics-button__icon {
+  border-color: var(--theme-badge-border);
+  color: var(--theme-badge-color);
+  background: var(--theme-badge-bg);
 }
 
 .desktop-lyrics-button.active,
