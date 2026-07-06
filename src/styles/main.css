@@ -2060,7 +2060,7 @@ button {
 .tabs a.active::after {
   position: absolute;
   right: 8px;
-  bottom: -14px;
+  bottom: -8px;
   left: 8px;
   height: 4px;
   border-radius: 999px;
