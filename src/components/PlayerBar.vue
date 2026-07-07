@@ -13,6 +13,7 @@
     :danmaku-max-items="fullPlayerDanmakuMaxItems"
     :danmaku-activation-delay="fullPlayerDanmakuActivationDelay"
     :visualizer-mode="fullPlayerVisualizerMode"
+    :player-bar-height="playerBarHeight"
     @danmaku-need-more="loadMoreFullPlayerDanmaku"
     @close="closeFullPlayer"
     @cover-flight-end="handleCoverFlightEnd"
@@ -141,7 +142,7 @@
 
 <script setup>
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
-import { AudioLines, Gauge, Orbit, Repeat, Repeat1, Repeat2, Shuffle, Sparkles, Volume2, VolumeX, Waves } from 'lucide-vue-next'
+import { Activity, Repeat, Repeat1, Repeat2, Shuffle, Sparkles, Volume2, VolumeX } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import PlayerDanmakuToggle from './PlayerDanmakuToggle.vue'
 import PlayerDesktopLyricsButton from './PlayerDesktopLyricsButton.vue'
@@ -179,8 +180,8 @@ const library = useLibraryStore()
 const auth = useAuthStore()
 const message = useMessage()
 const hasAccountLogin = computed(() => auth.state.isLoggedIn && auth.state.loginType !== 'guest')
-const fallbackFullPlayerVisualizerMode = 'halo'
-const validFullPlayerVisualizerModes = new Set(['halo', 'breath', 'trails', 'needle', 'particles'])
+const fallbackFullPlayerVisualizerMode = 'spectrum'
+const validFullPlayerVisualizerModes = new Set(['particles', 'spectrum'])
 const modeMenuOpen = ref(false)
 const volumeMenuOpen = ref(false)
 const queueMenuOpen = ref(false)
@@ -231,10 +232,7 @@ const playModes = [
 ]
 
 const visualizerModes = [
-  { value: 'halo', label: '黑胶日冕', icon: Orbit },
-  { value: 'breath', label: '歌词呼吸', icon: Waves },
-  { value: 'trails', label: '评论星云', icon: AudioLines },
-  { value: 'needle', label: '唱针星图', icon: Gauge },
+  { value: 'spectrum', label: '左右音谱', icon: Activity },
   { value: 'particles', label: '空间粒子', icon: Sparkles }
 ]
 

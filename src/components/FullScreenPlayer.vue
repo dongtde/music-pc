@@ -16,35 +16,6 @@
       </button>
 
       <div
-        v-if="visualizerActive && visualizerMode === 'trails'"
-        class="full-player__visualizer full-player__visualizer--comment-nebula"
-        :class="{ 'is-playing': visualizerActive && player.state.isPlaying }"
-        aria-hidden="true"
-      >
-        <span
-          v-for="thread in nebulaThreads"
-          :key="thread.key"
-          class="full-player__nebula-thread"
-          :style="thread.style"
-        />
-        <article
-          v-for="comment in commentNebulaItems"
-          :key="comment.key"
-          class="full-player__comment-signal"
-          :style="comment.style"
-        >
-          <span
-            class="full-player__comment-avatar"
-            :class="{ 'full-player__comment-avatar--empty': !comment.avatarUrl }"
-            :style="comment.avatarStyle"
-          >
-            <span v-if="!comment.avatarUrl">{{ comment.initial }}</span>
-          </span>
-          <span class="full-player__comment-text">{{ comment.text }}</span>
-        </article>
-      </div>
-
-      <div
         v-if="visualizerActive && visualizerMode === 'particles'"
         class="full-player__visualizer full-player__visualizer--particles"
         :class="{ 'is-playing': visualizerActive && player.state.isPlaying }"
@@ -57,30 +28,15 @@
         />
       </div>
 
+      <FullPlayerSpectrumVisualizer
+        v-if="visualizerActive && visualizerMode === 'spectrum'"
+        :active="visualizerActive && visualizerMode === 'spectrum'"
+        :playing="player.state.isPlaying"
+      />
+
       <div class="full-player__shell">
         <section class="full-player__turntable" aria-label="唱片封面">
           <div class="full-player__deck">
-            <div
-              v-if="visualizerActive && visualizerMode === 'halo'"
-              class="full-player__record-corona"
-              :class="{ 'is-playing': visualizerActive && player.state.isPlaying }"
-              aria-hidden="true"
-            >
-              <span class="full-player__corona-aura full-player__corona-aura--one" />
-              <span class="full-player__corona-aura full-player__corona-aura--two" />
-              <span
-                v-for="ray in coronaRays"
-                :key="ray.key"
-                class="full-player__corona-ray"
-                :style="ray.style"
-              />
-              <span
-                v-for="spark in coronaSparks"
-                :key="spark.key"
-                class="full-player__corona-spark"
-                :style="spark.style"
-              />
-            </div>
             <div class="full-player__platter">
               <div
                 class="full-player__record"
@@ -99,34 +55,6 @@
           </div>
         </section>
 
-        <div
-          v-if="visualizerActive && visualizerMode === 'needle'"
-          class="full-player__needle-map"
-          :class="{ 'is-playing': visualizerActive && player.state.isPlaying }"
-          aria-hidden="true"
-        >
-          <svg viewBox="0 0 760 260" preserveAspectRatio="none">
-            <path class="full-player__needle-route full-player__needle-route--base" d="M18 148 C130 38 230 210 348 104 S548 28 742 138" />
-            <path class="full-player__needle-route full-player__needle-route--main" d="M18 148 C130 38 230 210 348 104 S548 28 742 138" />
-            <path class="full-player__needle-route full-player__needle-route--echo" d="M24 170 C152 96 238 168 372 132 S582 86 734 170" />
-            <circle
-              v-for="star in needleStars"
-              :key="star.key"
-              class="full-player__needle-star"
-              :cx="star.x"
-              :cy="star.y"
-              :r="star.r"
-              :style="star.style"
-            />
-          </svg>
-          <span
-            v-for="bar in needleToneBars"
-            :key="bar.key"
-            class="full-player__needle-tone"
-            :style="bar.style"
-          />
-        </div>
-
         <section class="full-player__lyrics-panel" aria-label="歌词">
           <header class="full-player__lyrics-head">
             <h1>{{ track.name }}</h1>
@@ -141,7 +69,6 @@
             :current-time="player.state.currentTime"
             :playing="player.state.isPlaying"
             :danmaku-active="danmakuActive"
-            :breath="visualizerActive && visualizerMode === 'breath'"
             :layout-delay="coverFlightActive ? openingWorkDelay : 0"
             @seek="seekToLyric"
           />
@@ -194,6 +121,7 @@ import {
   getLyricFrame,
   isNeteaseTrackId,
 } from '../utils/lyrics';
+import FullPlayerSpectrumVisualizer from './FullPlayerSpectrumVisualizer.vue';
 import LyricsScroller from './LyricsScroller.vue';
 import '../styles/full-player.css';
 
@@ -249,7 +177,11 @@ const props = defineProps({
   },
   visualizerMode: {
     type: String,
-    default: 'halo',
+    default: 'spectrum',
+  },
+  playerBarHeight: {
+    type: Number,
+    default: 92,
   },
 });
 
@@ -284,66 +216,6 @@ const fallbackCoverPalette = {
   tertiary: '#e7a976',
 };
 
-const coronaRays = Array.from({ length: 54 }, (_, index) => ({
-  key: `corona-ray-${index}`,
-  style: {
-    '--corona-rotate': `${index * (360 / 54)}deg`,
-    '--corona-length': `${34 + ((index * 11) % 62)}px`,
-    '--corona-width': `${2 + (index % 4)}px`,
-    '--corona-delay': `${-(index % 18) * 0.11}s`,
-    '--corona-scale': `${0.72 + (index % 5) * 0.11}`,
-    '--corona-scale-low': `${(0.72 + (index % 5) * 0.11) * 0.66}`,
-    '--corona-scale-high': `${(0.72 + (index % 5) * 0.11) * 1.42}`,
-  },
-}));
-const coronaSparks = Array.from({ length: 18 }, (_, index) => ({
-  key: `corona-spark-${index}`,
-  style: {
-    '--spark-rotate': `${index * 20 + (index % 3) * 6}deg`,
-    '--spark-y': `${-210 - (index % 5) * 24}px`,
-    '--spark-y-low': `${-186 - (index % 5) * 18}px`,
-    '--spark-y-high': `${-238 - (index % 5) * 28}px`,
-    '--spark-size': `${4 + (index % 4)}px`,
-    '--spark-delay': `${-index * 0.21}s`,
-  },
-}));
-const nebulaThreads = Array.from({ length: 9 }, (_, index) => ({
-  key: `nebula-thread-${index}`,
-  style: {
-    '--nebula-top': `${12 + ((index * 11) % 72)}%`,
-    '--nebula-left': `${-8 + (index % 3) * 7}%`,
-    '--nebula-width': `${34 + (index % 4) * 9}vw`,
-    '--nebula-delay': `${-index * 0.62}s`,
-    '--nebula-duration': `${12 + (index % 4) * 1.4}s`,
-    '--nebula-drift': `${34 + (index % 4) * 10}vw`,
-  },
-}));
-const fallbackNebulaComments = [
-  { content: '这句歌词像突然亮起来的城市', user: { name: '听友', avatarUrl: '' } },
-  { content: '副歌一进来，整个人被拽进夜色里', user: { name: '云', avatarUrl: '' } },
-  { content: '此刻的心跳刚好对上鼓点', user: { name: '晚风', avatarUrl: '' } },
-  { content: '耳机里开了一场小型流星雨', user: { name: '星', avatarUrl: '' } },
-  { content: '这首适合把灯关掉听', user: { name: '夜航', avatarUrl: '' } },
-  { content: '像把没说出口的话全部放出来', user: { name: '回声', avatarUrl: '' } },
-];
-const needleStars = Array.from({ length: 16 }, (_, index) => ({
-  key: `needle-star-${index}`,
-  x: 34 + ((index * 47) % 690),
-  y: 42 + ((index * 73) % 176),
-  r: 1.8 + (index % 5) * 0.55,
-  style: {
-    '--star-delay': `${-index * 0.18}s`,
-  },
-}));
-const needleToneBars = Array.from({ length: 24 }, (_, index) => ({
-  key: `needle-tone-${index}`,
-  style: {
-    '--tone-index': index,
-    '--tone-left': `${4 + index * 4}%`,
-    '--tone-height': `${18 + ((index * 9) % 56)}px`,
-    '--tone-delay': `${-(index % 8) * 0.09}s`,
-  },
-}));
 const particleDots = Array.from({ length: 42 }, (_, index) => ({
   key: `particle-${index}`,
   style: {
@@ -355,40 +227,6 @@ const particleDots = Array.from({ length: 42 }, (_, index) => ({
   },
 }));
 
-const commentNebulaItems = computed(() => {
-  const sourceComments = [
-    ...props.danmakuHotComments.slice(0, 5),
-    ...props.danmakuComments.slice(0, 9),
-  ];
-  const comments = (sourceComments.length ? sourceComments : fallbackNebulaComments)
-    .filter((comment) => String(comment?.content ?? '').trim())
-    .slice(0, 11);
-
-  return comments.map((comment, index) => {
-    const user = comment.user ?? {};
-    const avatarUrl = user.avatarUrl || '';
-
-    return {
-      key: `nebula-comment-${comment.id ?? index}-${index}`,
-      text: clampVisualizerComment(comment.content),
-      initial: String(user.name || '听').slice(0, 1),
-      avatarUrl,
-      avatarStyle: avatarUrl
-        ? { '--comment-avatar-image': `url("${avatarUrl}")` }
-        : {},
-      style: {
-        '--comment-top': `${11 + ((index * 19) % 76)}%`,
-        '--comment-left': `${6 + ((index * 23) % 78)}%`,
-        '--comment-delay': `${-index * 0.48}s`,
-        '--comment-duration': `${8.8 + (index % 4) * 1.05}s`,
-        '--comment-scale': `${0.82 + (index % 5) * 0.05}`,
-        '--comment-scale-high': `${0.9 + (index % 5) * 0.05}`,
-        '--comment-float-x': `${index % 2 ? '-' : ''}${18 + (index % 5) * 9}px`,
-      },
-    };
-  });
-});
-
 const coverStyle = computed(() => {
   const palette = props.track.coverPalette ?? fallbackCoverPalette;
 
@@ -399,6 +237,7 @@ const coverStyle = computed(() => {
     '--cover-image': props.track.coverUrl
       ? `url("${props.track.coverUrl}")`
       : 'none',
+    '--player-bar-actual-height': `${Math.max(0, Number(props.playerBarHeight) || 92)}px`,
   };
 });
 
@@ -644,16 +483,6 @@ function syncPlaybackLyric(currentTime) {
   if (nextIndex !== playbackLyricIndex.value) {
     playbackLyricIndex.value = nextIndex;
   }
-}
-
-function clampVisualizerComment(value) {
-  const text = String(value ?? '').replace(/\s+/g, ' ').trim();
-
-  if (text.length <= 24) {
-    return text;
-  }
-
-  return `${text.slice(0, 23)}...`;
 }
 
 function seekToLyric({ index, seconds }) {

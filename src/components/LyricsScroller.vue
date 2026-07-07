@@ -5,16 +5,6 @@
     :aria-label="variant === 'home' ? '歌词' : undefined"
     :aria-busy="loading || undefined"
   >
-    <div
-      v-if="variant === 'full' && breath"
-      class="full-player__lyric-breath"
-      aria-hidden="true"
-    >
-      <span />
-      <span />
-      <span />
-    </div>
-
     <div v-if="showGuide" :class="guideClass">
       <span :class="guideTimeClass">{{ previewLyric.time }}</span>
       <span :class="guideLineClass" />
@@ -113,10 +103,6 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
-  breath: {
-    type: Boolean,
-    default: false
-  },
   requireSeekable: {
     type: Boolean,
     default: false
@@ -178,7 +164,6 @@ const rootClass = computed(() => props.variant === 'home'
       'full-player__qq-lyrics--wheeling': wheeling.value,
       'full-player__qq-lyrics--previewing': interactionActive.value,
       'full-player__qq-lyrics--danmaku': props.danmakuActive,
-      'full-player__qq-lyrics--breath': props.breath,
       'is-playing': props.playing
     }
 )

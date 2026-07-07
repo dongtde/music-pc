@@ -380,6 +380,10 @@ export function usePlayerStore() {
     return clampTime(currentTime, state.duration)
   }
 
+  function getAudioElement() {
+    return audio
+  }
+
   async function setPlaybackQuality(value) {
     const nextQuality = normalizeSelectablePlaybackQuality(value, state.currentTrack)
     const previousQuality = state.playbackQuality
@@ -478,6 +482,7 @@ export function usePlayerStore() {
     setPlaybackQuality,
     seekTo,
     getCurrentTime,
+    getAudioElement,
     onTrackEnded
   }
 }
