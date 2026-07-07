@@ -1,6 +1,7 @@
 <template>
   <section
     v-if="danmakuItems.length"
+    ref="layerRoot"
     class="soda-danmaku"
     :class="{
       'soda-danmaku--disabled': !layerVisible,
@@ -10,34 +11,16 @@
     :aria-hidden="!layerVisible"
     aria-live="off"
   >
-    <span
-      v-for="item in danmakuItems"
-      :key="item.key"
-      class="soda-danmaku__item"
-      :class="{
-        'soda-danmaku__item--hot': item.hot,
-        'soda-danmaku__item--fallback': item.fallback,
-        'soda-danmaku__item--empty': item.empty
-      }"
-      :style="item.style"
-    >
-      <span v-if="!item.empty" class="soda-danmaku__avatar" aria-hidden="true">
-        <img
-          v-if="item.avatarUrl"
-          :src="item.avatarUrl"
-          :alt="item.userName"
-          loading="lazy"
-          decoding="async"
-        />
-        <template v-else>{{ item.avatarText }}</template>
-      </span>
-      <span v-if="!item.empty" class="soda-danmaku__text">{{ item.content }}</span>
-    </span>
+    <canvas
+      ref="canvasElement"
+      class="soda-danmaku__canvas"
+      aria-hidden="true"
+    />
   </section>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import '../styles/danmaku.css'
 
 const emit = defineEmits(['needMore'])
@@ -113,6 +96,9 @@ const launchWarmupIntervalMs = computed(() => {
   return value > 36 ? 1800 : 1540
 })
 const layerVisible = ref(false)
+const layerRoot = ref(null)
+const canvasElement = ref(null)
+const reducedMotion = ref(prefersReducedMotion())
 const pageActive = ref(isPageActive())
 const streamPaused = computed(() => props.paused || !pageActive.value)
 const layerPaused = computed(() => streamPaused.value || !layerVisible.value)
@@ -128,10 +114,21 @@ let sourceSyncTimer = 0
 let fillTimer = 0
 let launchWarmupTimer = 0
 let resumeFrame = 0
+let canvasFrame = 0
+let canvasResizeObserver = null
+let observedCanvasRoot = null
+let reducedMotionMedia = null
 let streamClockMs = 0
 let streamStartedAt = 0
 let launchSequence = 0
 let replayCursor = 0
+const avatarImageCache = new Map()
+let canvasSpriteCache = new WeakMap()
+const canvasMetrics = {
+  width: 0,
+  height: 0,
+  dpr: 1
+}
 
 watch(
   () => props.song?.id,
@@ -196,8 +193,24 @@ watch(
     }
 
     requestMoreIfNeeded()
+    scheduleCanvasRefresh()
   },
   { immediate: true }
+)
+
+watch(
+  () => [layerVisible.value, layerPaused.value, reducedMotion.value],
+  () => {
+    scheduleCanvasRefresh()
+  }
+)
+
+watch(
+  danmakuItems,
+  () => {
+    scheduleCanvasRefresh()
+  },
+  { flush: 'post' }
 )
 
 onMounted(() => {
@@ -209,6 +222,10 @@ onMounted(() => {
   document.addEventListener('visibilitychange', handlePageActivityChange)
   window.addEventListener('blur', handlePageActivityChange)
   window.addEventListener('focus', handlePageActivityChange)
+  window.addEventListener('resize', handleCanvasResize, { passive: true })
+  setupReducedMotionListener()
+  setupCanvasObserver()
+  scheduleCanvasRefresh()
 })
 
 onUnmounted(() => {
@@ -219,12 +236,16 @@ onUnmounted(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('blur', handlePageActivityChange)
     window.removeEventListener('focus', handlePageActivityChange)
+    window.removeEventListener('resize', handleCanvasResize)
   }
 
+  teardownReducedMotionListener()
+  teardownCanvasObserver()
   clearSourceSyncTimer()
   clearFillTimer()
   clearLaunchWarmupTimer()
   clearResumeFrame()
+  clearCanvasFrame()
   clearSlotTimers()
 })
 
@@ -240,6 +261,39 @@ function isPageActive() {
 
 function handlePageActivityChange() {
   pageActive.value = isPageActive()
+}
+
+function setupReducedMotionListener() {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return
+  }
+
+  reducedMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)')
+  reducedMotion.value = reducedMotionMedia.matches
+
+  if (typeof reducedMotionMedia.addEventListener === 'function') {
+    reducedMotionMedia.addEventListener('change', handleReducedMotionChange)
+  } else if (typeof reducedMotionMedia.addListener === 'function') {
+    reducedMotionMedia.addListener(handleReducedMotionChange)
+  }
+}
+
+function teardownReducedMotionListener() {
+  if (!reducedMotionMedia) {
+    return
+  }
+
+  if (typeof reducedMotionMedia.removeEventListener === 'function') {
+    reducedMotionMedia.removeEventListener('change', handleReducedMotionChange)
+  } else if (typeof reducedMotionMedia.removeListener === 'function') {
+    reducedMotionMedia.removeListener(handleReducedMotionChange)
+  }
+
+  reducedMotionMedia = null
+}
+
+function handleReducedMotionChange(event) {
+  reducedMotion.value = Boolean(event.matches)
 }
 
 function getSourceComments() {
@@ -388,6 +442,7 @@ function refreshDanmakuItemStyles(clockMs = getStreamClockMs()) {
       style: createDanmakuStyle(item.timing, item.hot, clockMs)
     }
   })
+  scheduleCanvasRefresh()
 }
 
 function scheduleSourceCommentsSync() {
@@ -783,6 +838,476 @@ function getTimingDurationMs(timing) {
   return Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 1000
 }
 
+function scheduleCanvasRefresh() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  nextTick(() => {
+    setupCanvasObserver()
+    requestCanvasFrame()
+  })
+}
+
+function requestCanvasFrame() {
+  if (canvasFrame || !canvasElement.value) {
+    return
+  }
+
+  canvasFrame = window.requestAnimationFrame(renderCanvasFrame)
+}
+
+function renderCanvasFrame() {
+  canvasFrame = 0
+  drawDanmakuCanvas()
+
+  if (shouldRunCanvasLoop()) {
+    requestCanvasFrame()
+  }
+}
+
+function shouldRunCanvasLoop() {
+  return Boolean(
+    canvasElement.value &&
+    danmakuItems.value.length &&
+    props.enabled &&
+    layerVisible.value &&
+    !streamPaused.value &&
+    !reducedMotion.value
+  )
+}
+
+function clearCanvasFrame() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  if (canvasFrame) {
+    window.cancelAnimationFrame(canvasFrame)
+    canvasFrame = 0
+  }
+}
+
+function setupCanvasObserver() {
+  const root = layerRoot.value
+
+  if (!root || typeof ResizeObserver === 'undefined') {
+    return
+  }
+
+  if (observedCanvasRoot === root && canvasResizeObserver) {
+    return
+  }
+
+  teardownCanvasObserver()
+
+  canvasResizeObserver = new ResizeObserver(() => {
+    handleCanvasResize()
+  })
+  canvasResizeObserver.observe(root)
+  observedCanvasRoot = root
+}
+
+function teardownCanvasObserver() {
+  canvasResizeObserver?.disconnect()
+  canvasResizeObserver = null
+  observedCanvasRoot = null
+}
+
+function handleCanvasResize() {
+  resizeCanvas(true)
+  requestCanvasFrame()
+}
+
+function resizeCanvas(force = false) {
+  const canvas = canvasElement.value
+  const root = layerRoot.value
+
+  if (!canvas || !root) {
+    return false
+  }
+
+  const rect = root.getBoundingClientRect()
+  const width = Math.max(1, Math.round(rect.width))
+  const height = Math.max(1, Math.round(rect.height))
+  const dpr = getCanvasPixelRatio()
+  const pixelWidth = Math.round(width * dpr)
+  const pixelHeight = Math.round(height * dpr)
+
+  if (
+    !force &&
+    canvas.width === pixelWidth &&
+    canvas.height === pixelHeight &&
+    canvasMetrics.dpr === dpr
+  ) {
+    return false
+  }
+
+  canvas.width = pixelWidth
+  canvas.height = pixelHeight
+  canvasMetrics.width = width
+  canvasMetrics.height = height
+  canvasMetrics.dpr = dpr
+
+  const context = canvas.getContext('2d')
+
+  if (context) {
+    context.setTransform(dpr, 0, 0, dpr, 0, 0)
+    context.imageSmoothingEnabled = true
+    context.imageSmoothingQuality = 'high'
+  }
+
+  return true
+}
+
+function drawDanmakuCanvas() {
+  const canvas = canvasElement.value
+
+  if (!canvas) {
+    return
+  }
+
+  resizeCanvas()
+
+  const context = canvas.getContext('2d')
+  const width = canvasMetrics.width
+  const height = canvasMetrics.height
+
+  if (!context || !width || !height) {
+    return
+  }
+
+  context.clearRect(0, 0, width, height)
+
+  if (!layerVisible.value || !danmakuItems.value.length) {
+    return
+  }
+
+  const clockMs = getStreamClockMs()
+
+  danmakuItems.value.forEach((item) => {
+    if (!item || item.empty || !item.timing) {
+      return
+    }
+
+    drawDanmakuItem(context, item, clockMs, width, height)
+  })
+}
+
+function drawDanmakuItem(context, item, clockMs, width, height) {
+  const sprite = getDanmakuSprite(context, item)
+
+  if (!sprite) {
+    return
+  }
+
+  const layout = sprite.layout
+  const position = getCanvasItemPosition(item, layout, clockMs, width, height)
+
+  if (
+    position.x > width + layout.width ||
+    position.x + layout.width < -layout.width ||
+    position.y > height + layout.height ||
+    position.y + layout.height < -layout.height
+  ) {
+    return
+  }
+
+  const drawX = position.x - sprite.margin
+  const drawY = Math.round(position.y - sprite.margin)
+
+  context.drawImage(
+    sprite.canvas,
+    drawX,
+    drawY,
+    sprite.width,
+    sprite.height
+  )
+}
+
+function getDanmakuSprite(context, item) {
+  if (typeof document === 'undefined') {
+    return null
+  }
+
+  const image = getAvatarImage(item.avatarUrl)
+  const avatarReady = Boolean(image?.complete && image.naturalWidth > 0)
+  const dpr = canvasMetrics.dpr || 1
+  const maxWidth = getCanvasItemMaxWidth()
+  const cacheKey = [
+    maxWidth,
+    dpr,
+    item.content,
+    item.hot ? 'hot' : 'normal',
+    item.fallback ? 'fallback' : 'source',
+    item.avatarUrl || '',
+    avatarReady ? 'avatar-ready' : 'avatar-fallback',
+    item.avatarText || ''
+  ].join('|')
+  const cached = canvasSpriteCache.get(item)
+
+  if (cached?.cacheKey === cacheKey) {
+    return cached
+  }
+
+  const layout = measureDanmakuItem(context, item, maxWidth)
+  const margin = item.hot ? 28 : 24
+  const spriteWidth = layout.width + margin * 2
+  const spriteHeight = layout.height + margin * 2
+  const spriteCanvas = document.createElement('canvas')
+
+  spriteCanvas.width = Math.ceil(spriteWidth * dpr)
+  spriteCanvas.height = Math.ceil(spriteHeight * dpr)
+
+  const spriteContext = spriteCanvas.getContext('2d')
+
+  if (!spriteContext) {
+    return null
+  }
+
+  spriteContext.setTransform(dpr, 0, 0, dpr, 0, 0)
+  spriteContext.imageSmoothingEnabled = true
+  spriteContext.imageSmoothingQuality = 'high'
+  spriteContext.translate(margin, margin)
+  drawDanmakuBubble(spriteContext, item, layout)
+  drawDanmakuAvatar(spriteContext, item, layout)
+  drawDanmakuText(spriteContext, item, layout)
+
+  const sprite = {
+    cacheKey,
+    canvas: spriteCanvas,
+    height: spriteHeight,
+    layout,
+    margin,
+    width: spriteWidth
+  }
+
+  canvasSpriteCache.set(item, sprite)
+
+  return sprite
+}
+
+function measureDanmakuItem(context, item, maxWidth = getCanvasItemMaxWidth()) {
+  const height = 34
+  const leftPadding = 7
+  const rightPadding = 14
+  const avatarSize = 22
+  const avatarGap = 8
+  const textStart = leftPadding + avatarSize + avatarGap
+  const textMaxWidth = Math.max(30, maxWidth - textStart - rightPadding)
+
+  context.font = getDanmakuFont()
+
+  const text = fitCanvasText(context, item.content, textMaxWidth)
+  const textWidth = Math.ceil(context.measureText(text).width)
+  const width = Math.min(maxWidth, textStart + textWidth + rightPadding)
+
+  return {
+    avatarGap,
+    avatarSize,
+    height,
+    leftPadding,
+    rightPadding,
+    text,
+    textMaxWidth,
+    textStart,
+    width
+  }
+}
+
+function getCanvasItemMaxWidth() {
+  const viewportWidth = typeof window === 'undefined' ? 1280 : window.innerWidth
+
+  return viewportWidth <= 1160
+    ? Math.min(viewportWidth * 0.5, 360)
+    : Math.min(viewportWidth * 0.44, 480)
+}
+
+function getCanvasPixelRatio() {
+  return 1
+}
+
+function getCanvasItemPosition(item, layout, clockMs, width, height) {
+  const top = Math.max(0, Math.min(height - layout.height, height * (Number(item.timing.top) || 0) / 100))
+
+  if (reducedMotion.value) {
+    return {
+      x: Math.max(0, width - layout.width - 12 - (Number(item.timing.lane) || 0) * 10),
+      y: top
+    }
+  }
+
+  const phaseMs = getDanmakuPhaseMs(item.timing, clockMs)
+  const durationMs = getTimingDurationMs(item.timing)
+  const progress = durationMs > 0 ? phaseMs / durationMs : 0
+  const viewportWidth = typeof window === 'undefined' ? width : window.innerWidth
+  const startX = width + viewportWidth * 0.18
+  const endX = width - viewportWidth * 1.2 - layout.width
+
+  return {
+    x: startX + (endX - startX) * progress,
+    y: top
+  }
+}
+
+function drawDanmakuBubble(context, item, layout) {
+  const radius = layout.height / 2
+
+  context.save()
+  context.shadowColor = item.hot
+    ? 'rgba(0, 0, 0, 0.28)'
+    : 'rgba(0, 0, 0, 0.24)'
+  context.shadowBlur = item.hot ? 18 : 14
+  context.shadowOffsetY = 10
+  createRoundedRectPath(context, 0, 0, layout.width, layout.height, radius)
+
+  if (item.hot) {
+    const gradient = context.createLinearGradient(0, 0, layout.width, 0)
+    gradient.addColorStop(0, 'rgba(49, 194, 124, 0.38)')
+    gradient.addColorStop(0.58, 'rgba(8, 8, 10, 0.38)')
+    gradient.addColorStop(1, 'rgba(8, 8, 10, 0.34)')
+    context.fillStyle = gradient
+  } else {
+    context.fillStyle = item.fallback
+      ? 'rgba(10, 10, 12, 0.34)'
+      : 'rgba(10, 10, 12, 0.42)'
+  }
+
+  context.fill()
+  context.restore()
+
+  context.save()
+  createRoundedRectPath(context, 0.5, 0.5, layout.width - 1, layout.height - 1, radius)
+  context.strokeStyle = item.hot
+    ? 'rgba(49, 194, 124, 0.34)'
+    : 'rgba(255, 255, 255, 0.14)'
+  context.lineWidth = 1
+  context.stroke()
+  context.restore()
+}
+
+function drawDanmakuAvatar(context, item, layout) {
+  const x = layout.leftPadding
+  const y = (layout.height - layout.avatarSize) / 2
+  const radius = layout.avatarSize / 2
+  const image = getAvatarImage(item.avatarUrl)
+
+  context.save()
+  context.beginPath()
+  context.arc(x + radius, y + radius, radius, 0, Math.PI * 2)
+  context.closePath()
+  context.clip()
+
+  if (image?.complete && image.naturalWidth > 0) {
+    context.drawImage(image, x, y, layout.avatarSize, layout.avatarSize)
+  } else {
+    const gradient = context.createLinearGradient(x, y, x + layout.avatarSize, y + layout.avatarSize)
+    gradient.addColorStop(0, item.hot ? 'rgba(49, 194, 124, 0.86)' : 'rgba(255, 255, 255, 0.2)')
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0.12)')
+    context.fillStyle = gradient
+    context.fillRect(x, y, layout.avatarSize, layout.avatarSize)
+  }
+
+  context.restore()
+
+  if (!image?.complete || image.naturalWidth <= 0) {
+    context.save()
+    context.font = '900 11px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+    context.fillStyle = 'rgba(255, 255, 255, 0.88)'
+    context.textAlign = 'center'
+    context.textBaseline = 'middle'
+    context.fillText(item.avatarText || String(item.userName || '?').slice(0, 1), x + radius, y + radius + 0.5)
+    context.restore()
+  }
+}
+
+function drawDanmakuText(context, item, layout) {
+  context.save()
+  context.font = getDanmakuFont()
+  context.fillStyle = item.hot ? '#ffffff' : 'rgba(255, 255, 255, 0.9)'
+  context.textAlign = 'left'
+  context.textBaseline = 'middle'
+  context.shadowColor = 'rgba(0, 0, 0, 0.42)'
+  context.shadowBlur = 3
+  context.shadowOffsetY = 1
+  context.fillText(layout.text, layout.textStart, layout.height / 2 + 0.5)
+  context.restore()
+}
+
+function getAvatarImage(url) {
+  if (!url) {
+    return null
+  }
+
+  const cached = avatarImageCache.get(url)
+
+  if (cached) {
+    return cached
+  }
+
+  const image = new Image()
+
+  image.decoding = 'async'
+  image.onload = () => {
+    canvasSpriteCache = new WeakMap()
+    requestCanvasFrame()
+  }
+  image.onerror = () => {
+    requestCanvasFrame()
+  }
+  image.src = url
+  avatarImageCache.set(url, image)
+
+  return image
+}
+
+function fitCanvasText(context, value, maxWidth) {
+  const text = String(value ?? '')
+
+  if (context.measureText(text).width <= maxWidth) {
+    return text
+  }
+
+  const ellipsis = '...'
+  let start = 0
+  let end = text.length
+  let fitted = ellipsis
+
+  while (start <= end) {
+    const midpoint = Math.floor((start + end) / 2)
+    const candidate = `${text.slice(0, midpoint)}${ellipsis}`
+
+    if (context.measureText(candidate).width <= maxWidth) {
+      fitted = candidate
+      start = midpoint + 1
+    } else {
+      end = midpoint - 1
+    }
+  }
+
+  return fitted
+}
+
+function createRoundedRectPath(context, x, y, width, height, radius) {
+  const nextRadius = Math.min(radius, width / 2, height / 2)
+
+  context.beginPath()
+  context.moveTo(x + nextRadius, y)
+  context.lineTo(x + width - nextRadius, y)
+  context.quadraticCurveTo(x + width, y, x + width, y + nextRadius)
+  context.lineTo(x + width, y + height - nextRadius)
+  context.quadraticCurveTo(x + width, y + height, x + width - nextRadius, y + height)
+  context.lineTo(x + nextRadius, y + height)
+  context.quadraticCurveTo(x, y + height, x, y + height - nextRadius)
+  context.lineTo(x, y + nextRadius)
+  context.quadraticCurveTo(x, y, x + nextRadius, y)
+  context.closePath()
+}
+
+function getDanmakuFont() {
+  return '800 13px "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+}
+
 function rememberSourceComment(key, comment) {
   if (!sourceCommentsByKey.has(key)) {
     sourceCommentKeys.push(key)
@@ -830,5 +1355,13 @@ function clampCommentText(value) {
   const text = String(value ?? '').replace(/\s+/g, ' ').trim()
 
   return text.length > 28 ? `${text.slice(0, 28)}...` : text
+}
+
+function prefersReducedMotion() {
+  return Boolean(
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
 }
 </script>
