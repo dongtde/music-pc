@@ -344,17 +344,49 @@
     </section>
 
     <section class="latest-section">
-      <div class="section-head">
+      <div class="section-head recommend-carousel-head">
         <SectionTitle title="推荐单曲" compact />
+        <div
+          v-if="recommendedSingleCarouselNeeded"
+          class="recommend-carousel-actions"
+          aria-label="推荐单曲翻页"
+        >
+          <button
+            v-if="recommendedSingleCarouselPageIndex > 0"
+            class="recommend-carousel-button"
+            type="button"
+            aria-label="上一组推荐单曲"
+            @click="moveRecommendedSingleCarousel(-1)"
+          >
+            <ChevronLeft :size="18" />
+          </button>
+          <button
+            v-if="recommendedSingleCarouselPageIndex < recommendedSingleCarouselLastPage"
+            class="recommend-carousel-button"
+            type="button"
+            aria-label="下一组推荐单曲"
+            @click="moveRecommendedSingleCarousel(1)"
+          >
+            <ChevronRight :size="18" />
+          </button>
+        </div>
       </div>
-      <div class="song-list song-list--recommend">
-        <SongListRow
-          v-for="song in visibleRecommendedSingles"
-          :key="song.id ?? song.rank"
-          :track="song"
-          compact
-          @play="playRecommendedSong"
-        />
+      <div class="recommended-single-carousel">
+        <div
+          ref="recommendedSingleTrack"
+          class="song-list song-list--recommend"
+          :class="{ 'song-list--recommend-carousel': isCompactCarouselLayout }"
+          :style="recommendedSingleListStyle"
+          aria-label="推荐单曲列表"
+        >
+          <SongListRow
+            v-for="song in visibleRecommendedSingles"
+            :key="song.id ?? song.rank"
+            :track="song"
+            compact
+            @play="playRecommendedSong"
+          />
+        </div>
       </div>
     </section>
 
@@ -466,6 +498,9 @@ const HOME_PARTIAL_RETRY_DELAY_MS = 900;
 const HOME_PARTIAL_RETRY_TIMEOUT_MS = 12000;
 const HOME_PARTIAL_RETRY_LIMIT = 2;
 const RECOMMENDED_SINGLE_DISPLAY_LIMIT = 12;
+const RECOMMENDED_SINGLE_ROWS = 4;
+const RECOMMENDED_SINGLE_COMPACT_COLUMNS = 2;
+const RECOMMENDED_SINGLE_WIDE_COLUMNS = 3;
 const HERO_SLIDES_PER_PAGE = 2;
 const RECOMMEND_CAROUSEL_ROWS = 2;
 const LATEST_CAROUSEL_ROWS = 1;
@@ -495,6 +530,17 @@ const recommendPage = ref(null);
 const recommendedMvPreviewVideo = ref(null);
 const isHomeLoading = ref(true);
 const playlistCarouselColumns = ref(6);
+const isCompactCarouselLayout = computed(
+  () => playlistCarouselColumns.value < PLAYLIST_CAROUSEL_WIDE_COLUMNS
+);
+const recommendedSingleVisibleColumns = computed(() =>
+  isCompactCarouselLayout.value
+    ? RECOMMENDED_SINGLE_COMPACT_COLUMNS
+    : RECOMMENDED_SINGLE_WIDE_COLUMNS
+);
+const recommendedSingleTotalColumns = computed(() =>
+  Math.max(1, Math.ceil(visibleRecommendedSingles.value.length / RECOMMENDED_SINGLE_ROWS))
+);
 const playlistCarouselGap = computed(() =>
   playlistCarouselColumns.value >= PLAYLIST_CAROUSEL_WIDE_COLUMNS
     ? PLAYLIST_CAROUSEL_WIDE_GAP
@@ -504,19 +550,42 @@ const playlistCarouselStyle = computed(() => {
   const columns = playlistCarouselColumns.value;
   const gap = playlistCarouselGap.value;
   const gapOffset = (gap * (columns - 1)) / columns;
+  const singleColumns = recommendedSingleVisibleColumns.value;
+  const singleGap = isCompactCarouselLayout.value
+    ? PLAYLIST_CAROUSEL_COMPACT_GAP
+    : 26;
+  const singleGapOffset = (singleGap * (singleColumns - 1)) / singleColumns;
 
   return {
     '--recommend-carousel-column-width': `calc(${(100 / columns).toFixed(4)}% - ${gapOffset.toFixed(3)}px)`,
-    '--recommend-carousel-column-gap': `${gap}px`
+    '--recommend-carousel-column-gap': `${gap}px`,
+    '--recommended-single-column-width': `calc(${(100 / singleColumns).toFixed(4)}% - ${singleGapOffset.toFixed(3)}px)`,
+    '--recommended-single-column-gap': `${singleGap}px`
+  };
+});
+const recommendedSingleListStyle = computed(() => {
+  if (!isCompactCarouselLayout.value) {
+    return {};
+  }
+
+  const trackColumns = Math.max(
+    recommendedSingleVisibleColumns.value,
+    recommendedSingleTotalColumns.value
+  );
+
+  return {
+    gridTemplateColumns: `repeat(${trackColumns}, var(--recommended-single-column-width))`
   };
 });
 const visibleRecommendedRadioLimit = computed(() => playlistCarouselColumns.value);
 const recommendCarouselPageIndex = ref(0);
 const latestCarouselPageIndex = ref(0);
 const radioCarouselPageIndex = ref(0);
+const recommendedSingleCarouselPageIndex = ref(0);
 const recommendPlaylistTrack = ref(null);
 const latestPlaylistTrack = ref(null);
 const recommendedRadioTrack = ref(null);
+const recommendedSingleTrack = ref(null);
 const fallbackHeroSlides = [
   {
     id: 'exclusive',
@@ -584,6 +653,19 @@ const radioCarouselLastPage = computed(() =>
   Math.max(radioCarouselPageStarts.value.length - 1, 0)
 );
 const radioCarouselNeeded = computed(() => radioCarouselLastPage.value > 0);
+const recommendedSingleCarouselPageStarts = computed(() =>
+  getPlaylistCarouselPageStarts(
+    visibleRecommendedSingles.value.length,
+    RECOMMENDED_SINGLE_ROWS,
+    recommendedSingleVisibleColumns.value
+  )
+);
+const recommendedSingleCarouselLastPage = computed(() =>
+  Math.max(recommendedSingleCarouselPageStarts.value.length - 1, 0)
+);
+const recommendedSingleCarouselNeeded = computed(
+  () => isCompactCarouselLayout.value && recommendedSingleCarouselLastPage.value > 0
+);
 const recommendSkeletonCarouselNeeded = computed(
   () =>
     getPlaylistCarouselPageStarts(12, RECOMMEND_CAROUSEL_ROWS, playlistCarouselColumns.value)
@@ -1073,6 +1155,10 @@ function clampPlaylistCarouselPages() {
     radioCarouselPageIndex.value,
     radioCarouselLastPage.value
   );
+  recommendedSingleCarouselPageIndex.value = Math.min(
+    recommendedSingleCarouselPageIndex.value,
+    recommendedSingleCarouselLastPage.value
+  );
 }
 
 function moveRecommendCarousel(direction) {
@@ -1114,23 +1200,51 @@ function moveRadioCarousel(direction) {
   );
 }
 
-function getPlaylistCarouselScrollLeft(track, startColumn) {
+function moveRecommendedSingleCarousel(direction) {
+  recommendedSingleCarouselPageIndex.value = Math.min(
+    Math.max(recommendedSingleCarouselPageIndex.value + direction, 0),
+    recommendedSingleCarouselLastPage.value
+  );
+  scrollPlaylistCarouselToPage(
+    recommendedSingleTrack.value,
+    recommendedSingleCarouselPageStarts.value,
+    recommendedSingleCarouselPageIndex.value,
+    true,
+    recommendedSingleVisibleColumns.value
+  );
+}
+
+function getPlaylistCarouselScrollLeft(
+  track,
+  startColumn,
+  visibleColumns = playlistCarouselColumns.value
+) {
   const styles = window.getComputedStyle(track);
   const columnGap = Number.parseFloat(styles.columnGap) || 0;
   const columnWidth =
-    (track.clientWidth - columnGap * (playlistCarouselColumns.value - 1)) /
-    playlistCarouselColumns.value;
+    (track.clientWidth - columnGap * (visibleColumns - 1)) /
+    visibleColumns;
 
   return startColumn * (columnWidth + columnGap);
 }
 
-function scrollPlaylistCarouselToPage(track, pageStarts, pageIndex, smooth = false) {
+function scrollPlaylistCarouselToPage(
+  track,
+  pageStarts,
+  pageIndex,
+  smooth = false,
+  visibleColumns = playlistCarouselColumns.value
+) {
   if (!track) {
     return;
   }
 
   track.scrollTo({
-    left: getPlaylistCarouselScrollLeft(track, pageStarts[pageIndex] ?? 0),
+    left: getPlaylistCarouselScrollLeft(
+      track,
+      pageStarts[pageIndex] ?? 0,
+      visibleColumns
+    ),
     behavior: smooth ? 'smooth' : 'auto',
   });
 }
@@ -1154,6 +1268,13 @@ function syncPlaylistCarouselScrollPositions(smooth = false) {
       radioCarouselPageStarts.value,
       radioCarouselPageIndex.value,
       smooth
+    );
+    scrollPlaylistCarouselToPage(
+      recommendedSingleTrack.value,
+      recommendedSingleCarouselPageStarts.value,
+      recommendedSingleCarouselPageIndex.value,
+      smooth,
+      recommendedSingleVisibleColumns.value
     );
   });
 }

@@ -1948,6 +1948,10 @@
   overflow: hidden;
 }
 
+.recommended-single-carousel {
+  overflow: hidden;
+}
+
 .radio-carousel {
   overflow: hidden;
 }
@@ -2618,6 +2622,19 @@
 
 .song-list--recommend {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.song-list--recommend.song-list--recommend-carousel {
+  column-gap: var(--recommended-single-column-gap, 16px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+
+.song-list--recommend.song-list--recommend-carousel::-webkit-scrollbar {
+  display: none;
 }
 
 .song-row {
