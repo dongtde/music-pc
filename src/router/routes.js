@@ -3,6 +3,11 @@ const PodcastView = () => import('../views/PodcastView.vue')
 export const routes = [
   { path: '/', redirect: '/home' },
   {
+    path: '/space', name: 'space',
+    component: () => import('../views/SpaceView.vue'),
+    meta: { title: '声境音乐馆', environment: '3d' }
+  },
+  {
     path: '/home',
     name: 'home',
     component: () => import('../views/HomeView.vue'),

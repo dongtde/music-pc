@@ -50,6 +50,10 @@ const props = defineProps({
     type: Number,
     default: 48
   },
+  lanes: {
+    type: Number,
+    default: 7
+  },
   hasMore: {
     type: Boolean,
     default: false
@@ -64,7 +68,7 @@ const props = defineProps({
   }
 })
 
-const laneCount = 7
+const laneCount = computed(() => Math.max(1, Math.min(7, Math.floor(Number(props.lanes)) || 7)))
 const fallbackNames = ['云听友', '耳机党', '夜航线', '旋律控', '今日循环']
 const fallbackTexts = [
   '这段前奏一响就有画面了',
@@ -162,6 +166,11 @@ watch(maxVisibleItems, () => {
   fillDanmakuSlots()
   scheduleLaunchWarmup()
   requestMoreIfNeeded()
+})
+
+watch(laneCount, () => {
+  resetDanmakuStream()
+  scheduleSourceCommentsSync()
 })
 
 watch(
@@ -603,7 +612,7 @@ function ensureLaunchWarmup() {
 }
 
 function getInitialLaunchSlotCount() {
-  return Math.max(1, Math.min(maxVisibleItems.value, laneCount))
+  return Math.max(1, Math.min(maxVisibleItems.value, laneCount.value))
 }
 
 function getCurrentLaunchSlotLimit() {
@@ -771,10 +780,10 @@ function isLayerRunning() {
 }
 
 function createDanmakuTiming(content, index) {
-  const lane = index % laneCount
-  const row = Math.floor(index / laneCount)
+  const lane = index % laneCount.value
+  const row = Math.floor(index / laneCount.value)
   const duration = 20 + (index % 5) * 2 + Math.min(6, content.length / 8)
-  const top = 6 + lane * 12 + (row % 2) * 2
+  const top = 6 + lane * (84 / laneCount.value) + (row % 2) * 2
 
   return {
     lane,

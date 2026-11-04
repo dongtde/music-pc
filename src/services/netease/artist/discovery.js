@@ -110,5 +110,5 @@ function getKugouArtistGroup(response = {}, initial = -1) {
     ? groups.find((item) => item.title === '热门') || groups[0]
     : groups.find((item) => String(item.title).toUpperCase() === target)
 
-  return group?.artists ?? response.artists ?? []
+  return group?.artists ?? (groups.length ? [] : response.artists ?? [])
 }

@@ -10,20 +10,24 @@
           'app-shell--layout-switching': isLayoutSwitching,
           'app-shell--immersive': isImmersiveRoute,
           'app-shell--desktop': isDesktopApp,
+          'app-shell--world': isWorld,
         }"
       >
-        <SidebarNav :compact="isImmersiveRoute" />
+        <MusicWorld v-if="isWorld" :suspended="fullPlayerVisible || auth.state.loginModalVisible" />
+        <EnvironmentSwitch v-if="!isWorld && !fullPlayerVisible" />
+        <SidebarNav v-if="!isWorld" :compact="isImmersiveRoute" />
         <div
-          v-if="isDesktopApp && isImmersiveRoute"
+          v-if="isDesktopApp && (isImmersiveRoute || isWorld)"
           class="app-window-drag-strip"
           aria-hidden="true"
         />
         <WindowControls
-          v-if="isDesktopApp && isImmersiveRoute"
+          v-if="isDesktopApp && (isImmersiveRoute || isWorld)"
           floating
           class="app-window-controls"
         />
-        <section class="main-panel">
+        <button v-if="isWorld && route.name !== 'space'" type="button" class="world-route-close" @click="router.push('/space')">返回音乐馆 ↗</button>
+        <section class="main-panel" :class="{ 'main-panel--world-hidden': isWorld && route.name === 'space' }">
           <TopBar :inert="isImmersiveRoute" :aria-hidden="isImmersiveRoute" />
           <div class="route-stage">
             <router-view v-slot="{ Component, route: viewRoute }">
@@ -66,7 +70,7 @@
             </section>
           </div>
         </Transition>
-        <PlayerBar />
+        <PlayerBar :hidden="isWorld" @full-player-change="fullPlayerVisible = $event" />
         <ThemeTransitionOverlay />
         <div
           v-if="appUpdateAvailable"
@@ -89,7 +93,7 @@
 
 <script setup>
 import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { darkTheme } from 'naive-ui';
 import SidebarNav from './components/SidebarNav.vue';
 import HomeBootSkeleton from './components/HomeBootSkeleton.vue';
@@ -98,6 +102,9 @@ import ThemeTransitionOverlay from './components/ThemeTransitionOverlay.vue';
 import WindowControls from './components/WindowControls.vue';
 import { useAuthStore } from './stores/auth';
 import { useThemeStore } from './stores/theme';
+import { useEnvironmentStore } from './stores/environment';
+import EnvironmentSwitch from './components/EnvironmentSwitch.vue';
+const MusicWorld = defineAsyncComponent(() => import('./components/MusicWorld.vue'));
 
 const PlayerBar = defineAsyncComponent({
   loader: () => import('./components/PlayerBar.vue'),
@@ -113,6 +120,10 @@ const LoginModal = defineAsyncComponent(() => import('./components/LoginModal.vu
 const auth = useAuthStore();
 const theme = useThemeStore();
 const route = useRoute();
+const fullPlayerVisible = ref(false);
+const router = useRouter();
+const environment = useEnvironmentStore();
+const isWorld = computed(() => environment.state.mode === '3d' && !isDesktopLyricsRoute.value);
 const initialRoutePath = getInitialRoutePath();
 theme.initTheme();
 auth.initAuth();
@@ -124,7 +135,7 @@ const isDesktopLyricsRoute = computed(() =>
   route.meta.desktopLyrics || (!route.name && initialRoutePath.startsWith('/desktop-lyrics')),
 );
 const isImmersiveRoute = computed(() =>
-  route.name === 'home' || (!route.name && isHomePath(initialRoutePath)),
+  !isWorld.value && (route.name === 'home' || (!route.name && isHomePath(initialRoutePath))),
 );
 const isDesktopApp = computed(() =>
   typeof window !== 'undefined' && Boolean(window.mappicDesktop?.windowControls),
@@ -195,7 +206,18 @@ onMounted(() => {
   clearBootRouteMarker();
   window.addEventListener('lanyin:app-update-available', handleAppUpdateAvailable);
   notifyRendererReady();
+  router.isReady().then(() => {
+    if (environment.state.mode === '3d' && !isDesktopLyricsRoute.value && route.name === 'home') router.replace('/space');
+  });
 });
+
+watch(() => environment.state.mode, (mode) => {
+  document.documentElement.dataset.environment = mode;
+  if (mode === '3d') appBootVisible.value = false;
+}, { immediate: true });
+watch(() => route.name, (name) => {
+  if (name === 'space') environment.setMode('3d');
+}, { immediate: true });
 
 watch(
   () => route.name,

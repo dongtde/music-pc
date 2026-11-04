@@ -23,6 +23,7 @@
   />
 
   <footer
+    v-show="!hidden"
     ref="playerBar"
     class="player"
     :class="{ 'player--full-screen': fullPlayerOpen }"
@@ -175,6 +176,8 @@ import { getPlaybackErrorDisplay } from '../utils/playbackError'
 import '../styles/player.css'
 
 const loadFullScreenPlayer = () => import('./FullScreenPlayer.vue')
+defineProps({ hidden: { type: Boolean, default: false } })
+const emit = defineEmits(['full-player-change'])
 const CommentModal = defineAsyncComponent(() => import('./CommentModal.vue'))
 const FullScreenPlayer = defineAsyncComponent(loadFullScreenPlayer)
 const theme = useThemeStore()
@@ -402,6 +405,7 @@ watch(
 )
 
 watch(fullPlayerOpen, (open) => {
+  emit('full-player-change', open)
   if (open && danmakuEnabled.value) {
     scheduleFullPlayerBackgroundTasks()
     return

@@ -1,4 +1,5 @@
 import { CanvasTexture, SRGBColorSpace } from 'three'
+import { drawTransportButton } from '../playerTransportDrawing.js'
 
 export function createMusicScreen(onUpdate = () => {}) {
   const canvas = document.createElement('canvas')
@@ -84,13 +85,10 @@ export function createMusicScreen(onUpdate = () => {}) {
     text(state.line?.translation || state.nextLine?.text || '', 683, 690, '27px "Microsoft YaHei", sans-serif', '#7798aa', 1170)
     if (state.line && !state.line.placeholder) addZone(670, 385, 1220, 240, 'lyric', state.line.seconds)
 
-    const buttons = [{ x: 815, action: 'previous', label: '上一首' }, { x: 1100, action: 'toggle', label: state.loading ? '加载中' : state.playing ? '暂停' : '播放' }, { x: 1385, action: 'next', label: '下一首' }]
+    const buttons = [{ x: 1030, action: 'previous' }, { x: 1215, action: 'toggle' }, { x: 1400, action: 'next' }]
     buttons.forEach((button) => {
-      context.fillStyle = button.action === 'toggle' ? '#90e6d2' : '#233e50'
-      context.beginPath(); context.roundRect(button.x, 755, 230, 82, 14); context.fill()
-      context.textAlign = 'center'
-      text(button.label, button.x + 115, 809, '30px "Microsoft YaHei", sans-serif', button.action === 'toggle' ? '#0a2731' : '#d8e9f2')
-      addZone(button.x, 755, 230, 82, button.action)
+      drawTransportButton(context,button.action,button.x,796,button.action==='toggle'?82:56,state)
+      if(!state.loading)addZone(button.x-48,748,96,96,button.action)
     })
     context.textAlign = 'left'
     const progress = state.duration > 0 ? Math.min(1, Math.max(0, state.currentTime / state.duration)) : 0

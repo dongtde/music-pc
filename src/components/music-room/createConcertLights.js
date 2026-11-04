@@ -104,16 +104,18 @@ export function createConcertLights(scene) {
     })
   }
 
-  function update(state, theme, reducedMotion) {
+  function update(state, theme, reducedMotion, commands) {
     primary.set(theme.primary); secondary.set(theme.secondary)
     const animated = state.live && !reducedMotion
     const phrase = Math.floor(state.beats / 4)
-    fixtures.forEach((fixture) => {
+    fixtures.forEach((fixture,fixtureIndex) => {
       const { side, index, z, pan, head, lens, spot, beam, pool } = fixture
       const phase = animated ? state.phase : 0
       const sweep = Math.sin(phase + index * 0.48)
       const reach = animated ? 3.1 + sweep * (0.7 + state.energy * 1.6) : 3.2
       target.set(side * (5.5 - reach), 0.04, THREE.MathUtils.clamp(z - 0.6 + (animated ? Math.cos(phase * 0.7 + index * 0.6) * 1.7 : 0), -9.6, 9.7))
+      const command=commands?.[fixtureIndex]
+      if(command){target.set(command.x,command.y,command.z);spot.angle=command.angle}
       direction.set(target.x - side * 5.5, target.y - 5.91, target.z - z)
       pan.rotation.y = Math.atan2(direction.x, direction.z)
       head.rotation.x = Math.atan2(-direction.y, Math.hypot(direction.x, direction.z))
@@ -121,14 +123,16 @@ export function createConcertLights(scene) {
       origin.set(0, 0, 0.385).applyMatrix4(head.matrixWorld)
       direction.subVectors(target, origin)
       const distance = direction.length()
+      if(command)spot.distance=Math.max(17,distance+2)
       direction.normalize()
       const chasing = (index + (side > 0 ? 1 : 0)) % 3 === state.beats % 3
-      const intensity = state.power * (animated
+      const intensity = command?.intensity ?? state.power * (animated
         ? Math.min(1.4, state.energy * 1.4 + state.bass * 0.35 + state.pulse * (chasing ? 0.85 : 0.24))
         : 0.48)
-      const mix = ((index + (side > 0 ? 1 : 0) + phrase) % 2) * 0.85
+      const mix = command?.mix ?? ((index + (side > 0 ? 1 : 0) + phrase) % 2) * 0.85
       color.copy(primary).lerp(secondary, mix)
-      if (animated) color.lerp(highlight, state.pulse * state.treble * 0.3)
+      if(command){color.offsetHSL(command.hue,0,0);color.lerp(highlight,command.white)}
+      else if (animated) color.lerp(highlight, state.pulse * state.treble * 0.3)
       lens.emissive.copy(color); lens.emissiveIntensity = intensity * 5
       spot.color.copy(color); spot.intensity = intensity * 100
       spot.position.copy(origin); spot.target.position.copy(target)
