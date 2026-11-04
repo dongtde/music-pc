@@ -74,6 +74,10 @@ export default defineConfig(({ mode }) => {
               return 'vendor-http';
             }
 
+            if (id.includes('/three/') || id.includes('\\three\\')) {
+              return 'vendor-three';
+            }
+
             return 'vendor';
           },
         },

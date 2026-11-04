@@ -1,0 +1,90 @@
+.music-room {
+  --room-mint: #a0edda;
+  --room-text: #edf5fa;
+  --room-muted: #9dafbe;
+  position: absolute;
+  inset: 0 0 var(--player-bar-actual-height, 92px);
+  overflow: hidden;
+  background: #090f18;
+  color: var(--room-text);
+  font-family: 'Bahnschrift', 'Segoe UI', 'Microsoft YaHei', sans-serif;
+}
+.music-room__canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+.music-room__canvas:active { cursor: grabbing; }
+.music-room__canvas:focus { outline: 0; }
+.music-room__canvas:focus-visible { outline: 1px solid #a0edda60; outline-offset: -4px; }
+.music-room::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(#050b1590, transparent 19%, transparent 78%, #050b15a8); }
+.music-room button { font: inherit; cursor: pointer; }
+.music-room button:disabled { opacity: 0.4; cursor: default; }
+.music-room button:focus-visible, .music-room input:focus-visible { outline: 2px solid var(--room-mint); outline-offset: 4px; }
+.music-room__identity { position: absolute; z-index: 2; top: 28px; left: 88px; pointer-events: none; }
+.music-room__identity > span { display: block; color: #b6d0df; font-size: 10px; letter-spacing: 0.25em; }
+.music-room__identity h2 { display: flex; align-items: center; gap: 18px; margin: 8px 0 0; font-size: 20px; font-weight: 500; letter-spacing: 0.12em; }
+.music-room__identity h2 span { color: var(--room-muted); font-size: 11px; font-weight: 400; letter-spacing: 0.08em; }
+.music-room__destination { position: absolute; z-index: 2; top: 32px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 9px 14px; border: 1px solid #9dcbdf20; border-radius: 4px; color: #bfd8e4; background: #0b192470; font-size: 11px; backdrop-filter: blur(8px); }
+.music-room__destination b { margin-left: 7px; color: var(--room-mint); font: 14px 'Consolas', monospace; }
+.music-room__destination small { color: #779eaf; font-size: 10px; }
+.music-room__crosshair { position: absolute; z-index: 2; top: 50%; left: 50%; width: 4px; height: 4px; border: 1px solid #e9ffffad; border-radius: 50%; box-shadow: 0 0 5px #031222; pointer-events: none; }
+.music-room__welcome { position: absolute; z-index: 2; right: 5%; bottom: 115px; width: min(460px, 80vw); padding: 25px 30px; border-left: 1px solid #a0eddab3; background: linear-gradient(90deg, #091623df, #09162330); backdrop-filter: blur(5px); }
+.music-room__welcome-label { display: flex; align-items: center; gap: 8px; color: var(--room-mint); font-size: 11px; letter-spacing: 0.14em; }
+.music-room__welcome h3 { margin: 16px 0 11px; font-size: clamp(25px, 2.4vw, 36px); font-weight: 400; letter-spacing: 0.05em; }
+.music-room__welcome p { margin: 0 0 23px; color: #bbcbd5; font-size: 12px; line-height: 1.7; }
+.music-room__enter { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 180px; padding: 12px 16px; border: 0; border-radius: 3px; color: #102d35; background: #a0edda; font-size: 13px !important; transition: background 180ms; }
+.music-room__enter:hover { background: #d0fff3; }
+.music-room__keys { display: flex; align-items: center; gap: 7px; margin-top: 22px; color: #90a4b4; font-size: 10px; }
+.music-room kbd { padding: 3px 5px; border: 1px solid #d0e9f12b; border-radius: 3px; color: #d0e4ec; font: 10px 'Consolas', monospace; }
+.music-room__interaction { position: absolute; bottom: 125px; left: 50%; z-index: 3; transform: translateX(-50%); }
+.music-room__interaction button { display: flex; align-items: center; gap: 12px; padding: 11px 18px; border: 1px solid #a0edda66; border-radius: 4px; color: #d4fff0; background: #0a262de8; backdrop-filter: blur(10px); font-size: 13px; white-space: nowrap; }
+.music-room__interaction kbd { color: #132d32; background: var(--room-mint); padding: 4px 7px; font-size: 12px; }
+.music-room__notice { position: absolute; z-index: 3; bottom: 91px; left: 50%; transform: translateX(-50%); color: #b8d9e5; text-shadow: 0 2px 8px #000; font-size: 11px; pointer-events: none; white-space: nowrap; }
+.music-room__navigation { position: absolute; left: 5%; bottom: 30px; z-index: 3; display: flex; gap: 4px; align-items: center; padding: 5px; border: 1px solid #96b9d22b; border-radius: 6px; background: #0b1827bf; backdrop-filter: blur(14px); }
+.music-room__navigation button { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 13px; border: 0; border-radius: 3px; background: transparent; color: #bed5e1; font-size: 12px; transition: background 160ms, color 160ms; }
+.music-room__navigation button:hover { color: #d0fff0; background: #8ce5d516; }
+.music-room__nav-divider { width: 1px; height: 18px; background: #a9ced52e; }
+.music-room__telemetry { position: absolute; z-index: 2; bottom: 26px; right: 35px; display: flex; align-items: center; gap: 13px; color: #d3e5ed; pointer-events: none; }
+.music-room__telemetry > div:last-child { display: flex; flex-direction: column; gap: 6px; min-width: 60px; font-size: 11px; }
+.music-room__telemetry small { color: #91aabd; font-size: 10px; }
+.music-room__mini-map { position: relative; width: 42px; height: 54px; border: 1px solid #b2d2e443; background: #0c1a2666; }
+.music-room__map-screen { position: absolute; width: 70%; height: 2px; top: 3px; left: 15%; background: #9bc9e899; }
+.music-room__map-lights { position: absolute; inset: 9px 9px 6px; border-left: 2px dotted #a0edda80; border-right: 2px dotted #91b7ff80; }
+.music-room__mini-map i { position: absolute; width: 4px; height: 4px; background: #bdfff0; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 5px #a0edda; }
+.music-room__loading { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: #0c1622; color: #a0edda; }
+.music-room__loading strong { font-size: 18px; font-weight: 400; }
+.music-room__loading p { margin: 0; color: var(--room-muted); font-size: 13px; }
+.music-room__loading button { padding: 10px 22px; margin-top: 7px; border: 1px solid #a0edda88; border-radius: 4px; background: transparent; color: #d5fff3; }
+.music-room__console { position: absolute; z-index: 4; left: 50%; bottom: 100px; width: min(360px, calc(100% - 40px)); transform: translateX(-50%); padding: 20px 24px; border: 1px solid #a0edda66; border-radius: 10px; background: #0d202eea; box-shadow: 0 25px 80px #0008; backdrop-filter: blur(25px); }
+.music-room__console header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 17px; color: #9ee6d7; font-size: 12px; }
+.music-room__console header > span { display: flex; align-items: center; gap: 8px; }
+.music-room__console button { display: grid; place-items: center; padding: 7px; border: 0; background: transparent; color: #d8edf2; }
+.music-room__console > strong { display: block; font-size: 20px; font-weight: 500; overflow-wrap: anywhere; }
+.music-room__console p { color: #9ebbc7; font-size: 12px; line-height: 1.7; }
+.music-room__transport { display: flex; align-items: center; justify-content: center; gap: 29px; margin: 20px 0; }
+.music-room__transport .music-room__play { width: 49px; height: 49px; border-radius: 50%; background: #a0edda; color: #16303a; }
+.music-room__seek { display: flex; align-items: center; gap: 10px; color: #91b3c3; font: 10px 'Consolas', monospace; }
+.music-room__seek input { min-width: 0; flex: 1; height: 3px; accent-color: #a0edda; cursor: pointer; }
+.music-room__touch { display: none; }
+@media (max-width: 1000px) {
+  .music-room__identity h2 span { display: none; }
+  .music-room__destination { top: 85px; }
+  .music-room__telemetry { right: 20px; }
+}
+@media (max-width: 700px) {
+  .music-room__identity { left: 76px; top: 25px; }
+  .music-room__identity h2 { font-size: 16px; }
+  .music-room__identity > span { font-size: 8px; letter-spacing: 0.13em; }
+  .music-room__destination { left: 20px; top: 88px; transform: none; font-size: 10px; }
+  .music-room__welcome { left: 20px; right: auto; bottom: 110px; padding: 20px; }
+  .music-room__navigation { left: 20px; right: 20px; bottom: 23px; justify-content: space-between; }
+  .music-room__navigation button { padding: 0 8px; font-size: 11px; }
+  .music-room__telemetry { bottom: auto; top: 84px; right: 20px; }
+  .music-room__telemetry > div:last-child { display: none; }
+  .music-room__interaction { bottom: 170px; }
+  .music-room__notice { bottom: 82px; font-size: 10px; }
+  .music-room__touch { display: grid; position: absolute; z-index: 3; bottom: 91px; left: 20px; grid-template-columns: repeat(3, 34px); grid-template-rows: repeat(2, 34px); gap: 3px; }
+  .music-room__touch button { display: grid; place-items: center; padding: 0; border: 1px solid #abc4d540; border-radius: 4px; background: #112b38b0; color: #d0eaf4; touch-action: none; }
+  .music-room__touch .is-forward { grid-column: 2; }
+  .music-room__touch .is-left { grid-column: 1; grid-row: 2; }
+  .music-room__touch .is-back { grid-column: 2; grid-row: 2; }
+  .music-room__touch .is-right { grid-column: 3; grid-row: 2; }
+}
+@media (prefers-reduced-motion: reduce) { .music-room * { transition: none !important; } }

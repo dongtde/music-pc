@@ -3,6 +3,7 @@
     <section
       v-show="open"
       class="full-player-page"
+      :class="{ 'full-player-page--3d': is3DView }"
       :style="coverStyle"
       aria-label="全屏播放器"
     >
@@ -15,8 +16,35 @@
         <ChevronDown :size="30" />
       </button>
 
+      <button
+        class="full-player__view-switch"
+        type="button"
+        :aria-pressed="is3DView"
+        @click="togglePlayerView"
+      >
+        <component :is="is3DView ? AlignLeft : Box" :size="17" />
+        {{ is3DView ? '歌词页面' : '3D 播放器' }}
+      </button>
+
+      <ThreeMusicRoom
+        v-if="is3DView"
+        :active="open"
+        :track="track"
+        :playing="player.state.isPlaying"
+        :loading="player.state.isLoading"
+        :queue-available="player.state.queue.length > 0"
+        :current-time="player.state.currentTime"
+        :duration="player.state.duration"
+        :lines="lyricLines"
+        :active-index="playbackLyricIndex"
+        @seek="seekToLyric"
+        @toggle-play="$emit('toggle-play')"
+        @previous="$emit('previous')"
+        @next="$emit('next')"
+      />
+
       <div
-        v-if="visualizerActive && visualizerMode === 'particles'"
+        v-if="!is3DView && visualizerActive && visualizerMode === 'particles'"
         class="full-player__visualizer full-player__visualizer--particles"
         :class="{ 'is-playing': visualizerActive && player.state.isPlaying }"
         aria-hidden="true"
@@ -29,12 +57,12 @@
       </div>
 
       <FullPlayerSpectrumVisualizer
-        v-if="visualizerActive && visualizerMode === 'spectrum'"
+        v-if="!is3DView && visualizerActive && visualizerMode === 'spectrum'"
         :active="visualizerActive && visualizerMode === 'spectrum'"
         :playing="player.state.isPlaying"
       />
 
-      <div class="full-player__shell">
+      <div v-show="!is3DView" class="full-player__shell">
         <section class="full-player__turntable" aria-label="唱片封面">
           <div class="full-player__deck">
             <div class="full-player__platter">
@@ -76,7 +104,7 @@
       </div>
 
       <DanmakuLayer
-        v-if="danmakuMounted"
+        v-if="danmakuMounted && !is3DView"
         class="full-player__danmaku"
         :enabled="danmakuActive"
         :song="track"
@@ -113,7 +141,7 @@ import {
   ref,
   watch,
 } from 'vue';
-import { ChevronDown } from 'lucide-vue-next';
+import { AlignLeft, Box, ChevronDown } from 'lucide-vue-next';
 import { getCachedTrackLyrics } from '../services/lyrics';
 import { usePlayerStore } from '../stores/player';
 import {
@@ -129,6 +157,7 @@ const DanmakuLayer = defineAsyncComponent({
   loader: () => import('./DanmakuLayer.vue'),
   suspensible: false,
 });
+const ThreeMusicRoom = defineAsyncComponent(() => import('./ThreeMusicRoom.vue'));
 
 const props = defineProps({
   open: {
@@ -185,8 +214,9 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['close', 'cover-flight-end', 'danmaku-need-more']);
+const emit = defineEmits(['close', 'cover-flight-end', 'danmaku-need-more', 'toggle-play', 'previous', 'next']);
 const player = usePlayerStore();
+const is3DView = ref(false);
 
 const coverLabel = ref(null);
 const coverFlyer = ref(null);
@@ -254,7 +284,7 @@ watch(
 );
 
 watch(
-  () => [props.open, props.danmakuEnabled, props.track.id],
+  () => [props.open, props.danmakuEnabled, props.track.id, is3DView.value],
   () => {
     scheduleDanmakuActivation();
   },
@@ -292,10 +322,22 @@ watch(
 
     const sourceRect = getFlightSourceRect();
 
+    if (is3DView.value) {
+      coverFlightAnimation?.cancel();
+      coverFlightActive.value = false;
+      emit('cover-flight-end', open ? 'enter' : 'leave');
+      return;
+    }
+
     if (open) {
       coverFlightActive.value = Boolean(sourceRect);
       await nextTick();
       await waitForLayoutFrame();
+      if (is3DView.value || !props.open) {
+        coverFlightActive.value = false;
+        emit('cover-flight-end', props.open ? 'enter' : 'leave');
+        return;
+      }
       playCoverFlight('enter', { sourceRect });
       requestLyricsLayoutRefresh('auto', openingWorkDelay);
       return;
@@ -335,13 +377,26 @@ onBeforeUnmount(() => {
   clearVisualizerActivation();
   clearLyricsLayoutRefresh();
   lyricRequestId += 1;
+  coverFlightAnimation?.cancel();
 });
+
+function togglePlayerView() {
+  coverFlightAnimation?.cancel();
+  coverFlightActive.value = false;
+  is3DView.value = !is3DView.value;
+  if (is3DView.value) {
+    deactivateVisualizer();
+  } else {
+    scheduleVisualizerActivation(visualizerModeSwitchDelay);
+    nextTick(() => requestLyricsLayoutRefresh('auto'));
+  }
+}
 
 function scheduleDanmakuActivation() {
   clearDanmakuActivation();
   danmakuActive.value = false;
 
-  if (!props.open || !props.danmakuEnabled) {
+  if (!props.open || !props.danmakuEnabled || is3DView.value) {
     return;
   }
 
@@ -352,7 +407,7 @@ function scheduleDanmakuActivation() {
     danmakuMounted.value = true;
     danmakuActivationFrame = window.requestAnimationFrame(() => {
       danmakuActivationFrame = 0;
-      danmakuActive.value = Boolean(props.open && props.danmakuEnabled);
+      danmakuActive.value = Boolean(props.open && props.danmakuEnabled && !is3DView.value);
     });
   }, delay);
 }
@@ -373,7 +428,7 @@ function scheduleVisualizerActivation(delay = visualizerActivationDelay) {
   clearVisualizerActivation();
   visualizerActive.value = false;
 
-  if (!props.open) {
+  if (!props.open || is3DView.value) {
     return;
   }
 
@@ -383,7 +438,7 @@ function scheduleVisualizerActivation(delay = visualizerActivationDelay) {
     visualizerActivationTimer = null;
     visualizerActivationFrame = window.requestAnimationFrame(() => {
       visualizerActivationFrame = 0;
-      visualizerActive.value = Boolean(props.open);
+      visualizerActive.value = Boolean(props.open && !is3DView.value);
     });
   }, timeout);
 }

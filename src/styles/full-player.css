@@ -734,3 +734,40 @@
     height: clamp(92px, 18vh, 136px);
   }
 }
+
+.full-player-page.full-player-page--3d {
+  background: #090f18;
+}
+
+.full-player__view-switch {
+  position: absolute;
+  top: 24px;
+  right: 32px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  padding: 8px 15px;
+  border: 1px solid rgba(227, 236, 242, 0.23);
+  border-radius: 24px;
+  color: #eef2f4;
+  background: rgba(18, 33, 43, 0.32);
+  backdrop-filter: blur(12px);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 180ms, border-color 180ms;
+}
+
+.full-player__view-switch:hover {
+  border-color: rgba(227, 236, 242, 0.55);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.full-player__view-switch:focus-visible,
+.music-room button:focus-visible,
+.music-room__canvas:focus-visible {
+  outline: 2px solid #e8c696;
+  outline-offset: 5px;
+}

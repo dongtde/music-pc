@@ -20,6 +20,9 @@ importers:
       naive-ui:
         specifier: ^2.42.0
         version: 2.44.1(vue@3.5.38)
+      three:
+        specifier: ^0.185.1
+        version: 0.185.1
       vite:
         specifier: ^6.3.5
         version: 6.4.3(@types/node@26.0.0)(jiti@2.7.0)
@@ -38,6 +41,9 @@ importers:
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)
 
 packages:
+
+  three@0.185.1:
+    resolution: {integrity: sha512-5aojFCXKwnjBRZvUnt3WFfEcvUJgkN5LlijRFN95hMy8WVkG4I0QNcJE+OuWvuJ0bOdStrbfXn0pkd6/QyiAlg==}
 
   '@babel/helper-string-parser@7.29.7':
     resolution: {integrity: sha512-Pb5ijPrZ89GDH8223L4UP8i6QApWxs04RbPQJTeWDV0/keR2E36MeKnyr6LYmUUvqRRI+Iv87SuF1W6ErINzYw==}
@@ -1619,6 +1625,8 @@ packages:
     engines: {node: '>=10'}
 
 snapshots:
+
+  three@0.185.1: {}
 
   '@babel/helper-string-parser@7.29.7': {}
 

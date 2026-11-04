@@ -17,6 +17,9 @@
     @danmaku-need-more="loadMoreFullPlayerDanmaku"
     @close="closeFullPlayer"
     @cover-flight-end="handleCoverFlightEnd"
+    @toggle-play="player.togglePlay()"
+    @previous="playPreviousTrack"
+    @next="playNextTrack"
   />
 
   <footer
