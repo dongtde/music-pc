@@ -6,29 +6,10 @@
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "dev:lan": "vite --host 0.0.0.0",
-    "backend:install": "npm --prefix backend ci",
-    "backend:dev": "npm --prefix backend run dev",
-    "room:server": "npm --prefix backend start",
-    "test:backend": "npm --prefix backend test",
-    "test:listening": "node --test scripts/listening-room.test.js scripts/listening-directory.test.js",
-    "smoke:listening": "node scripts/listening-room-browser-smoke.js",
-    "build": "vite build",
-    "baseline:bundle": "node scripts/analyze-bundle.cjs",
-    "smoke:routes": "node scripts/route-smoke.js",
-    "smoke:first-screen": "node scripts/first-screen-smoke.js",
-    "smoke:fps": "node scripts/fps-smoke.js",
-    "smoke:player": "node scripts/player-smoke.js",
-    "smoke:electron-proxy": "node scripts/electron-proxy-smoke.cjs",
-    "preview": "vite preview --host 127.0.0.1",
-    "preview:lan": "vite preview --host 0.0.0.0",
-    "desktop:dev": "vite --host 127.0.0.1",
-    "desktop:debug": "node scripts/desktop-debug.cjs",
-    "desktop:start": "electron .",
-    "desktop:prepare-env": "node scripts/prepare-runtime-env.cjs",
-    "desktop:build": "node scripts/prepare-runtime-env.cjs && vite build --mode desktop && electron-builder --win --x64",
-    "desktop:pack": "node scripts/prepare-runtime-env.cjs && vite build --mode desktop && electron-builder --win --x64 --dir"
+    "dev": "vite --configLoader native --host 0.0.0.0",
+    "build": "node deploy/baota/package.mjs",
+    "desktop:dev": "node scripts/desktop-dev.cjs",
+    "desktop:build": "node scripts/prepare-runtime-env.cjs && vite build --configLoader native --mode desktop --outDir dist-desktop && electron-builder --win --x64 --publish never"
   },
   "dependencies": {
     "@vitejs/plugin-vue": "^5.2.4",
@@ -53,7 +34,11 @@
       "output": "release"
     },
     "files": [
-      "dist/**/*",
+      {
+        "from": "dist-desktop",
+        "to": "dist",
+        "filter": ["**/*"]
+      },
       "electron/**/*",
       "package.json"
     ],

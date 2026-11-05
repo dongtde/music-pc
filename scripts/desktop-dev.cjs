@@ -5,6 +5,8 @@ const devServerUrl = process.env.VITE_DEV_SERVER_URL || `http://127.0.0.1:${devS
 
 const vite = spawn(process.execPath, [
   'node_modules/vite/bin/vite.js',
+  '--configLoader',
+  'native',
   '--host',
   '127.0.0.1',
   '--port',
@@ -15,6 +17,7 @@ const vite = spawn(process.execPath, [
 ], {
   stdio: 'inherit',
   shell: false,
+  windowsHide: true,
   env: {
     ...process.env,
     VITE_DEV_SERVER_PORT: String(devServerPort),
@@ -29,6 +32,7 @@ waitForDevServer()
     electron = spawn(process.execPath, ['node_modules/electron/cli.js', '.'], {
       stdio: 'inherit',
       shell: false,
+      windowsHide: true,
       env: {
         ...process.env,
         MAPPIC_DESKTOP_DEBUG: '1',

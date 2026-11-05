@@ -27,33 +27,25 @@ npm run dev
 
 「加入房间」会自动显示当前一起听服务上已创建的房间，可以直接点击加入，也支持房间码和完整邀请。
 
-首次运行后端，在根目录执行 `npm run backend:install`；随后分别在两个终端运行 `npm run room:server` 和 `npm run dev:lan`。前端默认通过 Vite 代理连接 `http://127.0.0.1:3030`。前端启动和构建不会自动启动后端。
+首次运行后端，在 `backend/` 中执行 `npm ci`，然后执行 `npm run dev`；前端在项目根目录执行 `npm run dev`。前端开发入口同时支持本机和局域网访问，默认代理到 `http://127.0.0.1:3030`。前后端分别启动。
 
 详见 [后端项目说明](backend/README.md) 和 [一起听运行指南](docs/listening-room.md)。
 
+`npm run build` 会生成 `dist/` 网页资源，同时把前端、独立后台和 Nginx 配置打成 `release/server/` 下的服务器部署压缩包。具体步骤见 [宝塔部署指南](docs/baota-deployment.md)。发布过程的临时目录位于 `node_modules/.cache/`，编辑器不再把它们当成独立 NPM 项目。
+
 ## 桌面端开发
 
-先启动 Vite 开发服务：
+一条命令同时启动 Vite 和 Electron 开发窗口：
 
 ```bash
 npm run desktop:dev
 ```
 
-再启动 Electron 调试入口：
-
-```bash
-npm run desktop:debug
-```
-
-也可以在已有前端构建结果的情况下直接启动 Electron：
-
-```bash
-npm run desktop:start
-```
+无需再单独启动桌面调试或桌面 Vite 服务。
 
 ## 构建
 
-构建 Web 资源：
+构建 Web 资源和服务器部署包：
 
 ```bash
 npm run build
@@ -65,32 +57,18 @@ npm run build
 npm run desktop:build
 ```
 
-仅打包为目录：
-
-```bash
-npm run desktop:pack
-```
-
-构建产物默认输出到 `release/`。
+桌面安装包和便携版输出到 `release/`；服务器部署包输出到 `release/server/`。网页资源放在 `dist/`，桌面打包中间资源放在 `dist-desktop/`，两种构建互不覆盖。
 
 ## 常用脚本
 
-| 命令                           | 说明                       |
-| ------------------------------ | -------------------------- |
-| `npm run dev`                  | 启动 Vite 开发服务         |
-| `npm run build`                | 构建前端资源               |
-| `npm run preview`              | 预览构建产物               |
-| `npm run desktop:dev`          | 启动桌面端开发用 Vite 服务 |
-| `npm run desktop:debug`        | 启动 Electron 调试流程     |
-| `npm run desktop:start`        | 直接运行 Electron          |
-| `npm run desktop:build`        | 构建 Windows 桌面应用      |
-| `npm run desktop:pack`         | 打包桌面应用目录           |
-| `npm run baseline:bundle`      | 分析构建包体积             |
-| `npm run smoke:routes`         | 路由 smoke 检查            |
-| `npm run smoke:first-screen`   | 首屏 smoke 检查            |
-| `npm run smoke:fps`            | FPS smoke 检查             |
-| `npm run smoke:player`         | 播放器 smoke 检查          |
-| `npm run smoke:electron-proxy` | Electron 代理 smoke 检查   |
+| 命令 | 说明 |
+| --- | --- |
+| `npm run dev` | 打开网页开发环境，支持局域网访问 |
+| `npm run build` | 打包网页正式环境和服务器部署包 |
+| `npm run desktop:dev` | 打开桌面开发环境，自动启动 Vite 和 Electron |
+| `npm run desktop:build` | 打包 Windows 桌面正式安装包和便携版 |
+
+后台在 `backend/` 中使用 `dev`、`build`、`start`，分别用于开发、打包和服务器正式启动。
 
 ## 项目结构
 
@@ -113,7 +91,7 @@ npm run desktop:pack
 |   `-- views/             # 页面视图
 |-- build/                 # 桌面应用图标
 |-- dist/                  # 前端构建产物
-`-- release/               # Electron 打包产物
+`-- release/               # 桌面和服务器发布压缩包
 ```
 
 ## 接口与代理
@@ -141,13 +119,7 @@ VITE_DEV_SERVER_PORT=5174
 
 Vite 开发代理和 Electron 主进程都会读取 `VITE_KUGOU_API_TARGET`、`VITE_NETEASE_API_TARGET`。旧的 `KUGOU_API_TARGET`、`NETEASE_API_TARGET` 仍保留兼容。
 
-桌面端打包前会自动执行：
-
-```bash
-npm run desktop:prepare-env
-```
-
-这个命令会从 `.env` / `.env.local` 生成被 Git 忽略的 `build/runtime/runtime.env`，再由 Electron 打包进应用资源目录。这样开源代码里不会出现真实后台地址，打包后的桌面应用仍能读取接口目标。
+`npm run desktop:build` 会自动从 `.env` / `.env.local` 生成被 Git 忽略的 `build/runtime/runtime.env`，再由 Electron 打包进应用资源目录，无需额外运行环境准备命令。实际接口配置不写入仓库。
 
 如果已经生成了桌面应用，也可以把 `.env.local` 放到 exe 同级目录。Electron 启动时会优先读取系统环境变量，其次读取打包资源里的运行时配置和 exe 同级 `.env.local`。
 

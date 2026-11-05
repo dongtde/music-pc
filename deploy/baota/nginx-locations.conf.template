@@ -1,0 +1,84 @@
+# Include this file INSIDE the website's server { ... } block.
+# Website document root: /www/wwwroot/lanyin/frontend
+# These locations replace Vite's development proxies in production.
+
+location / {
+    try_files $uri $uri/ /index.html;
+}
+
+location = /index.html {
+    add_header Cache-Control "no-cache" always;
+}
+
+location = /sw.js {
+    add_header Cache-Control "no-cache" always;
+}
+
+location ^~ /assets/ {
+    try_files $uri =404;
+    add_header Cache-Control "public, max-age=31536000, immutable";
+}
+
+location = /health {
+    proxy_pass http://127.0.0.1:3030;
+    proxy_set_header Host $host;
+    proxy_cache off;
+}
+
+location ^~ /listening-room/socket.io {
+    proxy_pass http://127.0.0.1:3030;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_buffering off;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+}
+
+location ^~ /listening-room/ {
+    proxy_pass http://127.0.0.1:3030;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    proxy_cache off;
+}
+
+location = /api {
+    return 308 /api/;
+}
+
+location ^~ /api/ {
+    proxy_pass __KUGOU_TARGET__/;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $proxy_host;
+    proxy_ssl_server_name on;
+    proxy_ssl_name __KUGOU_HOST__;
+    proxy_ssl_verify on;
+    proxy_ssl_trusted_certificate /etc/pki/tls/certs/ca-bundle.crt;
+    proxy_connect_timeout 15s;
+    proxy_read_timeout 120s;
+    proxy_cache off;
+}
+
+location = /netease-api {
+    return 308 /netease-api/;
+}
+
+location ^~ /netease-api/ {
+    proxy_pass __NETEASE_TARGET__/;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $proxy_host;
+    proxy_ssl_server_name on;
+    proxy_ssl_name __NETEASE_HOST__;
+    proxy_ssl_verify on;
+    proxy_ssl_trusted_certificate /etc/pki/tls/certs/ca-bundle.crt;
+    proxy_connect_timeout 15s;
+    proxy_read_timeout 120s;
+    proxy_cache off;
+}

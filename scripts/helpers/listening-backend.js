@@ -17,7 +17,7 @@ export async function startListeningBackend(options = {}) {
       else if (message.type === 'error') finish(new Error(message.error))
     }
     const onError = error => finish(error)
-    const onExit = code => finish(new Error(`Backend exited before startup (code ${code}). Run npm run backend:install first.`))
+    const onExit = code => finish(new Error(`Backend exited before startup (code ${code}). Run npm --prefix backend ci first.`))
     const timer = setTimeout(() => finish(new Error('Backend startup timed out.')), 10000)
     child.on('message', onMessage); child.once('error', onError); child.once('exit', onExit)
     child.send({ type: 'start', options })

@@ -1,0 +1,11 @@
+{
+  "npm.exclude": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/dist-*/**",
+    "**/release/**",
+    "**/release-*/**",
+    "**/.tmp/**"
+  ],
+  "npm.scriptExplorerExclude": ["^install$"]
+}

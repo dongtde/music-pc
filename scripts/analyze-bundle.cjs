@@ -192,7 +192,7 @@ function renderMarkdownReport(report) {
     '',
     '## Usage',
     '',
-    '- Run `npm run baseline:bundle` after optimization batches.',
+    '- Run `node scripts/analyze-bundle.cjs` after optimization batches.',
     '- Compare `reports/performance/bundle-baseline.json` between runs for exact byte deltas.',
     ''
   ]

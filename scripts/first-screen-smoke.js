@@ -14,7 +14,7 @@ const distIndexPath = path.join(rootDir, 'dist', 'index.html')
 const appUrl = 'mappic://app/#/home'
 
 if (!fsSync.existsSync(distIndexPath)) {
-  console.error('Missing dist/index.html. Run `npm run build` before `npm run smoke:first-screen`.')
+  console.error('Missing dist/index.html. Run `npm run build` first.')
   process.exit(1)
 }
 

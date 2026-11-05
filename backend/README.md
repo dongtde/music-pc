@@ -8,12 +8,18 @@
 
 ```sh
 npm ci
-npm start
+npm run dev
 ```
 
-默认监听 `0.0.0.0:3030`。`npm run dev` 使用 Node 的 watch 模式；`npm test` 运行后端测试。
+默认监听 `0.0.0.0:3030`。源码项目只保留三个入口：
 
-部署时只需复制整个 `backend/` 目录，执行 `npm ci --omit=dev` 和 `npm start`。无需复制前端 `src/`、`electron/` 或根目录的 `package.json`。服务只在内存保存房间，重启后房间会结束。
+| 命令 | 用途 |
+| --- | --- |
+| `npm run dev` | 开发环境，修改源码后自动重启 |
+| `npm run build` | 生成 `release/` 下的后台部署压缩包 |
+| `npm start` | 在服务器正式运行 |
+
+部署时先执行 `npm run build`，将 `release/` 中的压缩包上传并解压，再执行 `npm ci --omit=dev` 和 `npm start`。发布包只保留 `start` 入口，不包含开发依赖安装目录或本地 `.env`。服务只在内存保存房间，重启后房间会结束。
 
 ## Vercel 试运行
 
@@ -61,7 +67,7 @@ Vercel 项目需要启用 Fluid compute。供浏览器直接连接的部署域�
 
 所有房间成员都可添加歌曲、切歌、播放、暂停、调整进度和播放模式。加歌在服务端合并，队列最多 200 首，满额时拒绝新增并保留原队列。替换或清空队列需携带最新的 `queueVersion`，防止覆盖其他人刚添加的歌曲；过期歌曲上的进度和上下首操作也会被拒绝。指令按成员去重，并由服务器按接收顺序处理。
 
-## 目录
+## 源码目录
 
 ```text
 backend/
@@ -72,6 +78,7 @@ backend/
 │   ├── rooms.js       # 房间与同步业务
 │   └── protocol.js    # 后端校验与时间线计算
 ├── test/              # 后端测试及联调进程入口
+├── scripts/build.mjs  # 独立后台打包
 ├── .env.example
 ├── package.json
 └── package-lock.json
