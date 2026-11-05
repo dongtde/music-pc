@@ -15,7 +15,7 @@
 ## 快速开始
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
@@ -23,7 +23,7 @@ npm run dev
 
 ## 前后端独立运行
 
-项目根目录是 Vue/Electron 前端，`backend/` 是独立的一起听后端，拥有自己的依赖、配置与测试，可以单独复制部署。房间默认支持 10 人共同点歌和控制播放，可通过后端的 `LISTENING_ROOM_CAPACITY` 调整人数上限。前端正常浏览和个人播放不需要启动一起听后端。
+项目根目录是 Vue/Electron 前端，`backend/` 是独立的一起听后端，拥有自己的依赖与配置，可以单独复制部署。房间默认支持 10 人共同点歌和控制播放，可通过后端的 `LISTENING_ROOM_CAPACITY` 调整人数上限。前端正常浏览和个人播放不需要启动一起听后端。
 
 「加入房间」会自动显示当前一起听服务上已创建的房间，可以直接点击加入，也支持房间码和完整邀请。
 
@@ -31,7 +31,7 @@ npm run dev
 
 详见 [后端项目说明](backend/README.md) 和 [一起听运行指南](docs/listening-room.md)。
 
-`npm run build` 会生成 `dist/` 网页资源，同时把前端、独立后台和 Nginx 配置打成 `release/server/` 下的服务器部署压缩包。具体步骤见 [宝塔部署指南](docs/baota-deployment.md)。发布过程的临时目录位于 `node_modules/.cache/`，编辑器不再把它们当成独立 NPM 项目。
+`npm run build` 会生成 `dist/` 网页资源，同时把前端、独立后台和 Nginx 配置打成 `release/server/` 下的服务器部署压缩包。具体步骤见 [宝塔部署指南](docs/baota-deployment.md)。发布过程的临时目录位于 `node_modules/.cache/`，打包成功后自动清理。
 
 ## 桌面端开发
 
@@ -75,9 +75,9 @@ npm run desktop:build
 ```text
 .
 |-- electron/              # Electron 主进程、预加载脚本、协议代理和桌面能力
-|-- backend/               # 独立一起听后端，自带 package.json、配置和测试
+|-- backend/               # 独立一起听后端，自带 package.json、配置和打包入口
 |-- public/                # PWA manifest、Service Worker 和图标资源
-|-- scripts/               # 构建分析、调试和 smoke 检查脚本
+|-- scripts/               # 桌面开发、运行时配置、开发代理和 3D 模型生成
 |-- src/
 |   |-- api/               # API 请求封装
 |   |-- components/        # 通用 UI 和播放器组件
@@ -128,10 +128,9 @@ Vite 开发代理和 Electron 主进程都会读取 `VITE_KUGOU_API_TARGET`、`V
 - [多人一起听](docs/listening-room.md)：`/space` 控制终端的创建房间、加入房间、人数配置、共同点歌和独立服务部署。
 
 - `KuGouMusic-API.md`：酷狗接口说明
-- `OPTIMIZATION_PLAN.md`：性能和体验优化计划
 
 ## 注意事项
 
-- 项目同时存在 `package-lock.json` 和 `pnpm-lock.yaml`。团队协作时建议统一一种包管理器，避免依赖版本漂移。
+- 前后端统一使用 npm，各自保留 `package-lock.json`；首次安装依赖使用 `npm ci`。
 - 桌面端打包依赖 `build/icon.ico`，不要在清理资源时删除。
 - 部分接口依赖第三方服务，开发或打包后如果数据加载异常，请优先检查代理目标和网络可用性。

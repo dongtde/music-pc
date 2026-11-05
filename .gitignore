@@ -10,6 +10,9 @@ lerna-debug.log*
 node_modules
 .vercel/
 .tmp/
+*.tmp
+*.tmp.*
+reports/
 dist
 dist-desktop/
 release

@@ -9,7 +9,6 @@ const {
   safelyCallWindowMethod,
   sendToWindow,
 } = require('./windowUtils.cjs');
-const { captureFirstScreenSmoke, captureFpsSmoke } = require('./smoke.cjs');
 
 const projectRoot = path.join(__dirname, '..');
 const initialEnvKeys = new Set(Object.keys(process.env));
@@ -31,12 +30,6 @@ const APP_USER_MODEL_ID = 'com.lanyin.music';
 const isDev = !app.isPackaged;
 const isDebug =
   process.env.MAPPIC_DESKTOP_DEBUG === '1' || process.argv.includes('--debug');
-const electronSmokeMode =
-  process.env.MAPPIC_ELECTRON_SMOKE_MODE ||
-  (process.env.MAPPIC_FIRST_SCREEN_SMOKE === '1' ? 'first-screen' : '');
-const isFirstScreenSmoke = electronSmokeMode === 'first-screen';
-const isFpsSmoke = electronSmokeMode === 'fps';
-const isAutomationSmoke = isFirstScreenSmoke || isFpsSmoke;
 const devServerUrl = readEnv(['VITE_DEV_SERVER_URL'], 'http://127.0.0.1:5173');
 const kugouApiBase = readEnv(['VITE_KUGOU_API_BASE'], '/api');
 const neteaseApiBase = readEnv(['VITE_NETEASE_API_BASE'], '/netease-api');
@@ -63,11 +56,6 @@ const desktopLyricsStatePath = path.join(
 let mainWindow = null;
 let mainWindowIpcRegistered = false;
 let mainWindowShowFallbackTimer = null;
-
-if (isAutomationSmoke) {
-  app.commandLine.appendSwitch('disable-gpu');
-  app.commandLine.appendSwitch('disable-background-timer-throttling');
-}
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
@@ -151,22 +139,6 @@ async function createMainWindow() {
   taskbarControls.attachToWindow(mainWindow);
 
   await mainWindow.loadURL(`${APP_PROTOCOL}://app/#/home`);
-
-  if (isFirstScreenSmoke) {
-    await captureFirstScreenSmoke({
-      app,
-      appProtocol: APP_PROTOCOL,
-      window: mainWindow,
-    });
-  }
-
-  if (isFpsSmoke) {
-    await captureFpsSmoke({
-      app,
-      appProtocol: APP_PROTOCOL,
-      window: mainWindow,
-    });
-  }
 
   if (isDebug) {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
@@ -256,10 +228,6 @@ function sendMainWindowState(window = mainWindow) {
 }
 
 function attachMainWindowShowEvents(window) {
-  if (isAutomationSmoke) {
-    return;
-  }
-
   window.once('ready-to-show', () => {
     setTimeout(() => showMainWindow(window), 80);
   });
@@ -283,7 +251,6 @@ function clearMainWindowShowFallback() {
 
 function showMainWindow(window = mainWindow) {
   if (
-    isAutomationSmoke ||
     !window ||
     window !== mainWindow ||
     window.isDestroyed() ||
@@ -471,10 +438,6 @@ app
   })
   .catch((error) => {
     console.error('[main:ready]', error);
-
-    if (isFirstScreenSmoke) {
-      app.exit(1);
-    }
   });
 
 app.on('window-all-closed', () => {
@@ -484,7 +447,7 @@ app.on('window-all-closed', () => {
 });
 
 async function restoreDesktopLyricsOnStartup() {
-  if (isAutomationSmoke || !desktopLyrics.shouldRestoreLastSession()) {
+  if (!desktopLyrics.shouldRestoreLastSession()) {
     return;
   }
 

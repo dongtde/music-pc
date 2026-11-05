@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, writeFile, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -27,6 +27,7 @@ async function main() {
   const cache = path.join(root, 'node_modules', '.cache', 'release', stamp)
   const output = path.join(root, 'release')
   const archive = path.join(output, `lanyin-backend-${stamp}.tar.gz`)
+  if (path.dirname(cache) !== path.join(root, 'node_modules', '.cache', 'release')) throw new Error('The staging directory must remain inside the backend build cache.')
   if (existsSync(cache) || existsSync(archive)) throw new Error('Build output already exists; retry with a new timestamp.')
   await mkdir(cache, { recursive: true })
   await mkdir(output, { recursive: true })
@@ -35,6 +36,7 @@ async function main() {
   const result = spawnSync('tar', ['-czf', archive, '-C', cache, 'backend'], { stdio: 'inherit', windowsHide: true })
   if (result.error) throw result.error
   if (result.status !== 0) throw new Error(`Packaging failed with status ${result.status}.`)
+  await rm(cache, { recursive: true, force: true })
   console.log(`Backend package: ${archive}`)
 }
 

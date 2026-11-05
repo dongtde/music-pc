@@ -1,5 +1,5 @@
 import { build, loadEnv } from 'vite'
-import { mkdir, readFile, writeFile, copyFile, readdir, stat, cp, lstat } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, copyFile, readdir, stat, cp, lstat, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
@@ -31,7 +31,7 @@ const staging = path.join(cache, 'staging')
 const bundle = path.join(staging, 'lanyin')
 const archive = path.join(outputBase, `lanyin-baota-${stamp}.tar.gz`)
 const frontend = path.join(root, 'dist')
-const relativeOutput = path.relative(root, staging)
+const relativeOutput = path.relative(root, cache)
 if (relativeOutput.startsWith('..') || path.isAbsolute(relativeOutput) || existsSync(staging) || existsSync(archive)) {
   throw new Error('The package output must be a new directory within this workspace.')
 }
@@ -114,4 +114,5 @@ await writeFile(path.join(bundle, 'config', 'package-manifest.json'), JSON.strin
 const tar = spawnSync('tar', ['-czf', archive, '-C', staging, 'lanyin'], { stdio: 'inherit', windowsHide: true })
 if (tar.error) throw tar.error
 if (tar.status !== 0) throw new Error(`tar failed with status ${tar.status}; the unpacked package remains at ${bundle}`)
+await rm(cache, { recursive: true, force: true })
 console.log(JSON.stringify({ archive, frontend, files: files.length + 1, sizeMiB: Number(((await stat(archive)).size / 1024 / 1024).toFixed(2)) }, null, 2))
