@@ -8,7 +8,8 @@ export function readConfig(env = process.env) {
   const capacity = Number(env.LISTENING_ROOM_CAPACITY || ROOM_CAPACITY)
   if (!Number.isInteger(capacity) || capacity < 2 || capacity > ROOM_MAX_CAPACITY) throw new Error(`LISTENING_ROOM_CAPACITY must be an integer between 2 and ${ROOM_MAX_CAPACITY}.`)
   const origins = String(env.LISTENING_ALLOWED_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean)
-  const publicUrl = String(env.LISTENING_PUBLIC_URL || '').trim()
+  const vercelHost = env.VERCEL === '1' ? env.VERCEL_PROJECT_PRODUCTION_URL || env.VERCEL_URL : ''
+  const publicUrl = String(env.LISTENING_PUBLIC_URL || (vercelHost ? 'https://' + vercelHost : '')).trim()
   if (publicUrl) {
     const url = new URL(publicUrl)
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {

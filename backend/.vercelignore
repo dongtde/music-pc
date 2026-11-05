@@ -1,0 +1,9 @@
+# Deploy only the backend runtime and its dependency manifests.
+*
+!api
+!api/**
+!src
+!src/**
+!package.json
+!package-lock.json
+!vercel.json

@@ -29,6 +29,14 @@ test('standalone backend serves health checks and never serves frontend files', 
   assert.equal((await fetch(`${url}/.env`)).status, 404)
 })
 
+test('Vercel invitations use the public deployment origin unless an explicit origin is configured', () => {
+  const env = { VERCEL: '1', VERCEL_URL: 'preview.example.com', VERCEL_PROJECT_PRODUCTION_URL: 'listen.example.com' }
+  assert.equal(readConfig(env).publicUrl, 'https://listen.example.com')
+  assert.equal(readConfig({ VERCEL: '1', VERCEL_URL: 'preview.example.com' }).publicUrl, 'https://preview.example.com')
+  assert.equal(readConfig({ ...env, LISTENING_PUBLIC_URL: 'https://custom.example.com' }).publicUrl, 'https://custom.example.com')
+  assert.equal(readConfig({ VERCEL_URL: 'preview.example.com' }).publicUrl, '')
+})
+
 test('direct WebSocket connections respect frontend origins and expose the configured invitation origin', async t => {
   const env = await fixture(t, { allowedOrigins: ['https://music.example.com'], publicUrl: 'https://listen.example.com' })
   await assert.rejects(env.connect(undefined, { Origin: 'https://unrelated.example.com' }))
