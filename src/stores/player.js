@@ -1,4 +1,5 @@
 import { reactive } from 'vue'
+import { trackKey } from '../services/listeningRoomProtocol.js'
 import { getSongUrl, registerAnonymous } from '../api/modules/netease'
 import { STORAGE_KEYS } from '../config/app'
 import { currentTrack as fallbackTrack } from '../data/music'
@@ -71,6 +72,8 @@ let lastPersistedSecond = Math.floor(state.currentTime)
 let playbackClockFrame = 0
 let coverPaletteRequestId = 0
 let initialCoverPaletteRefreshStarted = false
+let playbackController = null
+let playbackRequestId = 0
 
 audio.volume = state.volume
 
@@ -145,12 +148,15 @@ export function usePlayerStore() {
       return false
     }
 
+    const requestId = ++playbackRequestId
     state.isLoading = true
     state.error = null
 
     try {
       const preferredQuality = getTrackHighestAudioQuality(track)
       const playbackSource = await resolveBestPlaybackSource(track, preferredQuality)
+
+      if (requestId !== playbackRequestId) return false
 
       if (!playbackSource.url) {
         throw createPlaybackError(PLAYBACK_ERROR_CODES.NO_PLAYBACK_URL, {
@@ -173,6 +179,7 @@ export function usePlayerStore() {
       useLibraryStore().addRecentTrack(state.currentTrack)
       return true
     } catch (error) {
+      if (requestId !== playbackRequestId) return false
       state.error = normalizePlaybackError(error, {
         operation: 'play',
         track
@@ -181,7 +188,7 @@ export function usePlayerStore() {
       console.warn('Failed to play track:', error)
       return false
     } finally {
-      state.isLoading = false
+      if (requestId === playbackRequestId) state.isLoading = false
     }
   }
 
@@ -408,12 +415,14 @@ export function usePlayerStore() {
     const resumeTime = clampTime(getCurrentTime(), state.duration)
     const shouldResume = !audio.paused
     let appliedQuality = false
+    const requestId = ++playbackRequestId
 
     state.isLoading = true
     state.error = null
 
     try {
       const songUrl = await resolvePlaybackUrl(state.currentTrack, nextQuality)
+      if (requestId !== playbackRequestId) return false
 
       if (!songUrl) {
         const quality = getAudioQualityDefinition(nextQuality)
@@ -444,6 +453,7 @@ export function usePlayerStore() {
       useLibraryStore().addRecentTrack(state.currentTrack)
       return true
     } catch (error) {
+      if (requestId !== playbackRequestId) return false
       if (!appliedQuality) {
         state.playbackQuality = previousQuality
         persistPlaybackQuality(previousQuality)
@@ -463,28 +473,118 @@ export function usePlayerStore() {
       console.warn('Failed to switch playback quality:', error)
       return false
     } finally {
-      state.isLoading = false
+      if (requestId === playbackRequestId) state.isLoading = false
+    }
+  }
+
+  function routePlayback(type, payload, fallback) {
+    return playbackController ? playbackController.command(type, payload) : fallback()
+  }
+
+  function attachRoomController(controller) {
+    if (playbackController && playbackController !== controller) throw new Error('已在另一个一起听房间中。')
+    playbackController = controller
+    ++playbackRequestId
+    const pause = () => { audio.pause(); audio.playbackRate = 1 }
+    return {
+      audio,
+      async prepare(track, signal) {
+        const requestId = ++playbackRequestId
+        const assertCurrent = () => {
+          if (signal?.aborted || requestId !== playbackRequestId) throw new DOMException('歌曲加载已取消', 'AbortError')
+        }
+        pause(); state.isLoading = true; state.error = null
+        try {
+          assertCurrent()
+          if (!audio.src || trackKey(track) !== trackKey(state.currentTrack) || audio.error) {
+            const source = await resolveBestPlaybackSource(track, getTrackHighestAudioQuality(track))
+            assertCurrent()
+            if (!source.url) throw createPlaybackError(PLAYBACK_ERROR_CODES.NO_PLAYBACK_URL, { track })
+            state.currentTrack = normalizeTrack(track, source.url, source.quality)
+            state.playbackQuality = source.quality
+            state.duration = parseDuration(state.currentTrack.duration)
+            state.currentTime = 0; lastPersistedSecond = 0
+            refreshCurrentTrackCoverPalette()
+            audio.preload = 'auto'; audio.src = source.url
+            audio.load()
+          }
+          await waitForRoomAudio(audio, signal)
+          assertCurrent()
+          state.duration = audio.duration
+          state.currentTrack.duration = formatTime(audio.duration)
+          useLibraryStore().addRecentTrack(state.currentTrack)
+          return { duration: audio.duration }
+        } catch (error) {
+          if (error.name !== 'AbortError' && requestId === playbackRequestId) state.error = normalizePlaybackError(error, { track })
+          throw error
+        } finally {
+          if (requestId === playbackRequestId) state.isLoading = false
+        }
+      },
+      pause,
+      async play() {
+        const requestId = playbackRequestId
+        try { await audio.play(); if (requestId === playbackRequestId) state.error = null }
+        catch (error) {
+          if (requestId === playbackRequestId && error.name !== 'AbortError') state.error = normalizePlaybackError(error)
+          throw error
+        }
+      },
+      seek: seekTo,
+      currentTime: getCurrentTime,
+      setRate(value) { audio.playbackRate = value },
+      setWaiting(value) { state.isLoading = Boolean(value) },
+      clearTrack() {
+        if (!state.currentTrack.id) return
+        ++playbackRequestId; pause(); audio.removeAttribute('src'); audio.load()
+        state.currentTrack = createEmptyTrack(); state.currentTime = 0; state.duration = 0; state.isLoading = false
+      },
+      setQueue(tracks, mode) { setQueue(tracks, { type: 'listening-room', id: 'shared', label: '一起听' }); setPlayMode(mode) },
+      setError(message) { state.error = message ? Object.assign(new Error(message), { userMessage: message }) : null },
+      release() {
+        if (playbackController !== controller) return
+        ++playbackRequestId; playbackController = null; pause(); state.isLoading = false; state.error = null
+      },
     }
   }
 
   return {
     state,
-    playTrack,
-    togglePlay,
-    restartCurrentTrack,
-    setQueue,
-    appendToQueue,
-    clearQueue,
-    setPlayMode,
+    playTrack: track => routePlayback('track', { track }, () => playTrack(track)),
+    togglePlay: () => routePlayback('toggle', {}, togglePlay),
+    restartCurrentTrack: () => routePlayback('restart', {}, restartCurrentTrack),
+    setQueue: (tracks, source) => routePlayback('queue', { tracks }, () => setQueue(tracks, source)),
+    appendToQueue: (tracks, source) => routePlayback('append', { tracks: Array.isArray(tracks) ? tracks : [tracks] }, () => appendToQueue(tracks, source)),
+    clearQueue: () => routePlayback('clear', {}, clearQueue),
+    setPlayMode: mode => routePlayback('mode', { mode }, () => setPlayMode(mode)),
     getRelativeQueueTrack,
     shouldRestartCurrentTrackOnEnded,
     setVolume,
-    setPlaybackQuality,
-    seekTo,
+    setPlaybackQuality: quality => routePlayback('quality', { quality }, () => setPlaybackQuality(quality)),
+    seekTo: position => routePlayback('seek', { position }, () => seekTo(position)),
     getCurrentTime,
     getAudioElement,
-    onTrackEnded
+    onTrackEnded,
+    attachRoomController,
   }
+}
+
+function waitForRoomAudio(media, signal) {
+  if (signal?.aborted) return Promise.reject(new DOMException('歌曲加载已取消', 'AbortError'))
+  if (media.readyState >= 3 && Number.isFinite(media.duration) && media.duration > 0) return Promise.resolve()
+  return new Promise((resolve, reject) => {
+    let timer
+    const finish = error => {
+      clearTimeout(timer); media.removeEventListener('canplay', ready); media.removeEventListener('error', failed)
+      signal?.removeEventListener('abort', aborted)
+      error ? reject(error) : resolve()
+    }
+    const ready = () => Number.isFinite(media.duration) && media.duration > 0 ? finish() : finish(new Error('无法读取完整歌曲时长。'))
+    const failed = () => finish(new Error('音频加载失败，请重试或选择其他歌曲。'))
+    const aborted = () => finish(new DOMException('歌曲加载已取消', 'AbortError'))
+    media.addEventListener('canplay', ready); media.addEventListener('error', failed); signal?.addEventListener('abort', aborted, { once: true })
+    timer = setTimeout(() => finish(new Error('音频加载超时，请检查网络后重试。')), 28000)
+  })
 }
 
 function syncAudioPlaybackTime(options = {}) {
@@ -663,6 +763,10 @@ async function ensurePlaybackCookie(auth) {
 }
 
 function notifyTrackEnded() {
+  if (playbackController) {
+    playbackController.ended?.()
+    return
+  }
   endedListeners.forEach((listener) => {
     try {
       const result = listener(state.currentTrack)

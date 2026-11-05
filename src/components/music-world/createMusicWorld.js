@@ -384,6 +384,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   return {
     navigate, navigateToPoint, focusScreen, sit, stand, cancelTravel, setKey, clearMovement, dispose, updateLibrary,
     setAccount(value){terminal.setAccount(value)},
+    setListeningRoom(value){terminal.setRoom(value)},
     setFeeds(value) { covers.filter(c => c.side === 'discover').forEach(c => c.surface.setState(value[FEED_IDS[c.index]])); invalidate() },
     inspectRecord(item){clearMovement();cancelTravel();stand(true);records.inspect(item)},
     dismissRecord(){records.dismiss()},

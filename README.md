@@ -21,6 +21,16 @@ npm run dev
 
 默认开发服务运行在 `http://127.0.0.1:5173`。
 
+## 前后端独立运行
+
+项目根目录是 Vue/Electron 前端，`backend/` 是独立的一起听后端，拥有自己的依赖、配置与测试，可以单独复制部署。房间默认支持 10 人共同点歌和控制播放，可通过后端的 `LISTENING_ROOM_CAPACITY` 调整人数上限。前端正常浏览和个人播放不需要启动一起听后端。
+
+「加入房间」会自动显示当前一起听服务上已创建的房间，可以直接点击加入，也支持房间码和完整邀请。
+
+首次运行后端，在根目录执行 `npm run backend:install`；随后分别在两个终端运行 `npm run room:server` 和 `npm run dev:lan`。前端默认通过 Vite 代理连接 `http://127.0.0.1:3030`。前端启动和构建不会自动启动后端。
+
+详见 [后端项目说明](backend/README.md) 和 [一起听运行指南](docs/listening-room.md)。
+
 ## 桌面端开发
 
 先启动 Vite 开发服务：
@@ -87,6 +97,7 @@ npm run desktop:pack
 ```text
 .
 |-- electron/              # Electron 主进程、预加载脚本、协议代理和桌面能力
+|-- backend/               # 独立一起听后端，自带 package.json、配置和测试
 |-- public/                # PWA manifest、Service Worker 和图标资源
 |-- scripts/               # 构建分析、调试和 smoke 检查脚本
 |-- src/
@@ -141,6 +152,8 @@ npm run desktop:prepare-env
 如果已经生成了桌面应用，也可以把 `.env.local` 放到 exe 同级目录。Electron 启动时会优先读取系统环境变量，其次读取打包资源里的运行时配置和 exe 同级 `.env.local`。
 
 ## 相关文档
+
+- [多人一起听](docs/listening-room.md)：`/space` 控制终端的创建房间、加入房间、人数配置、共同点歌和独立服务部署。
 
 - `KuGouMusic-API.md`：酷狗接口说明
 - `OPTIMIZATION_PLAN.md`：性能和体验优化计划

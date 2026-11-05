@@ -8,6 +8,7 @@ import { normalizeDanmakuOpacity } from './danmakuSettings.js'
 export const TERMINAL_SLIDERS = ['progress','volume','danmaku-opacity']
 export const TERMINAL_QUEUE = {x:28,y:143,width:402,height:420,rowHeight:60}
 export const TERMINAL_ACCOUNT = {x:1304,y:10,width:272,height:57}
+export const TERMINAL_LISTENING = {create:{x:540,y:17,width:178,height:43},join:{x:732,y:17,width:178,height:43}}
 export const TERMINAL_MODES = [{value:'shuffle',label:'随机播放'},{value:'order',label:'顺序播放'},{value:'single',label:'单曲循环'},{value:'list',label:'列表循环'}]
 const WIDTH=1600,HEIGHT=650,QUALITIES=[{id:'smooth',label:'流畅'},{id:'balanced',label:'均衡'},{id:'high',label:'精细'}]
 const EMPTY_QUEUE=[]
@@ -19,6 +20,7 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
   let dirty=true,signature='',zones=[],sceneId='rain',sceneLoading=false,quality='balanced',lastDraw=0
   let playback={},queue=[],queueVersion,queueReference,currentId='',scroll=0,menu=''
   let account={isLoggedIn:false,displayName:'点击登录',avatarUrl:''}
+  let room={id:'',isHost:false,connected:false,count:0,capacity:10,status:''}
   const images=createScreenImages(()=>{dirty=true;invalidate()},3)
   const zone=(x,y,w,h,action,payload,label)=>zones.push({x,y,w,h,action,payload,label})
   const changed=()=>{dirty=true;invalidate()}
@@ -151,6 +153,19 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
     const area=TERMINAL_ACCOUNT
     zone(area.x,area.y,area.width,area.height,'account',null,account.isLoggedIn?'查看账号信息':'登录账号')
   }
+  function drawListening(){
+    if(room.id){
+      const label=room.connected?`一起听 · ${room.id} · ${room.count}/${room.capacity}`:'一起听 · 正在重新连接'
+      button(510,17,480,43,label,'room-open','details',{selected:true,size:19})
+      text(ctx,room.isHost?'你是房主':'共同控制',1008,46,17,ink.muted,130)
+    }else{
+      for(const [mode,label] of [['create','创建房间'],['join','加入房间']]){
+        const area=TERMINAL_LISTENING[mode]
+        button(area.x,area.y,area.width,area.height,label,'room-open',mode,{size:19})
+      }
+      text(ctx,'多人一起听',933,46,17,ink.muted,140)
+    }
+  }
   function draw(state,now=performance.now()){
     playback=state;queue=Array.isArray(state.queue)?state.queue:EMPTY_QUEUE
     const nextId=String(state.track?.id||'')
@@ -164,7 +179,7 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
     ctx.fillStyle='#0b202b';ctx.fillRect(0,0,WIDTH,HEIGHT)
     ctx.fillStyle='#102b36';ctx.fillRect(458,80,663,570)
     text(ctx,'澜音  /  控制终端',36,49,23,ink.light)
-    drawAccount()
+    drawAccount();drawListening()
     ctx.fillStyle='#9abcc82b';ctx.fillRect(28,76,1536,1);ctx.fillRect(456,96,1,530);ctx.fillRect(1120,96,1,530)
     drawQueue(state);drawPlayer(state,now);drawSettings(state);drawMenu(state)
     surface.refresh();return motion
@@ -179,6 +194,7 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
   }
   function hitTest(uv,action){
     const target=rawHit(uv,action);if(!target)return null
+    if(room.id&&!room.connected&&['toggle','previous','next','queue-play','play-mode','progress'].includes(target.action))return {action:'room-open',payload:'details'}
     return {action:target.action,payload:TERMINAL_SLIDERS.includes(target.action)?THREE.MathUtils.clamp((uv.x*WIDTH-target.x)/target.w,0,1):target.payload}
   }
   function closeMenus(){if(menu){menu='';changed()}}
@@ -199,12 +215,13 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
     hint:uv=>rawHit(uv)?.label||'控制终端',
     setScene(id,loading=false){sceneId=id;sceneLoading=loading;changed()},
     setQuality(value){quality=QUALITIES.some(option=>option.id===value)?value:'balanced';changed()},
+    setRoom(value){if(JSON.stringify(value)!==JSON.stringify(room)){room={...value};changed()}},
     setAccount(value={}){
       const loggedIn=Boolean(value.isLoggedIn),next={isLoggedIn:loggedIn,displayName:loggedIn?String(value.displayName||'我的账号'):'点击登录',avatarUrl:loggedIn?String(value.avatarUrl||''):''}
       if(next.isLoggedIn===account.isLoggedIn&&next.displayName===account.displayName&&next.avatarUrl===account.avatarUrl)return
       account=next;changed()
     },
-    getState:()=>({scene:sceneId,loading:sceneLoading,quality,menu,scroll,account:{...account},queueLength:queue.length,visibleIndices:zones.filter(z=>z.action==='queue-play').map(z=>z.payload.index),danmakuEnabled:playback.danmakuEnabled!==false,danmakuOpacity:normalizeDanmakuOpacity(playback.danmakuOpacity),controls:zones.map(z=>z.action)}),
+    getState:()=>({scene:sceneId,loading:sceneLoading,quality,menu,scroll,account:{...account},room:{...room},queueLength:queue.length,visibleIndices:zones.filter(z=>z.action==='queue-play').map(z=>z.payload.index),danmakuEnabled:playback.danmakuEnabled!==false,danmakuOpacity:normalizeDanmakuOpacity(playback.danmakuOpacity),controls:zones.map(z=>z.action)}),
     dispose(){images.dispose();surface.texture.dispose()},
   }
 }

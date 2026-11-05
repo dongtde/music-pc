@@ -1,0 +1,21 @@
+{
+  "name": "lanyin-listening-backend",
+  "version": "1.0.0",
+  "description": "Standalone room and playback synchronization service for Lanyin",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "node src/start.js",
+    "dev": "node --watch src/start.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.4"
+  }
+}

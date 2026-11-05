@@ -1,6 +1,7 @@
 <template>
   <section class="music-world" :class="{'music-world--inspecting':selectedRecord,'music-world--seated':status.seated}" :inert="suspended" aria-label="声境 3D 音乐馆" @keydown="handleWorldKey">
     <canvas ref="canvas" :key="canvasKey" class="music-world__canvas" tabindex="0" aria-label="3D 音乐馆。WASD 行走，拖动环顾，方向键转向，E 选择视线中的展品，Home 返回中庭。" @pointerdown="exploring=true" />
+    <WorldListeningRoom v-if="listeningPanel" :mode="listeningPanel" :display-name="account.isLoggedIn?account.displayName:''" @close="closeListeningRoom" />
     <WorldDanmaku
       v-if="ready && commentsState.items.length"
       class="world-danmaku"
@@ -69,6 +70,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { ArrowLeft, ArrowUpRight, AudioLines, Disc3, Heart, Loader2, Play, Search, X } from 'lucide-vue-next'
 import { usePlayerStore } from '../stores/player'
+import { useListeningRoomStore } from '../stores/listeningRoom'
 import { useAuthStore } from '../stores/auth'
 import { useEnvironmentStore } from '../stores/environment'
 import { getCachedTrackLyrics } from '../services/lyrics'
@@ -94,6 +96,9 @@ const environment=useEnvironmentStore()
 const auth=useAuthStore()
 const account=computed(()=>({isLoggedIn:auth.state.isLoggedIn,displayName:auth.displayName.value,avatarUrl:auth.avatarUrl.value}))
 const WorldDanmaku=defineAsyncComponent(()=>import('./music-world/WorldDanmaku.vue'))
+const WorldListeningRoom=defineAsyncComponent(()=>import('./music-world/WorldListeningRoom.vue'))
+const listeningRoom=useListeningRoomStore(),listeningPanel=ref('')
+const roomSummary=computed(()=>({id:listeningRoom.state.room?.id||'',isHost:listeningRoom.state.room?.hostId===listeningRoom.state.memberId,connected:listeningRoom.state.connected,count:listeningRoom.state.room?.members.length||0,capacity:listeningRoom.state.room?.capacity||10,status:listeningRoom.state.syncStatus}))
 const props=defineProps({suspended:{type:Boolean,default:false}})
 const canvas=ref(null),canvasKey=ref(0),ready=ref(false),failed=ref(false),progress=ref(0),exploring=ref(true),panel=ref(false),panelEl=ref(null),notice=ref('')
 const sceneId=ref(getWorldScene(readStorage('lanyin.world.scene','rain')).id)
@@ -142,6 +147,8 @@ function openComments(index){
   panel.value=false;commentOpen.value=true;exploring.value=true;world?.clearMovement();world?.cancelTravel()
 }
 function closeComments(){commentOpen.value=false;canvas.value?.focus({preventScroll:true})}
+function openListeningRoom(mode){world?.clearMovement();world?.cancelTravel();panel.value=false;commentOpen.value=false;listeningPanel.value=mode||'create'}
+async function closeListeningRoom(){listeningPanel.value='';await nextTick();canvas.value?.focus({preventScroll:true})}
 function receiveStatus(value){Object.assign(status,value);status.audioMode=sampler?.getStatus()||'waiting';if(value.scene){sceneId.value=value.scene;writeStorage('lanyin.world.scene',value.scene)}if(value.sceneError)toast(value.sceneError);if(value.station)stationId.value=value.station;if(value.inspecting===false)selectedRecord.value=null}
 function changeScene(id){world?.setScene(id)}
 function changeQuality(value){quality.value=['smooth','balanced','high'].includes(value)?value:'balanced';world?.setQuality(quality.value);writeStorage('lanyin.world.quality',quality.value)}
@@ -166,7 +173,7 @@ async function placeSelected(){
 }
 function toast(value){notice.value=value;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>notice.value='',3500)}
 function syncPlayback(){
-  if(!props.suspended && !routeOpen.value && !failed.value && !document.hidden && player.state.isPlaying && !reducedMotion.value)sampler?.start();else sampler?.stop()
+  if(!props.suspended && !routeOpen.value && !listeningPanel.value && !failed.value && !document.hidden && player.state.isPlaying && !reducedMotion.value)sampler?.start();else sampler?.stop()
   const current=listening.value,index=worldLyricIndex(lyrics.value,current.currentTime)
   world?.setPlayback({...current,line:lyrics.value[index],previousLine:lyrics.value[index-1],nextLine:lyrics.value[index+1],lyrics:lyrics.value,commentsTotal:commentsState.value.total,danmakuEnabled:danmakuEnabled.value,danmakuOpacity:danmakuOpacity.value,reducedMotion:reducedMotion.value})
 }
@@ -180,7 +187,7 @@ async function initialize(){
     sampler=createWorldAudioSampler(player.getAudioElement())
     world=await createMusicWorld(canvas.value,{signal,sampleAudio:()=>sampler?.sample(),onProgress:value=>progress.value=value,onStatus:receiveStatus,onAction:handleAction})
     if(signal.aborted)return
-    world.updateLibrary(data.exhibits.value);world.setFeeds(feeds.getState());world.setQuality(quality.value);world.setAccount(account.value);world.setActive(!props.suspended&&!routeOpen.value);syncPlayback();await world.setScene(requestedScene);if(!signal.aborted){ready.value=true;if(!props.suspended&&!routeOpen.value)canvas.value?.focus({preventScroll:true})}
+    world.updateLibrary(data.exhibits.value);world.setFeeds(feeds.getState());world.setQuality(quality.value);world.setAccount(account.value);world.setListeningRoom(roomSummary.value);world.setActive(!props.suspended&&!routeOpen.value&&!listeningPanel.value);syncPlayback();await world.setScene(requestedScene);if(!signal.aborted){ready.value=true;if(!props.suspended&&!routeOpen.value&&!listeningPanel.value)canvas.value?.focus({preventScroll:true})}
   }catch(error){if(error.name!=='AbortError'&&!signal.aborted){failed.value=true;sampler?.stop();console.warn('Music pavilion failed:',error)}}
 }
 async function goTo(id){
@@ -219,6 +226,7 @@ async function handleAction(action,payload){
   else if(action==='danmaku-opacity')changeDanmakuOpacity(payload)
   else if(action==='settings')router.push('/settings')
   else if(action==='account'){world?.clearMovement();world?.cancelTravel();auth.openLoginModal()}
+  else if(action==='room-open')openListeningRoom(payload)
   else if(action==='environment'&&payload==='2d')returnTo2D()
   else if(action==='select')selectItem(payload)
   else if(action==='inspect')inspectRecord(payload,true)
@@ -242,7 +250,8 @@ function syncMotion(){reducedMotion.value=mediaQuery.matches;syncPlayback()}
 watch(()=>[listening.value,danmakuEnabled.value,danmakuOpacity.value],syncPlayback)
 watch(data.exhibits,value=>world?.updateLibrary(value))
 watch(account,value=>world?.setAccount(value))
-watch(()=>[routeOpen.value,props.suspended],([covered,suspended])=>{world?.setActive(!covered&&!suspended);if(covered||suspended){world?.clearMovement();world?.dismissRecord();panel.value=false;commentOpen.value=false}syncPlayback()})
+watch(roomSummary,value=>world?.setListeningRoom(value))
+watch(()=>[routeOpen.value,props.suspended,listeningPanel.value],([covered,suspended,roomOpen])=>{world?.setActive(!covered&&!suspended&&!roomOpen);if(covered||suspended||roomOpen){world?.clearMovement();world?.dismissRecord();panel.value=false;commentOpen.value=false}syncPlayback()})
 watch(()=>listening.value.track?.id,async()=>{
   const token=++lyricsToken;lyrics.value=[];comments.setTrack(listening.value.track)
   if(!listening.value.track?.id)return

@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
+import { createListeningRoomProxy } from './scripts/helpers/listening-proxy.js';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -27,11 +28,13 @@ export default defineConfig(({ mode }) => {
     ['VITE_NETEASE_API_TARGET', 'NETEASE_API_TARGET'],
     '',
   );
+  const listeningApiTarget = readEnv(['LISTENING_API_TARGET'], 'http://127.0.0.1:3030');
   const proxy = createProxyConfig({
     kugouApiBase,
     kugouApiTarget,
     neteaseApiBase,
     neteaseApiTarget,
+    listeningApiTarget,
   });
 
   return {
@@ -54,6 +57,7 @@ export default defineConfig(({ mode }) => {
       allowedHosts: ['.cpolar.top'],
       proxy,
     },
+    preview: { proxy },
     build: {
       rollupOptions: {
         output: {
@@ -91,8 +95,9 @@ function createProxyConfig({
   kugouApiTarget,
   neteaseApiBase,
   neteaseApiTarget,
+  listeningApiTarget,
 }) {
-  const proxy = {};
+  const proxy = createListeningRoomProxy(listeningApiTarget);
 
   if (kugouApiTarget) {
     proxy[`^${escapeRegExp(kugouApiBase)}`] = createProxyEntry(

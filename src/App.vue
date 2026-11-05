@@ -103,6 +103,7 @@ import WindowControls from './components/WindowControls.vue';
 import { useAuthStore } from './stores/auth';
 import { useThemeStore } from './stores/theme';
 import { useEnvironmentStore } from './stores/environment';
+import { useListeningRoomStore } from './stores/listeningRoom';
 import EnvironmentSwitch from './components/EnvironmentSwitch.vue';
 const MusicWorld = defineAsyncComponent(() => import('./components/MusicWorld.vue'));
 
@@ -203,6 +204,7 @@ onBeforeUnmount(() => {
 });
 
 onMounted(() => {
+  if (!isDesktopLyricsRoute.value) void useListeningRoomStore().restore();
   clearBootRouteMarker();
   window.addEventListener('lanyin:app-update-available', handleAppUpdateAvailable);
   notifyRendererReady();
