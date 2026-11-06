@@ -58,6 +58,16 @@ export function attachListeningRoomServer(httpServer, options = {}) {
     }
   }
   function stopPreparing(room) { cancel(room.prepareTimer); room.playback.preparing = false }
+  function resumePlayback(room) {
+    const p = room.playback, position = playbackPosition(p, now())
+    if (!p.track) {
+      if (room.queue.length) { prepare(room, room.queue[0]); return }
+      fail('请先选择一首在线歌曲。')
+    }
+    if (p.preparing) room.desiredPlaying = true
+    else if (room.error || [...room.members.values()].some(member => member.connected && member.ready !== p.generation)) prepare(room, p.track, position, true)
+    else setAnchor(room, position >= p.duration ? 0 : position, true, startDelay)
+  }
   function finishPreparation(room) {
     if (!room.playback.preparing) return
     const members = [...room.members.values()].filter(member => member.connected)
@@ -130,11 +140,11 @@ export function attachListeningRoomServer(httpServer, options = {}) {
     if (!track) fail('一起听暂时支持在线歌曲，请选择一首在线歌曲。')
     return track
   }
-  function prependTracks(room, tracks) {
-    const additions = roomQueue(tracks), keys = new Set(additions.map(trackKey))
-    const remaining = room.queue.filter(track => !keys.has(trackKey(track)))
-    if (additions.length + remaining.length > ROOM_QUEUE_LIMIT) fail(`播放队列最多 ${ROOM_QUEUE_LIMIT} 首，请先整理队列后再添加。`)
-    room.queue = [...additions, ...remaining]; room.queueVersion++
+  function appendTracks(room, tracks) {
+    const keys = new Set(room.queue.map(trackKey))
+    const additions = roomQueue(tracks).filter(track => !keys.has(trackKey(track)))
+    if (additions.length + room.queue.length > ROOM_QUEUE_LIMIT) fail(`播放队列最多 ${ROOM_QUEUE_LIMIT} 首，请先整理队列后再添加。`)
+    if (additions.length) { room.queue = [...room.queue, ...additions]; room.queueVersion++ }
   }
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token
@@ -178,13 +188,10 @@ export function attachListeningRoomServer(httpServer, options = {}) {
     handle('room:create', payload => {
       if (session.roomId) fail('请先退出当前房间。')
       if (rooms.size >= 256) fail('房间较多，请稍后再创建。')
-      const track = payload.track ? validateTrack(payload.track) : null
-      let queue = roomQueue(payload.queue)
-      if (track && !queue.some(item => trackKey(item) === trackKey(track))) queue = roomQueue([track, ...queue])
-      const room = { id: nextCode(), hostId: session.id, revision: 0, queueVersion: 1, queue, playMode: ROOM_MODES.includes(payload.playMode) ? payload.playMode : 'list', error: '', members: new Map(), playback: { generation: 0 } }
+      const room = { id: nextCode(), hostId: session.id, revision: 0, queueVersion: 1, queue: [], playMode: 'list', error: '', members: new Map(), playback: { generation: 0 } }
       room.members.set(session.id, { id: session.id, token: session.token, name: nameOf(payload.name), connected: true, ready: -1, error: '', buffering: false })
       rooms.set(room.id, room); session.roomId = room.id; socket.join(room.id)
-      prepare(room, track, Number.isFinite(payload.position) ? Math.max(0, payload.position) : 0, Boolean(payload.playing))
+      prepare(room, null, 0, false)
       broadcast(room); return { room: snapshot(room) }
     })
     handle('room:join', payload => {
@@ -244,19 +251,19 @@ export function attachListeningRoomServer(httpServer, options = {}) {
       if (['queue', 'clear'].includes(payload.type) && payload.queueVersion !== room.queueVersion) fail('播放队列已被其他操作更新，请查看最新队列后重试。')
       switch (payload.type) {
         case 'queue': room.queue = roomQueue(payload.tracks); room.queueVersion++; break
-        case 'append': prependTracks(room, payload.tracks); break
+        case 'append': appendTracks(room, payload.tracks); break
         case 'clear': room.queue = []; room.queueVersion++; break
         case 'mode': if (!ROOM_MODES.includes(payload.mode)) fail('播放模式无效。'); room.playMode = payload.mode; break
         case 'track': {
           const track = validateTrack(payload.track)
-          if (!room.queue.some(item => trackKey(item) === trackKey(track))) prependTracks(room, [track])
-          prepare(room, track); break
+          appendTracks(room, [track])
+          if (payload.resume === true && trackKey(track) === trackKey(p.track)) {
+            if (!p.playing) resumePlayback(room)
+          } else prepare(room, track)
+          break
         }
         case 'play':
-          if (!p.track) fail('请先选择一首在线歌曲。')
-          if (p.preparing) room.desiredPlaying = true
-          else if (room.error || [...room.members.values()].some(member => member.connected && member.ready !== p.generation)) prepare(room, p.track, position, true)
-          else setAnchor(room, position >= p.duration ? 0 : position, true, startDelay)
+          resumePlayback(room)
           break
         case 'pause': room.desiredPlaying = false; setAnchor(room, position, false); break
         case 'seek':
