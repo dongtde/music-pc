@@ -49,6 +49,24 @@ export function drawPlayerIcon(ctx, icon, x, y, size, color = '#ffffff', rotatio
   ctx.restore()
 }
 
+export function drawPlayingBars(ctx, x, y, size, color, now, levels, reducedMotion = false) {
+  ctx.save(); ctx.fillStyle = color
+  for (let index = 0; index < 4; index++) {
+    let energy = .35 + index % 2 * .3
+    if (!reducedMotion) {
+      if (levels?.length) {
+        const first = Math.floor(index * levels.length / 4), last = Math.floor((index + 1) * levels.length / 4)
+        let sum = 0
+        for (let bin = first; bin < last; bin++) sum += Number(levels[bin]) || 0
+        energy = Math.min(1, sum / Math.max(1, last - first) * 1.8)
+      } else energy = .2 + .8 * Math.abs(Math.sin(now / 260 + index * 1.7) * Math.cos(now / 630 + index))
+    }
+    const height = size * (.18 + .82 * energy), width = size * .15
+    ctx.beginPath(); ctx.roundRect(x - size * .45 + index * size * .25, y + size / 2 - height, width, height, width / 2); ctx.fill()
+  }
+  ctx.restore()
+}
+
 export function drawTransportButton(ctx, action, x, y, diameter, state = {}, { accent = '#d9c39e', color = '#d6e3e6', now = 0 } = {}) {
   const toggle = action === 'toggle'
   if (toggle) { ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(x, y, diameter / 2, 0, Math.PI * 2); ctx.fill() }

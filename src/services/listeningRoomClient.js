@@ -220,12 +220,7 @@ export function createListeningRoomClient({ player, state, storage = availableSe
       const parsed = kind === 'join' ? parseRoomInvitation(invitation, serverUrl) : { serverUrl: normalizeRoomServer(serverUrl) }
       await connect(parsed.serverUrl)
       if (state.room) return true
-      const current = player.state.currentTrack
-      if (kind === 'create' && current?.id && !roomTrack(current)) throw new Error('请先选择一首在线歌曲，再创建一起听房间。')
-      const payload = kind === 'join' ? { code: parsed.code, name: state.name } : {
-        name: state.name, track: current?.id ? roomTrack(current) : null, queue: roomQueue(player.state.queue),
-        position: player.getCurrentTime(), playing: player.state.isPlaying, playMode: player.state.playMode,
-      }
+      const payload = kind === 'join' ? { code: parsed.code, name: state.name } : { name: state.name }
       const epoch = lifecycle
       const result = await request(`room:${kind}`, payload)
       if (epoch !== lifecycle) return false
@@ -239,6 +234,7 @@ export function createListeningRoomClient({ player, state, storage = availableSe
     if (!state.room || !state.connected) return Promise.resolve(deny('连接已断开，恢复后才能控制播放。'))
     if (type === 'quality') return Promise.resolve(deny('一起听期间保持当前音质，退出房间后可以切换。'))
     if (type === 'track' && !roomTrack(payload.track)) return Promise.resolve(deny('一起听暂时支持在线歌曲，请选择一首在线歌曲。'))
+    if (type === 'append' && !roomQueue(payload.tracks).length) return Promise.resolve(deny('一起听暂时支持在线歌曲，请选择一首在线歌曲。'))
     if (type === 'seek') {
       if (pendingSeek) pendingSeek.resolve(false)
       clearTimeout(seekTimer)
@@ -265,7 +261,8 @@ export function createListeningRoomClient({ player, state, storage = availableSe
       if (payload.tracks) data.tracks = roomQueue(payload.tracks)
       try {
         const result = await request('playback:command', data)
-        if (epoch === lifecycle) accept(result.room)
+        if (epoch !== lifecycle) return false
+        accept(result.room)
         return true
       } catch (error) { if (epoch === lifecycle) deny(error.message); return false }
     })

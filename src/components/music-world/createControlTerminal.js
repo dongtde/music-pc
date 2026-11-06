@@ -4,9 +4,10 @@ import { createScreenImages, cropImage, formatTime, ink, rounded, text } from '.
 import { drawPlayerIcon, drawTransportButton } from '../playerTransportDrawing.js'
 import { WORLD_SCENES } from './worldScenes.js'
 import { normalizeDanmakuOpacity } from './danmakuSettings.js'
+import { createScreenList } from './createScreenList.js'
 
 export const TERMINAL_SLIDERS = ['progress','volume','danmaku-opacity']
-export const TERMINAL_QUEUE = {x:28,y:143,width:402,height:420,rowHeight:60}
+export const TERMINAL_QUEUE = {x:28,y:143,width:392,height:480,rowHeight:72}
 export const TERMINAL_ACCOUNT = {x:1304,y:10,width:272,height:57}
 export const TERMINAL_LISTENING = {create:{x:540,y:17,width:178,height:43},join:{x:732,y:17,width:178,height:43}}
 export const TERMINAL_MODES = [{value:'shuffle',label:'随机播放'},{value:'order',label:'顺序播放'},{value:'single',label:'单曲循环'},{value:'list',label:'列表循环'}]
@@ -21,15 +22,17 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
   let playback={},queue=[],queueVersion,queueReference,currentId='',scroll=0,menu=''
   let account={isLoggedIn:false,displayName:'点击登录',avatarUrl:''}
   let room={id:'',isHost:false,connected:false,count:0,capacity:10,status:''}
-  const images=createScreenImages(()=>{dirty=true;invalidate()},3)
+  const images=createScreenImages(()=>{dirty=true;invalidate()},32)
   const zone=(x,y,w,h,action,payload,label)=>zones.push({x,y,w,h,action,payload,label})
   const changed=()=>{dirty=true;invalidate()}
+  const queueList=createScreenList(ctx,{images,invalidate:changed})
   const maxScroll=()=>Math.max(0,queue.length-TERMINAL_QUEUE.height/TERMINAL_QUEUE.rowHeight)
   const centered=(label,x,y,size,color=ink.light,width=560,weight=400)=>{ctx.save();ctx.textAlign='center';text(ctx,label,x,y,size,color,width,weight);ctx.restore()}
-  function scrollQueue(delta){scroll=THREE.MathUtils.clamp(scroll+delta,0,maxScroll());changed()}
+  function scrollQueue(delta){const next=THREE.MathUtils.clamp(scroll+delta,0,maxScroll());if(next!==scroll){scroll=next;queueList.reset();changed()}}
   function revealCurrent(){
     const index=queue.findIndex(track=>String(track.id)===currentId)
     if(index>=0)scroll=THREE.MathUtils.clamp(index-3,0,maxScroll())
+    queueList.reset()
     changed()
   }
   function button(x,y,w,h,label,action,payload,{selected=false,size=20}={}){
@@ -45,36 +48,21 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
     rounded(ctx,x,y,w,5,3,'#7296a345');rounded(ctx,x,y,Math.max(2,w*value),5,3,color)
     rounded(ctx,x+w*value-6,y-4,13,13,7,ink.light);zone(x,y-20,w,45,action,undefined,action==='volume'?'调节音量':action==='progress'?'调节进度':'调节弹幕不透明度')
   }
-  function drawQueue(state){
+  function drawQueue(state,now,audioLevels){
     text(ctx,'播放列表',36,116,25,ink.light)
     text(ctx,queue.length+' 首',352,116,18,ink.muted,70)
-    const area=TERMINAL_QUEUE,first=Math.floor(scroll)
-    ctx.save();ctx.beginPath();ctx.rect(area.x,area.y,area.width,area.height);ctx.clip()
-    for(let index=first;index<Math.min(queue.length,first+8);index++){
-      const track=queue[index],y=area.y+(index-scroll)*area.rowHeight,selected=String(track.id)===currentId
-      if(selected){rounded(ctx,area.x,y+2,area.width-8,56,6,'#1b3b43');rounded(ctx,area.x,y+13,3,34,2,ink.ice)}
-      if(selected)drawPlayerIcon(ctx,state.playing?'pause':'play',49,y+29,17,ink.ice)
-      else{ctx.font='16px Consolas,monospace';ctx.fillStyle='#799ba8';ctx.fillText(String(index+1).padStart(2,'0'),37,y+32)}
-      text(ctx,track.name||'未命名歌曲',79,y+25,21,selected?ink.ice:ink.light,326,500)
-      text(ctx,track.artist||'未知歌手',79,y+47,16,ink.muted,248)
-      text(ctx,typeof track.duration==='number'?formatTime(track.duration):track.duration||'',352,y+47,16,ink.muted,60)
-      const top=Math.max(area.y,y),bottom=Math.min(area.y+area.height,y+area.rowHeight)
-      if(bottom>top&&!state.loading)zone(area.x,top,area.width,bottom-top,'queue-play',{index,id:track.id,version:state.queueVersion},'播放 '+(track.name||'这首歌'))
-    }
-    ctx.restore()
+    const area=TERMINAL_QUEUE
+    queueList.draw({items:queue,area,scroll,playback:state,songsOnly:true,now,audioLevels})
     if(!queue.length){
       text(ctx,'播放列表还是空的',57,292,23,ink.light)
       text(ctx,'去发现屏挑选一首音乐',57,329,18,ink.muted)
       button(57,365,245,46,'前往发现屏 ↗','station','discover')
     }
     if(maxScroll()>0){
-      const thumb=Math.max(16,area.height*7/queue.length)
+      const thumb=Math.max(16,area.height*(area.height/area.rowHeight)/queue.length)
       rounded(ctx,426,area.y,3,area.height,2,'#6e9ba523')
       rounded(ctx,426,area.y+(area.height-thumb)*scroll/maxScroll(),3,thumb,2,'#8eb9bb8c')
     }
-    text(ctx,queue.length?Math.floor(scroll)+1+'–'+Math.min(queue.length,Math.ceil(scroll)+7)+' / '+queue.length:'等待选歌',36,610,17,ink.muted)
-    button(164,582,153,43,'定位当前','queue-current',null,{size:17})
-    icon('up',350,604,'queue-page',-6,'上一页',24);icon('down',401,604,'queue-page',6,'下一页',24)
   }
   function drawPlayer(state,now){
     const track=state.track||{},art=images.get(track.coverUrl)
@@ -166,14 +154,14 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
       text(ctx,'多人一起听',933,46,17,ink.muted,140)
     }
   }
-  function draw(state,now=performance.now()){
+  function draw(state,now=performance.now(),audioLevels=null){
     playback=state;queue=Array.isArray(state.queue)?state.queue:EMPTY_QUEUE
     const nextId=String(state.track?.id||'')
     if(queueReference!==queue||queueVersion!==state.queueVersion){queueReference=queue;queueVersion=state.queueVersion;currentId=nextId;scroll=0;revealCurrent()}
     else if(currentId!==nextId){currentId=nextId;revealCurrent()}
     scroll=THREE.MathUtils.clamp(scroll,0,maxScroll())
-    const track=state.track||{},motion=state.loading&&!state.reducedMotion
-    const next=[track.id,track.name,track.artist,track.coverUrl,state.playing,state.loading,Math.floor(state.currentTime*4),state.duration,state.volume,state.playMode,state.queueVersion,queue.length,state.danmakuEnabled,state.danmakuOpacity,sceneId,sceneLoading,quality,menu,scroll,motion?Math.floor(now/50):0].join('|')
+    const track=state.track||{},motion=!state.reducedMotion&&(state.loading||queueList.getState().animating)
+    const next=[track.id,track.name,track.artist,track.coverUrl,state.playing,state.loading,state.loadingTrack?.id,(state.pendingKeys||[]).join(','),state.reducedMotion,Math.floor(state.currentTime*4),state.duration,state.volume,state.playMode,state.queueVersion,queue.length,state.danmakuEnabled,state.danmakuOpacity,sceneId,sceneLoading,quality,menu,scroll,motion?Math.floor(now/50):0].join('|')
     if(!dirty&&(signature===next||now-lastDraw<40))return motion
     dirty=false;lastDraw=now;signature=next;zones=[]
     ctx.fillStyle='#0b202b';ctx.fillRect(0,0,WIDTH,HEIGHT)
@@ -181,29 +169,38 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
     text(ctx,'澜音  /  控制终端',36,49,23,ink.light)
     drawAccount();drawListening()
     ctx.fillStyle='#9abcc82b';ctx.fillRect(28,76,1536,1);ctx.fillRect(456,96,1,530);ctx.fillRect(1120,96,1,530)
-    drawQueue(state);drawPlayer(state,now);drawSettings(state);drawMenu(state)
-    surface.refresh();return motion
+    drawQueue(state,now,audioLevels);drawPlayer(state,now);drawSettings(state);drawMenu(state)
+    surface.refresh();return !state.reducedMotion&&(state.loading||queueList.getState().animating)
   }
   function rawHit(uv,action){
+    if(!uv)return null
     const x=uv.x*WIDTH,y=(1-uv.y)*HEIGHT
     if(action)return zones.find(zone=>zone.action===action)
-    return zones.findLast(zone=>{
+    const control=zones.findLast(zone=>{
       const padding=TERMINAL_SLIDERS.includes(zone.action)?8:0
       return x>=zone.x-padding&&x<=zone.x+zone.w+padding&&y>=zone.y&&y<=zone.y+zone.h
     })
+    if(control)return control
+    const row=queueList.hitTest({x,y})
+    return row?{action:'queue-play',payload:{index:row.index,id:row.item.id,version:queueVersion},label:'播放 '+(row.item.name||'这首歌'),disabled:row.disabled}:null
   }
   function hitTest(uv,action){
-    const target=rawHit(uv,action);if(!target)return null
+    draw(playback)
+    const target=rawHit(uv,action);if(!target||target.disabled)return null
     if(room.id&&!room.connected&&['toggle','previous','next','queue-play','play-mode','progress'].includes(target.action))return {action:'room-open',payload:'details'}
     return {action:target.action,payload:TERMINAL_SLIDERS.includes(target.action)?THREE.MathUtils.clamp((uv.x*WIDTH-target.x)/target.w,0,1):target.payload}
   }
   function closeMenus(){if(menu){menu='';changed()}}
-  function select(uv){
+  function select(uv,options){
     const hit=hitTest(uv)
+    if(hit?.action==='queue-play'){
+      const row=queueList.select({x:uv.x*WIDTH,y:(1-uv.y)*HEIGHT},options)
+      if(!row)return null
+      closeMenus();return hit
+    }
+    queueList.cancelClick()
     if(hit?.action==='terminal-menu'){menu=menu===hit.payload?'':hit.payload;changed();return null}
     if(hit?.action==='noop')return null
-    if(hit?.action==='queue-page'){closeMenus();scrollQueue(hit.payload);return null}
-    if(hit?.action==='queue-current'){closeMenus();revealCurrent();return null}
     if(hit?.action!=='volume'&&hit?.action!=='mute')closeMenus()
     return hit
   }
@@ -212,6 +209,8 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
     return queue.length>0&&x>=area.x&&x<=area.x+area.width&&y>=area.y&&y<=area.y+area.height
   }
   return {mesh,draw,hitTest,select,closeMenus,containsQueue,scrollQueue,
+    setHover(uv){draw(playback);return queueList.setHover(uv?{x:uv.x*WIDTH,y:(1-uv.y)*HEIGHT}:null)},
+    cancelClick:()=>queueList.cancelClick(),
     hint:uv=>rawHit(uv)?.label||'控制终端',
     setScene(id,loading=false){sceneId=id;sceneLoading=loading;changed()},
     setQuality(value){quality=QUALITIES.some(option=>option.id===value)?value:'balanced';changed()},
@@ -221,7 +220,7 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
       if(next.isLoggedIn===account.isLoggedIn&&next.displayName===account.displayName&&next.avatarUrl===account.avatarUrl)return
       account=next;changed()
     },
-    getState:()=>({scene:sceneId,loading:sceneLoading,quality,menu,scroll,account:{...account},room:{...room},queueLength:queue.length,visibleIndices:zones.filter(z=>z.action==='queue-play').map(z=>z.payload.index),danmakuEnabled:playback.danmakuEnabled!==false,danmakuOpacity:normalizeDanmakuOpacity(playback.danmakuOpacity),controls:zones.map(z=>z.action)}),
+    getState:()=>({scene:sceneId,loading:sceneLoading,quality,menu,scroll,account:{...account},room:{...room},queueLength:queue.length,...queueList.getState(),danmakuEnabled:playback.danmakuEnabled!==false,danmakuOpacity:normalizeDanmakuOpacity(playback.danmakuOpacity),controls:zones.map(z=>z.action)}),
     dispose(){images.dispose();surface.texture.dispose()},
   }
 }

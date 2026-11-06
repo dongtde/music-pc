@@ -60,6 +60,7 @@ const state = reactive({
   queueVersion: queueVersionSeed,
   isPlaying: false,
   isLoading: false,
+  loadingTrack: null,
   currentTime: initialCurrentTime,
   duration: initialDuration,
   error: null,
@@ -143,13 +144,14 @@ export function usePlayerStore() {
     refreshCurrentTrackCoverPalette()
   }
 
-  async function playTrack(track) {
+  async function playTrack(track, { position = 0 } = {}) {
     if (!track?.id) {
       return false
     }
 
     const requestId = ++playbackRequestId
     state.isLoading = true
+    state.loadingTrack = track
     state.error = null
 
     try {
@@ -170,11 +172,13 @@ export function usePlayerStore() {
       state.currentTrack = normalizeTrack(track, playbackSource.url, playbackSource.quality)
       refreshCurrentTrackCoverPalette()
       state.duration = parseDuration(state.currentTrack.duration)
-      state.currentTime = 0
-      lastPersistedSecond = 0
+      state.currentTime = clampTime(position, state.duration)
+      state.currentTrack.elapsed = formatTime(state.currentTime)
+      lastPersistedSecond = Math.floor(state.currentTime)
       audio.src = playbackSource.url
-      audio.currentTime = 0
+      audio.currentTime = state.currentTime
       await audio.play()
+      if (requestId !== playbackRequestId) return false
       persistPlaybackSnapshot()
       useLibraryStore().addRecentTrack(state.currentTrack)
       return true
@@ -188,13 +192,14 @@ export function usePlayerStore() {
       console.warn('Failed to play track:', error)
       return false
     } finally {
-      if (requestId === playbackRequestId) state.isLoading = false
+      if (requestId === playbackRequestId) { state.isLoading = false; state.loadingTrack = null }
     }
   }
 
   async function togglePlay() {
+    if (!state.currentTrack.id && state.queue.length) return playTrack(state.queue[0])
     if (!audio.src) {
-      return playTrack(state.currentTrack)
+      return playTrack(state.currentTrack, { position: state.currentTime })
     }
 
     if (audio.paused) {
@@ -277,13 +282,10 @@ export function usePlayerStore() {
       return state.queueVersion
     }
 
+    const existingTrackKeys = new Set(state.queue.map(getQueueTrackIdentity).filter(Boolean))
     const mergedQueue = [
-      ...uniqueNextTracks,
-      ...state.queue.filter((track) => {
-        const trackKey = getQueueTrackIdentity(track)
-
-        return !trackKey || !nextTrackKeys.has(trackKey)
-      })
+      ...state.queue,
+      ...uniqueNextTracks.filter(track => !existingTrackKeys.has(getQueueTrackIdentity(track)))
     ]
 
     if (!hasQueueOrderChanged(state.queue, mergedQueue)) {
@@ -380,7 +382,7 @@ export function usePlayerStore() {
   }
 
   function getCurrentTime() {
-    const currentTime = Number.isFinite(audio.currentTime)
+    const currentTime = audio.src && Number.isFinite(audio.currentTime)
       ? audio.currentTime
       : state.currentTime
 
@@ -418,6 +420,7 @@ export function usePlayerStore() {
     const requestId = ++playbackRequestId
 
     state.isLoading = true
+    state.loadingTrack = state.currentTrack
     state.error = null
 
     try {
@@ -473,7 +476,7 @@ export function usePlayerStore() {
       console.warn('Failed to switch playback quality:', error)
       return false
     } finally {
-      if (requestId === playbackRequestId) state.isLoading = false
+      if (requestId === playbackRequestId) { state.isLoading = false; state.loadingTrack = null }
     }
   }
 
@@ -482,7 +485,16 @@ export function usePlayerStore() {
   }
 
   function attachRoomController(controller) {
-    if (playbackController && playbackController !== controller) throw new Error('已在另一个一起听房间中。')
+    if (playbackController) throw new Error('已在另一个一起听房间中。')
+    state.currentTime = getCurrentTime()
+    state.currentTrack.elapsed = formatTime(state.currentTime)
+    // Keep personal storage intact while the shared room owns the player, including across reloads.
+    persistPlaybackSnapshot(); persistQueueSnapshot(); persistPlayMode(state.playMode)
+    const personal = {
+      track: { ...state.currentTrack }, queue: state.queue.map(track => ({ ...track })),
+      source: { ...state.queueSource }, currentTime: state.currentTime, duration: state.duration,
+      playMode: state.playMode, playbackQuality: state.playbackQuality,
+    }
     playbackController = controller
     ++playbackRequestId
     const pause = () => { audio.pause(); audio.playbackRate = 1 }
@@ -493,7 +505,7 @@ export function usePlayerStore() {
         const assertCurrent = () => {
           if (signal?.aborted || requestId !== playbackRequestId) throw new DOMException('歌曲加载已取消', 'AbortError')
         }
-        pause(); state.isLoading = true; state.error = null
+        pause(); state.isLoading = true; state.loadingTrack = track; state.error = null
         try {
           assertCurrent()
           if (!audio.src || trackKey(track) !== trackKey(state.currentTrack) || audio.error) {
@@ -518,7 +530,7 @@ export function usePlayerStore() {
           if (error.name !== 'AbortError' && requestId === playbackRequestId) state.error = normalizePlaybackError(error, { track })
           throw error
         } finally {
-          if (requestId === playbackRequestId) state.isLoading = false
+          if (requestId === playbackRequestId) { state.isLoading = false; state.loadingTrack = null }
         }
       },
       pause,
@@ -533,17 +545,26 @@ export function usePlayerStore() {
       seek: seekTo,
       currentTime: getCurrentTime,
       setRate(value) { audio.playbackRate = value },
-      setWaiting(value) { state.isLoading = Boolean(value) },
+      setWaiting(value) { state.isLoading = Boolean(value); state.loadingTrack = value ? state.currentTrack : null },
       clearTrack() {
         if (!state.currentTrack.id) return
         ++playbackRequestId; pause(); audio.removeAttribute('src'); audio.load()
-        state.currentTrack = createEmptyTrack(); state.currentTime = 0; state.duration = 0; state.isLoading = false
+        state.currentTrack = createEmptyTrack(); state.currentTime = 0; state.duration = 0; state.isLoading = false; state.loadingTrack = null
       },
       setQueue(tracks, mode) { setQueue(tracks, { type: 'listening-room', id: 'shared', label: '一起听' }); setPlayMode(mode) },
       setError(message) { state.error = message ? Object.assign(new Error(message), { userMessage: message }) : null },
       release() {
         if (playbackController !== controller) return
-        ++playbackRequestId; playbackController = null; pause(); state.isLoading = false; state.error = null
+        ++playbackRequestId; ++coverPaletteRequestId
+        pause(); stopPlaybackClock(); audio.removeAttribute('src'); audio.load()
+        state.currentTrack = personal.track; state.currentTime = personal.currentTime; state.duration = personal.duration
+        state.queue = personal.queue; state.queueSource = personal.source; state.queueVersion = ++queueVersionSeed
+        state.playMode = personal.playMode; state.playbackQuality = personal.playbackQuality
+        state.isPlaying = false; state.isLoading = false; state.loadingTrack = null; state.error = null
+        lastPersistedSecond = Math.floor(state.currentTime)
+        playbackController = null
+        persistPlaybackSnapshot(); persistQueueSnapshot(); persistPlayMode(state.playMode)
+        refreshCurrentTrackCoverPalette()
       },
     }
   }
@@ -553,7 +574,7 @@ export function usePlayerStore() {
     playTrack: track => routePlayback('track', { track }, () => playTrack(track)),
     togglePlay: () => routePlayback('toggle', {}, togglePlay),
     restartCurrentTrack: () => routePlayback('restart', {}, restartCurrentTrack),
-    setQueue: (tracks, source) => routePlayback('queue', { tracks }, () => setQueue(tracks, source)),
+    setQueue: (tracks, source) => routePlayback('append', { tracks }, () => setQueue(tracks, source)),
     appendToQueue: (tracks, source) => routePlayback('append', { tracks: Array.isArray(tracks) ? tracks : [tracks] }, () => appendToQueue(tracks, source)),
     clearQueue: () => routePlayback('clear', {}, clearQueue),
     setPlayMode: mode => routePlayback('mode', { mode }, () => setPlayMode(mode)),
@@ -588,7 +609,7 @@ function waitForRoomAudio(media, signal) {
 }
 
 function syncAudioPlaybackTime(options = {}) {
-  const currentTime = Number.isFinite(audio.currentTime)
+  const currentTime = audio.src && Number.isFinite(audio.currentTime)
     ? audio.currentTime
     : state.currentTime
 
@@ -1068,6 +1089,7 @@ function persistPlaybackSnapshotThrottled() {
 }
 
 function persistPlaybackSnapshot() {
+  if (playbackController) return
   try {
     if (!isRestorableTrack(state.currentTrack)) {
       writeJsonStorage(STORAGE_KEYS.playerSnapshot, null)
@@ -1086,6 +1108,7 @@ function persistPlaybackSnapshot() {
 }
 
 function persistQueueSnapshot() {
+  if (playbackController) return
   try {
     const queue = state.queue
       .filter(isRestorableTrack)
@@ -1165,6 +1188,7 @@ function readPlayMode() {
 }
 
 function persistPlayMode(value) {
+  if (playbackController) return
   const playMode = normalizePlayMode(value)
 
   if (!writeStorage(STORAGE_KEYS.playerPlayMode, playMode)) {

@@ -1,6 +1,6 @@
 import { contentRequest } from './contentRequest.js'
 
-export const FEED_LAYOUT = { size: 768, listTop: 132, listBottom: 696, rowHeight: 94 }
+export const FEED_LAYOUT = { size: 768, listTop: 132, listBottom: 744, rowHeight: 94 }
 export const FEED_VIEW_ROWS = (FEED_LAYOUT.listBottom - FEED_LAYOUT.listTop) / FEED_LAYOUT.rowHeight
 export const FEED_IDS = ['recommend', 'playlists', 'artists', 'charts']
 export const ARTIST_INITIALS = [-1, ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ']
@@ -9,7 +9,7 @@ export const clampScroll = (scroll, count) => Math.max(0, Math.min(Number(scroll
 const unique = items => [...new Map(items.filter(item => item?.id != null).map(item => [`${item.kind}:${item.id}`, item])).values()]
 
 // Each physical screen owns its request, collection, pagination and scroll position.
-export function createScreenFeeds({ load, onChange = () => {}, onPlay = () => {} }) {
+export function createScreenFeeds({ load, onChange = () => {}, onAdd = () => {} }) {
   let disposed = false
   const screens = Object.fromEntries(FEED_IDS.map(id => [id, { id, title: titles[id], items: [], detail: null, initial: -1, scroll: 0, busy: false, error: '', more: false, loaded: false, offset: 0 }]))
   const revisions = {}, roots = {}
@@ -38,7 +38,7 @@ export function createScreenFeeds({ load, onChange = () => {}, onPlay = () => {}
   function select(id, item) {
     const state = screens[id]
     if (!state || !item || disposed) return
-    if (item.kind === 'song') return onPlay(item, state.items.filter(row => row.kind === 'song'), state.title)
+    if (item.kind === 'song') return onAdd(item, state.title)
     roots[id] = { ...state }
     revisions[id] = (revisions[id] || 0) + 1
     Object.assign(state, { detail: item, title: item.name || item.title, items: [], scroll: 0, offset: 0, more: false, busy: false, loaded: false })
@@ -53,7 +53,7 @@ export function createScreenFeeds({ load, onChange = () => {}, onPlay = () => {}
   function scroll(id, delta) {
     const state = screens[id]; if (!state || disposed) return
     state.scroll = clampScroll(state.scroll + delta, state.items.length); emit()
-    if (delta > 0 && state.more && !state.error && state.scroll >= state.items.length - FEED_VIEW_ROWS - .5) fetch(id, true)
+    if (delta > 0 && state.more && !state.error && state.scroll >= state.items.length - FEED_VIEW_ROWS - 1) fetch(id, true)
   }
   function setArtistInitial(value) {
     const initial = String(value) === '-1' ? -1 : String(value).toUpperCase(), state = screens.artists
@@ -67,7 +67,7 @@ export function createScreenFeeds({ load, onChange = () => {}, onPlay = () => {}
   return {
     getState: () => screens, select, back, scroll, setArtistInitial,
     loadAll: () => Promise.allSettled(FEED_IDS.map(id => screens[id].loaded ? null : fetch(id))),
-    more: id => fetch(id, true), retry: id => fetch(id, screens[id].items.length > 0 && screens[id].more),
+    retry: id => fetch(id, screens[id].items.length > 0 && screens[id].more),
     dispose() { disposed = true },
   }
 }

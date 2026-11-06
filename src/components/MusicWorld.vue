@@ -30,7 +30,7 @@
 
     <section v-if="selectedRecord && !routeOpen" ref="recordPanel" class="world-record-inspector" aria-label="查看选中的唱片">
       <div class="world-record-inspector__copy"><span class="world-eyebrow">FROM YOUR RECORD SHELF</span><h2>{{ selectedRecord.name }}</h2><p>{{ selectedRecord.artist || '未知歌手' }}</p><small>{{ selectedRecord.album || '在控制终端，开始这一次聆听。' }}</small></div>
-      <div class="world-record-inspector__actions"><button class="world-start-track" type="button" aria-label="播放并前往控制终端" title="播放并前往控制终端" :disabled="placingRecord" @click="placeSelected"><Loader2 v-if="placingRecord" class="world-spin" :size="22" /><Play v-else :size="22" fill="currentColor" /></button><button type="button" :aria-pressed="data.library.isTrackLiked(selectedRecord.id)" @click="data.library.toggleLikedTrack(selectedRecord)"><Heart :size="17" :fill="data.library.isTrackLiked(selectedRecord.id)?'currentColor':'none'" />{{ data.library.isTrackLiked(selectedRecord.id)?'已收藏':'收藏' }}</button><button type="button" :disabled="placingRecord" @click="dismissRecord"><ArrowLeft :size="16" />放回唱片</button></div>
+      <div class="world-record-inspector__actions"><button class="world-start-track" type="button" aria-label="加入播放列表并前往控制终端" title="加入播放列表并前往控制终端" :disabled="placingRecord" @click="placeSelected"><Loader2 v-if="placingRecord" class="world-spin" :size="22" /><Play v-else :size="22" fill="currentColor" /></button><button type="button" :aria-pressed="data.library.isTrackLiked(selectedRecord.id)" @click="data.library.toggleLikedTrack(selectedRecord)"><Heart :size="17" :fill="data.library.isTrackLiked(selectedRecord.id)?'currentColor':'none'" />{{ data.library.isTrackLiked(selectedRecord.id)?'已收藏':'收藏' }}</button><button type="button" :disabled="placingRecord" @click="dismissRecord"><ArrowLeft :size="16" />放回唱片</button></div>
       <small class="world-record-inspector__hint">封面与唱片来自你的曲库 <span>·</span> Esc 返回</small>
     </section>
 
@@ -57,7 +57,7 @@
           </div>
           <button v-if="data.section.value==='search' && data.more.value && !data.detail.value" class="world-more" type="button" :disabled="data.busy.value" @click="data.submitSearch(true)">{{ data.busy.value?'加载中…':'更多结果' }}</button>
         </div>
-        <footer><span>{{ data.items.value.length }} {{ data.items.value[0]?.kind==='song'?'首音乐':'个展品' }}</span><button v-if="data.items.value.some(i=>i.kind==='song')" type="button" :disabled="player.state.isLoading" @click="playAll"><Play :size="13" fill="currentColor" />播放全部</button></footer>
+        <footer><span>{{ data.items.value.length }} {{ data.items.value[0]?.kind==='song'?'首音乐':'个展品' }}</span><button v-if="queue.length" type="button" @click="enqueueTracks(queue,data.title.value)"><Play :size="13" fill="currentColor" />全部加入</button></footer>
       </section>
     </Transition>
     <div v-if="notice" class="world-notice" role="status">{{ notice }}</div>
@@ -67,7 +67,6 @@
 <script setup>
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useMessage } from 'naive-ui'
 import { ArrowLeft, ArrowUpRight, AudioLines, Disc3, Heart, Loader2, Play, Search, X } from 'lucide-vue-next'
 import { usePlayerStore } from '../stores/player'
 import { useListeningRoomStore } from '../stores/listeningRoom'
@@ -75,7 +74,6 @@ import { useAuthStore } from '../stores/auth'
 import { useEnvironmentStore } from '../stores/environment'
 import { getCachedTrackLyrics } from '../services/lyrics'
 import { worldLyricIndex } from './music-world/lyricTypography.js'
-import { useQueuePlayback } from '../composables/useQueuePlayback'
 import { createWorldAudioSampler } from './music-world/createWorldAudioSampler.js'
 import { getWorldScene } from './music-world/worldScenes.js'
 import { createMusicWorld } from './music-world/createMusicWorld'
@@ -85,13 +83,14 @@ import { useWorldLibrary } from './music-world/useWorldLibrary'
 import '../styles/music-world.css'
 import WorldCommentReader from './music-world/WorldCommentReader.vue'
 import { createScreenFeeds } from './music-world/screenFeeds.js'
+import { createScreenListFeedback } from './music-world/createScreenList.js'
 import { loadWorldScreen } from './music-world/worldDataSources.js'
 import { createSongComments } from './music-world/songComments.js'
 import { getSongCommentsData } from '../services/netease'
 import { readStorage, writeStorage } from '../utils/storage'
 import { DANMAKU_OPACITY_KEY, normalizeDanmakuOpacity } from './music-world/danmakuSettings.js'
 
-const player=usePlayerStore(),data=useWorldLibrary(),router=useRouter(),route=useRoute(),message=useMessage()
+const player=usePlayerStore(),data=useWorldLibrary(),router=useRouter(),route=useRoute()
 const environment=useEnvironmentStore()
 const auth=useAuthStore()
 const account=computed(()=>({isLoggedIn:auth.state.isLoggedIn,displayName:auth.displayName.value,avatarUrl:auth.avatarUrl.value}))
@@ -107,14 +106,14 @@ const status=reactive({x:0,z:12.8,yaw:0,live:false,seated:false,navigating:false
 const selectedRecord=ref(null),recordPanel=ref(null),placingRecord=ref(false),quality=ref(readStorage('lanyin.world.quality','balanced'))
 const searchTypes=[{id:1,name:'歌曲'},{id:100,name:'歌手'},{id:1000,name:'歌单'}],discoveryTabs=[{id:'recommend',name:'为你推荐'},{id:'playlists',name:'歌单'},{id:'charts',name:'排行榜'},{id:'artists',name:'歌手'}]
 const queue=computed(()=>data.items.value.filter(item=>item.kind==='song'))
-const playback=useQueuePlayback({queue,player,message,emptyMessage:'先挑选一些音乐',errorMessage:'这首音乐暂时无法播放',queueSource:{type:'music-world',id:'pavilion',label:'声境音乐馆'}})
 let world=null,sampler=null,abort=null,mediaQuery=null,noticeTimer=0,lyricsToken=0,disposed=false
-const listening=computed(()=>({track:player.state.currentTrack,playing:player.state.isPlaying,currentTime:player.state.currentTime,duration:player.state.duration,loading:player.state.isLoading,volume:player.state.volume,queueLength:player.state.queue.length,queue:player.state.queue,queueVersion:player.state.queueVersion,playMode:player.state.playMode}))
+const pendingListKeys=shallowRef([]),listFeedback=createScreenListFeedback(keys=>{pendingListKeys.value=keys})
+const listening=computed(()=>({track:player.state.currentTrack,playing:player.state.isPlaying,currentTime:player.state.currentTime,duration:player.state.duration,loading:player.state.isLoading,loadingTrack:player.state.loadingTrack,pendingKeys:pendingListKeys.value,volume:player.state.volume,queueLength:player.state.queue.length,queue:player.state.queue,queueVersion:player.state.queueVersion,playMode:player.state.playMode}))
 const commentOpen=ref(false),commentsState=shallowRef({items:[],index:0,total:0,busy:false})
 const danmakuEnabled=ref(readStorage('lanyin.world.danmaku','true')!=='false')
 const danmakuOpacity=ref(normalizeDanmakuOpacity(readStorage(DANMAKU_OPACITY_KEY,'1')))
 let opacitySaveTimer=0
-const feeds=createScreenFeeds({load:loadWorldScreen,onChange:value=>world?.setFeeds(value),onPlay:playScreenTrack})
+const feeds=createScreenFeeds({load:loadWorldScreen,onChange:value=>world?.setFeeds(value),onAdd:enqueueTracks})
 const comments=createSongComments({load:getSongCommentsData,onChange:value=>{commentsState.value=value;syncPlayback()}})
 function toggleDanmaku(){danmakuEnabled.value=!danmakuEnabled.value;writeStorage('lanyin.world.danmaku',String(danmakuEnabled.value));if(danmakuEnabled.value&&commentsState.value.error)comments.retry()}
 function saveDanmakuOpacity(){clearTimeout(opacitySaveTimer);opacitySaveTimer=0;writeStorage(DANMAKU_OPACITY_KEY,danmakuOpacity.value)}
@@ -122,24 +121,26 @@ function changeDanmakuOpacity(value){danmakuOpacity.value=normalizeDanmakuOpacit
 function returnTo2D(){environment.setMode('2d');if(route.name==='space')router.push(environment.state.returnPath||'/home')}
 function openMap(){world?.clearMovement();world?.cancelTravel()}
 function goToMapPoint(id){panel.value=false;exploring.value=true;world?.navigateToPoint(id);canvas.value?.focus({preventScroll:true})}
-let lastVolume=player.state.volume||.8,lastQueueClick='',lastQueueTime=0
+let lastVolume=player.state.volume||.8
+async function playSelectedTrack(track){
+  if(String(player.state.currentTrack.id)!==String(track.id))return player.playTrack(track)
+  return player.state.isPlaying?true:player.togglePlay()
+}
 async function playQueuedTrack(payload){
   if(player.state.isLoading||payload.version!==player.state.queueVersion)return
   const track=player.state.queue[payload.index]
   if(!track||String(track.id)!==String(payload.id))return
-  const key=String(track.id),now=performance.now()
-  if(lastQueueClick===key&&now-lastQueueTime<400)return
-  lastQueueClick=key;lastQueueTime=now
-  try{const ok=String(player.state.currentTrack.id)===key?await player.togglePlay():await player.playTrack(track);if(!ok)toast('这首音乐暂时无法播放，请选择其他歌曲。')}catch{toast('音乐暂时无法播放，请稍后重试。')}
+  const done=listFeedback.begin(track)
+  try{const ok=await playSelectedTrack(track);if(!ok)toast('这首音乐暂时无法播放，请选择其他歌曲。')}catch{toast('音乐暂时无法播放，请稍后重试。')}finally{done()}
 }
 function seekListening(seconds){player.seekTo(seconds)}
-async function playScreenTrack(track,tracks,title){
-  if(player.state.isLoading)return
+async function enqueueTracks(tracks,title='声境音乐馆'){
+  const done=listFeedback.begin(tracks)
   try{
-    player.setQueue(tracks,{type:'music-world',id:'discovery-screen',label:title})
-    const ok=String(player.state.currentTrack.id)===String(track.id)?await player.togglePlay():await player.playTrack(track)
-    if(!ok)toast('这首音乐暂时无法播放，请选择其他歌曲。')
-  }catch{toast('音乐暂时无法播放，请稍后重试。')}
+    const result=await player.appendToQueue(tracks,{type:'music-world',id:'pavilion',label:title})
+    if(result===false){toast(player.state.error?.userMessage||'未能加入播放列表，请稍后重试。');return false}
+    toast('已加入播放列表');return true
+  }catch{toast('未能加入播放列表，请稍后重试。');return false}finally{done()}
 }
 function openComments(index){
   if(Number.isInteger(index)&&index>=0)comments.select(index)
@@ -165,11 +166,9 @@ async function placeSelected(){
   const item=selectedRecord.value;if(!item||placingRecord.value)return
   placingRecord.value=true
   try{
-    const sameTrack=String(player.state.currentTrack.id)===String(item.id)
-    const success=sameTrack?(player.state.isPlaying||await player.togglePlay()):await playback.playTrack(item)
-    if(!success&&sameTrack)toast('音乐暂时无法播放，请稍后重试。')
-    if(success&&!disposed&&selectedRecord.value?.id===item.id){world?.openTerminal();selectedRecord.value=null;canvas.value?.focus({preventScroll:true});toast(`已载入控制终端 · ${item.name}`)}
-  }catch{toast('音乐暂时无法播放，请稍后重试。')}finally{placingRecord.value=false}
+    const success=await enqueueTracks(item)
+    if(success&&!disposed&&selectedRecord.value?.id===item.id){world?.openTerminal();selectedRecord.value=null;canvas.value?.focus({preventScroll:true})}
+  }finally{placingRecord.value=false}
 }
 function toast(value){notice.value=value;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>notice.value='',3500)}
 function syncPlayback(){
@@ -203,22 +202,17 @@ async function openSection(id){
 }
 function closePanel(){panel.value=false;canvas.value?.focus({preventScroll:true})}
 async function selectItem(item){
-  if(player.state.isLoading)return
   if(item.kind==='playlist'||item.kind==='artist'){panel.value=true;await data.openCollection(item);return}
   if(item.kind==='radio'){router.push(item.to||`/podcast/${item.id}`);return}
   if(item.kind==='video'){router.push(item.to||{path:'/mv',query:{mvId:item.id}});return}
   inspectRecord(item)
 }
-async function playAll(){if(await playback.playAll())toast('播放队列已同步 · 去听音厅坐坐吧')}
 function retryContent(){data.retry()}
 async function handleAction(action,payload){
   if(action==='section')openSection(payload)
   else if(action==='feed-scroll')feeds.scroll(payload.id,payload.delta)
-  else if(action==='feed-top')feeds.scroll(payload.id,-Infinity)
-  else if(action==='feed-page')feeds.scroll(payload.id,4.8)
   else if(action==='feed-select')feeds.select(payload.id,payload.item)
   else if(action==='feed-back')feeds.back(payload.id)
-  else if(action==='feed-more')feeds.more(payload.id)
   else if(action==='feed-retry')feeds.retry(payload.id)
   else if(action==='feed-initial')feeds.setArtistInitial(payload.initial)
   else if(action==='comments')openComments()
@@ -233,7 +227,7 @@ async function handleAction(action,payload){
   else if(action==='notice')toast(payload)
   else if(action==='station')['screen','terminal','discover'].includes(payload)?goTo(payload):openSection(payload==='archive'?'liked':'radio')
   else if(action==='listen')goTo('screen')
-  else if(action==='toggle'){if(!player.state.isLoading)player.state.currentTrack.id?player.togglePlay():openSection('recommend')}
+  else if(action==='toggle'){if(!player.state.isLoading)(player.state.currentTrack.id||player.state.queue.length)?player.togglePlay():openSection('recommend')}
   else if(action==='previous'||action==='next'){if(player.state.isLoading)return;const track=player.getRelativeQueueTrack(action==='next'?1:-1);if(track)await player.playTrack(track)}
   else if(action==='queue-play')await playQueuedTrack(payload)
   else if(action==='play-mode')player.setPlayMode(payload)
@@ -258,5 +252,5 @@ watch(()=>listening.value.track?.id,async()=>{
   try{const result=await getCachedTrackLyrics(listening.value.track,{timeoutMs:6000});if(token===lyricsToken&&!disposed){lyrics.value=result;syncPlayback()}}catch{}
 },{immediate:true})
 onMounted(()=>{mediaQuery=matchMedia('(prefers-reduced-motion: reduce)');syncMotion();mediaQuery.addEventListener('change',syncMotion);document.addEventListener('visibilitychange',visibility);initialize();data.loadHome();feeds.loadAll()})
-onBeforeUnmount(()=>{disposed=true;if(opacitySaveTimer)saveDanmakuOpacity();lyricsToken++;feeds.dispose();comments.dispose();abort?.abort();world?.dispose();sampler?.dispose();clearTimeout(noticeTimer);mediaQuery?.removeEventListener('change',syncMotion);document.removeEventListener('visibilitychange',visibility)})
+onBeforeUnmount(()=>{disposed=true;listFeedback.dispose();if(opacitySaveTimer)saveDanmakuOpacity();lyricsToken++;feeds.dispose();comments.dispose();abort?.abort();world?.dispose();sampler?.dispose();clearTimeout(noticeTimer);mediaQuery?.removeEventListener('change',syncMotion);document.removeEventListener('visibilitychange',visibility)})
 </script>
