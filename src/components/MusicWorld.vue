@@ -1,6 +1,12 @@
 <template>
   <section class="music-world" :class="{'music-world--inspecting':selectedRecord,'music-world--seated':status.seated}" :inert="suspended" aria-label="声境 3D 音乐馆" @keydown="handleWorldKey">
-    <canvas ref="canvas" :key="canvasKey" class="music-world__canvas" tabindex="0" aria-label="3D 音乐馆。WASD 行走，拖动环顾，方向键转向，E 选择视线中的展品，Home 返回中庭。" @pointerdown="exploring=true" />
+    <canvas ref="canvas" :key="canvasKey" class="music-world__canvas" tabindex="0" aria-label="3D 音乐馆。WASD 行走，空格跳跃，V 切换视角，拖动环顾，E 互动，Home 返回中庭。" @pointerdown="exploring=true" />
+    <div v-if="ready&&!suspended&&!routeOpen&&!panel&&!commentOpen&&!selectedRecord&&!listeningPanel" class="world-avatar-controls" @keydown.stop>
+      <span class="world-avatar-controls__model"><UserRound :size="18" /><span>Fantasy Queen</span></span>
+      <button type="button" :title="status.viewMode==='first'?'第三人称 · V':'第一人称 · V'" aria-label="切换人物视角" @click="toggleView"><ScanEye :size="18" /><span>{{ status.viewMode==='first'?'第三人称':'第一人称' }}</span></button>
+      <button type="button" :title="status.seated?'起身':'跳跃 · 空格'" :aria-label="status.seated?'起身':'跳跃'" @click="jumpAvatar"><ArrowUp :size="18" /></button>
+      <span v-if="listeningRoom.state.room" class="world-avatar-controls__online">{{ listeningRoom.state.connected ? (listeningRoom.state.presence?.players.length||0)+' 人在场' : '重连中' }}</span>
+    </div>
     <WorldListeningRoom v-if="listeningPanel" :mode="listeningPanel" :display-name="account.isLoggedIn?account.displayName:''" @close="closeListeningRoom" />
     <WorldDanmaku
       v-if="ready && commentsState.items.length"
@@ -67,7 +73,7 @@
 <script setup>
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, ArrowUpRight, AudioLines, Disc3, Heart, Loader2, Play, Search, X } from 'lucide-vue-next'
+import { ArrowLeft, ArrowUpRight, ArrowUp, AudioLines, Disc3, Heart, Loader2, Play, Search, X, UserRound, ScanEye } from 'lucide-vue-next'
 import { usePlayerStore } from '../stores/player'
 import { useListeningRoomStore } from '../stores/listeningRoom'
 import { useAuthStore } from '../stores/auth'
@@ -120,6 +126,10 @@ function saveDanmakuOpacity(){clearTimeout(opacitySaveTimer);opacitySaveTimer=0;
 function changeDanmakuOpacity(value){danmakuOpacity.value=normalizeDanmakuOpacity(value);clearTimeout(opacitySaveTimer);opacitySaveTimer=setTimeout(saveDanmakuOpacity,180)}
 function returnTo2D(){environment.setMode('2d');if(route.name==='space')router.push(environment.state.returnPath||'/home')}
 function openMap(){world?.clearMovement();world?.cancelTravel()}
+function toggleView(){world?.setViewMode(status.viewMode==='first'?'third':'first');canvas.value?.focus({preventScroll:true})}
+function jumpAvatar(){world?.jump();canvas.value?.focus({preventScroll:true})}
+function syncPresence(){world?.setPresence(listeningRoom.state.presence,{memberId:listeningRoom.state.memberId,roomId:listeningRoom.state.room?.id||'',connected:listeningRoom.state.connected})}
+async function takeSeat(id){const ok=await listeningRoom.takeSeat(id);if(!ok&&id)toast(listeningRoom.state.presenceError||'暂时无法落座。');return ok}
 function goToMapPoint(id){panel.value=false;exploring.value=true;world?.navigateToPoint(id);canvas.value?.focus({preventScroll:true})}
 let lastVolume=player.state.volume||.8
 async function playSelectedTrack(track){
@@ -184,8 +194,9 @@ async function initialize(){
   if(disposed||signal.aborted)return
   try{
     sampler=createWorldAudioSampler(player.getAudioElement())
-    world=await createMusicWorld(canvas.value,{signal,sampleAudio:()=>sampler?.sample(),onProgress:value=>progress.value=value,onStatus:receiveStatus,onAction:handleAction})
+    world=await createMusicWorld(canvas.value,{signal,sampleAudio:()=>sampler?.sample(),onProgress:value=>progress.value=value,onStatus:receiveStatus,onAction:handleAction,onPresence:listeningRoom.movePresence,onSeat:takeSeat})
     if(signal.aborted)return
+    syncPresence();await listeningRoom.setPresenceActive(!props.suspended&&!routeOpen.value)
     world.updateLibrary(data.exhibits.value);world.setFeeds(feeds.getState());world.setQuality(quality.value);world.setAccount(account.value);world.setListeningRoom(roomSummary.value);world.setActive(!props.suspended&&!routeOpen.value&&!listeningPanel.value);syncPlayback();await world.setScene(requestedScene);if(!signal.aborted){ready.value=true;if(!props.suspended&&!routeOpen.value&&!listeningPanel.value)canvas.value?.focus({preventScroll:true})}
   }catch(error){if(error.name!=='AbortError'&&!signal.aborted){failed.value=true;sampler?.stop();console.warn('Music pavilion failed:',error)}}
 }
@@ -245,6 +256,8 @@ watch(()=>[listening.value,danmakuEnabled.value,danmakuOpacity.value],syncPlayba
 watch(data.exhibits,value=>world?.updateLibrary(value))
 watch(account,value=>world?.setAccount(value))
 watch(roomSummary,value=>world?.setListeningRoom(value))
+watch(()=>[listeningRoom.state.presence,listeningRoom.state.connected,listeningRoom.state.room?.id],syncPresence)
+watch(()=>[routeOpen.value,props.suspended],([covered,suspended])=>{void listeningRoom.setPresenceActive(!covered&&!suspended)})
 watch(()=>[routeOpen.value,props.suspended,listeningPanel.value],([covered,suspended,roomOpen])=>{world?.setActive(!covered&&!suspended&&!roomOpen);if(covered||suspended||roomOpen){world?.clearMovement();world?.dismissRecord();panel.value=false;commentOpen.value=false}syncPlayback()})
 watch(()=>listening.value.track?.id,async()=>{
   const token=++lyricsToken;lyrics.value=[];comments.setTrack(listening.value.track)
@@ -252,5 +265,5 @@ watch(()=>listening.value.track?.id,async()=>{
   try{const result=await getCachedTrackLyrics(listening.value.track,{timeoutMs:6000});if(token===lyricsToken&&!disposed){lyrics.value=result;syncPlayback()}}catch{}
 },{immediate:true})
 onMounted(()=>{mediaQuery=matchMedia('(prefers-reduced-motion: reduce)');syncMotion();mediaQuery.addEventListener('change',syncMotion);document.addEventListener('visibilitychange',visibility);initialize();data.loadHome();feeds.loadAll()})
-onBeforeUnmount(()=>{disposed=true;listFeedback.dispose();if(opacitySaveTimer)saveDanmakuOpacity();lyricsToken++;feeds.dispose();comments.dispose();abort?.abort();world?.dispose();sampler?.dispose();clearTimeout(noticeTimer);mediaQuery?.removeEventListener('change',syncMotion);document.removeEventListener('visibilitychange',visibility)})
+onBeforeUnmount(()=>{disposed=true;void listeningRoom.setPresenceActive(false);listFeedback.dispose();if(opacitySaveTimer)saveDanmakuOpacity();lyricsToken++;feeds.dispose();comments.dispose();abort?.abort();world?.dispose();sampler?.dispose();clearTimeout(noticeTimer);mediaQuery?.removeEventListener('change',syncMotion);document.removeEventListener('visibilitychange',visibility)})
 </script>

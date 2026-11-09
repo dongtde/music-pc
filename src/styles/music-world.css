@@ -5,6 +5,10 @@
 .music-world__canvas:focus-visible { outline:1px solid #d3e8d780; outline-offset:-3px; }
 .music-world::after { content:''; position:absolute; inset:0; background:linear-gradient(#09151eae,transparent 22%,transparent 60%,#09151ebd); pointer-events:none; }
 .music-world button { font:inherit; cursor:pointer; }
+.world-avatar-controls{position:absolute;left:24px;bottom:24px;z-index:4;display:flex;align-items:center;gap:7px;padding:7px;border:1px solid #72929b66;border-radius:18px;background:#1b303ce8;backdrop-filter:blur(14px)}
+.world-avatar-controls__model{display:flex;align-items:center;gap:8px;padding:0 10px;color:#dbece5;font-size:13px}
+.world-avatar-controls button{display:flex;align-items:center;justify-content:center;gap:8px;min-width:42px;min-height:40px;padding:0 13px;border:0;border-radius:12px;background:transparent;color:#dbece5;font-size:13px}.world-avatar-controls button:hover{background:#42616c}.world-avatar-controls__online{font-size:12px;padding:0 9px;color:#b3ccc5}
+@media(max-width:600px){.world-avatar-controls{left:12px;bottom:16px;gap:2px}.world-avatar-controls button{padding:0 9px}.world-avatar-controls__online{padding:0 4px}}
 .music-world button:disabled { opacity:.5; cursor:wait; }
 .music-world button:focus-visible,.music-world input:focus-visible { outline:2px solid #dbe6c6; outline-offset:4px; }
 .world-eyebrow { display:flex; align-items:center; gap:9px; font-size:10px; letter-spacing:.24em; color:#d5c8af; }

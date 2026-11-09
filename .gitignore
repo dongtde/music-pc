@@ -13,6 +13,15 @@ node_modules
 *.tmp
 *.tmp.*
 reports/
+
+# Local model authoring files, previews, and verification outputs
+/output/
+/coverage/
+/test-results/
+/playwright-report/
+*.blend1
+*.blend2
+
 dist
 dist-desktop/
 release

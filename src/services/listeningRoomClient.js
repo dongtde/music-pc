@@ -11,6 +11,38 @@ export function createListeningRoomClient({ player, state, storage = availableSe
   let preparedGeneration = -1, loadingGeneration = -1, failedGeneration = -1, queueVersion = -1
   let offset = 0, lifecycle = 0, commandChain = Promise.resolve(), playPending = false, playAttempt = 0, restored = false
   let pendingSnapshot = null, pendingSeek = null, audioListeners = [], lastBuffering = false
+  let presenceSequence = 0, lastPresenceSent = -Infinity
+  function acceptPresence(value) {
+    if (!value || value.roomId !== state.room?.id || !Array.isArray(value.players)) return
+    if (state.presence?.roomId === value.roomId && state.presence.version > value.version) return
+    state.presence = value
+  }
+  async function setPresenceActive(active, avatar = state.avatar || 'mint') {
+    state.presenceActive = Boolean(active); state.avatar = avatar
+    if (!state.connected || !state.room) return true
+    const epoch = lifecycle, roomId = state.room.id
+    try {
+      const reply = await request('presence:profile', { active: state.presenceActive, avatar })
+      if (epoch === lifecycle && roomId === state.room?.id) acceptPresence(reply.presence)
+      return true
+    } catch { return false }
+  }
+  function movePresence(pose, force = false) {
+    if (!state.connected || !state.room || !state.presenceActive || !socket?.connected || (!force && now() - lastPresenceSent < 50)) return
+    lastPresenceSent = now()
+    // Volatile packets are never replayed after reconnecting or accumulated offline.
+    socket.volatile.emit('presence:move', { x: pose.x, y: pose.y, z: pose.z, yaw: pose.yaw, motion: pose.motion, seq: ++presenceSequence })
+  }
+  async function takeSeat(seatId = '') {
+    if (!state.room) return true
+    if (!state.connected) { state.presenceError = '连接恢复后才能使用房间座位。'; return false }
+    const epoch = lifecycle, roomId = state.room.id
+    try {
+      const reply = await request('presence:seat', { seatId })
+      if (epoch !== lifecycle || roomId !== state.room?.id) return false
+      acceptPresence(reply.presence); state.presenceError = ''; return true
+    } catch (error) { state.presenceError = error.message; return false }
+  }
   const readSession = () => { try { return JSON.parse(storage?.getItem(SESSION_KEY) || 'null') } catch { return null } }
   function saveSession(token) {
     try { storage?.setItem(SESSION_KEY, JSON.stringify({ token: token || socket?.auth.token, serverUrl: state.serverUrl, roomId: state.room?.id || '', name: state.name })) } catch { /* Storage may be unavailable in private sessions. */ }
@@ -47,7 +79,7 @@ export function createListeningRoomClient({ player, state, storage = availableSe
     lifecycle++; clearPlaybackWork()
     for (const [event, callback] of audioListeners) driver?.audio.removeEventListener(event, callback)
     audioListeners = []; driver?.release(); driver = null
-    state.room = null; state.localError = ''; state.autoplayBlocked = false; state.syncStatus = 'idle'
+    state.room = null; state.presence = null; state.presenceError = ''; state.localError = ''; state.autoplayBlocked = false; state.syncStatus = 'idle'
     state.notice = reason; queueVersion = -1; pendingSnapshot = null; saveSession()
   }
   function bindDriver() {
@@ -132,7 +164,7 @@ export function createListeningRoomClient({ player, state, storage = availableSe
     if (!room.members.some(member => member.id === state.memberId)) return
     const previous = state.room?.playback
     const hard = !previous || ['generation', 'anchorTime', 'position', 'playing'].some(key => previous[key] !== room.playback[key])
-    state.room = room; state.error = ''; bindDriver()
+    state.room = room; acceptPresence(room.presence); state.error = ''; bindDriver()
     if (queueVersion !== room.queueVersion || player.state.playMode !== room.playMode) { driver.setQueue(room.queue, room.playMode); queueVersion = room.queueVersion }
     const self = room.members.find(member => member.id === state.memberId)
     if (self.error && !state.localError && loadingGeneration !== room.playback.generation) { state.localError = self.error; failedGeneration = room.playback.generation; driver.pause(); state.syncStatus = 'error' }
@@ -195,6 +227,8 @@ export function createListeningRoomClient({ player, state, storage = availableSe
             const next = pendingSnapshot?.id === hello.room.id && pendingSnapshot.revision > hello.room.revision ? pendingSnapshot : hello.room
             pendingSnapshot = null; accept(next)
           } else if (state.room || saved?.roomId) detach('原房间已结束，可以重新创建或加入。')
+          presenceSequence = 0; lastPresenceSent = -Infinity
+          if (state.room) await setPresenceActive(state.presenceActive, state.avatar)
           beginPolling()
           if (!settled) { settled = true; clearTimeout(timeout); resolve() }
         } catch (error) { failed(error) }
@@ -206,9 +240,10 @@ export function createListeningRoomClient({ player, state, storage = availableSe
         else pendingSnapshot = room
       })
       target.on('room:closed', result => { if (target === socket) detach(result.reason || '房间已结束。') })
+      target.on('presence:state', value => { if (target === socket && state.connected) acceptPresence(value) })
       target.on('disconnect', () => {
         if (target !== socket) return
-        lifecycle++; state.connected = false; clearPlaybackWork()
+        lifecycle++; state.connected = false; state.presence = null; clearPlaybackWork()
         if (state.room) state.syncStatus = 'reconnecting'
       })
       target.connect()
@@ -221,11 +256,13 @@ export function createListeningRoomClient({ player, state, storage = availableSe
       await connect(parsed.serverUrl)
       if (state.room) return true
       const payload = kind === 'join' ? { code: parsed.code, name: state.name } : { name: state.name }
+      payload.avatar = state.avatar || 'mint'
       const epoch = lifecycle
       const result = await request(`room:${kind}`, payload)
       if (epoch !== lifecycle) return false
       accept(pendingSnapshot?.id === result.room.id && pendingSnapshot.revision > result.room.revision ? pendingSnapshot : result.room)
       pendingSnapshot = null
+      await setPresenceActive(state.presenceActive, state.avatar)
       return true
     } catch (error) { state.error = error.message; return false }
   }
@@ -311,5 +348,5 @@ export function createListeningRoomClient({ player, state, storage = availableSe
     globalThis.document?.removeEventListener('visibilitychange', onVisible)
     const previous = socket; socket = null; previous?.disconnect()
   }
-  return { create: options => enter('create', options), join: options => enter('join', options), leave, restore, connect, command, retryLocal, enableAudio, invitation, dispose }
+  return { create: options => enter('create', options), join: options => enter('join', options), leave, restore, connect, command, retryLocal, enableAudio, invitation, dispose, setPresenceActive, movePresence, takeSeat }
 }

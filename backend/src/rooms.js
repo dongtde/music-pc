@@ -1,6 +1,7 @@
 import { randomBytes, randomInt } from 'node:crypto'
 import { networkInterfaces } from 'node:os'
 import { Server } from 'socket.io'
+import { AVATAR_IDS, initialPresence, movement, seatPosition, releasePosition } from './presence.js'
 import { ROOM_SOCKET_PATH, ROOM_CAPACITY, ROOM_QUEUE_LIMIT, ROOM_MODES, roomTrack, roomQueue, trackKey, trackDuration, playbackPosition } from './protocol.js'
 
 export function attachListeningRoomServer(httpServer, options = {}) {
@@ -24,11 +25,15 @@ export function attachListeningRoomServer(httpServer, options = {}) {
     timer.unref?.(); timers.add(timer); return timer
   }
   function cancel(timer) { clearTimeout(timer); timers.delete(timer) }
+  function presenceSnapshot(room) {
+    return { roomId: room.id, version: room.presenceVersion || 0, players: [...room.members.values()].filter(member => member.connected && member.presence?.active).map(member => ({ id: member.id, name: member.name, ...member.presence })) }
+  }
+  function broadcastPresence(room) { room.presenceVersion = (room.presenceVersion || 0) + 1; io.to(room.id).emit('presence:state', presenceSnapshot(room)) }
   function snapshot(room) {
     return {
       id: room.id, hostId: room.hostId, capacity, revision: room.revision, queueVersion: room.queueVersion,
       members: [...room.members.values()].map(member => ({ id: member.id, name: member.name, connected: member.connected, ready: member.ready === room.playback.generation, buffering: member.buffering, error: member.error })),
-      playback: { ...room.playback }, queue: room.queue, playMode: room.playMode, error: room.error,
+      playback: { ...room.playback }, queue: room.queue, playMode: room.playMode, error: room.error, presence: presenceSnapshot(room),
     }
   }
   function broadcast(room) { room.revision++; io.to(room.id).emit('room:state', snapshot(room)) }
@@ -121,7 +126,7 @@ export function attachListeningRoomServer(httpServer, options = {}) {
     else {
       cancel(member.leaveTimer); room.members.delete(session.id); session.roomId = ''
       io.sockets.sockets.get(session.socketId)?.leave(room.id)
-      finishPreparation(room); broadcast(room)
+      broadcastPresence(room); finishPreparation(room); broadcast(room)
     }
   }
   function requireRoom(session) {
@@ -161,7 +166,7 @@ export function attachListeningRoomServer(httpServer, options = {}) {
   })
   io.on('connection', socket => {
     const session = socket.data.session
-    let windowStarted = now(), requests = 0, joins = []
+    let windowStarted = now(), requests = 0, joins = [], motionWindow = now(), motionRequests = 0
     function handle(event, callback) {
       socket.on(event, (payload = {}, ack) => {
         if (typeof ack !== 'function') return
@@ -177,7 +182,7 @@ export function attachListeningRoomServer(httpServer, options = {}) {
     handle('session:hello', () => {
       const room = rooms.get(session.roomId), member = room?.members.get(session.id)
       if (member) {
-        cancel(member.leaveTimer); member.connected = true; member.ready = -1; member.error = ''; socket.join(room.id); broadcast(room)
+        cancel(member.leaveTimer); member.connected = true; member.ready = -1; member.error = ''; member.presence.seq = 0; socket.join(room.id); broadcastPresence(room); broadcast(room)
       }
       const address = httpServer.address()
       const port = typeof address === 'object' && address ? address.port : 3030
@@ -189,7 +194,7 @@ export function attachListeningRoomServer(httpServer, options = {}) {
       if (session.roomId) fail('请先退出当前房间。')
       if (rooms.size >= 256) fail('房间较多，请稍后再创建。')
       const room = { id: nextCode(), hostId: session.id, revision: 0, queueVersion: 1, queue: [], playMode: 'list', error: '', members: new Map(), playback: { generation: 0 } }
-      room.members.set(session.id, { id: session.id, token: session.token, name: nameOf(payload.name), connected: true, ready: -1, error: '', buffering: false })
+      room.members.set(session.id, { id: session.id, token: session.token, name: nameOf(payload.name), connected: true, ready: -1, error: '', buffering: false, presence: initialPresence(0, payload.avatar) })
       rooms.set(room.id, room); session.roomId = room.id; socket.join(room.id)
       prepare(room, null, 0, false)
       broadcast(room); return { room: snapshot(room) }
@@ -203,12 +208,40 @@ export function attachListeningRoomServer(httpServer, options = {}) {
       if (!room) fail('没有找到这个房间，请检查房间码或让好友重新创建。')
       if (room.members.size >= capacity) fail(`房间已满，当前最多 ${capacity} 人。`)
       if (!room.members.get(room.hostId)?.connected) fail('房主正在重连，请稍后加入。')
-      room.members.set(session.id, { id: session.id, token: session.token, name: nameOf(payload.name), connected: true, ready: -1, error: '', buffering: false })
+      room.members.set(session.id, { id: session.id, token: session.token, name: nameOf(payload.name), connected: true, ready: -1, error: '', buffering: false, presence: initialPresence(room.members.size, payload.avatar) })
       session.roomId = room.id; socket.join(room.id); broadcast(room)
       return { room: snapshot(room) }
     })
     handle('room:snapshot', () => ({ room: snapshot(requireRoom(session)) }))
     handle('room:leave', () => { leave(session); return {} })
+    handle('presence:profile', payload => {
+      const room = requireRoom(session), member = room.members.get(session.id)
+      if (payload.avatar !== undefined && !AVATAR_IDS.includes(payload.avatar)) fail('请选择有效的角色。')
+      if (payload.avatar) member.presence.avatar = payload.avatar
+      member.presence.active = payload.active === true
+      if (!member.presence.active) member.presence = releasePosition(member.presence)
+      broadcastPresence(room); return { presence: presenceSnapshot(room) }
+    })
+    handle('presence:seat', payload => {
+      const room = requireRoom(session), member = room.members.get(session.id)
+      if (!member.presence.active) fail('请先进入 3D 音乐馆。')
+      if (payload.seatId) {
+        const pose = seatPosition(payload.seatId)
+        if (!pose) fail('这个座位不存在。')
+        if ([...room.members.values()].some(peer => peer.id !== member.id && peer.connected && peer.presence?.active && peer.presence.seatId === payload.seatId)) fail('这张椅子已经有人坐了。')
+        Object.assign(member.presence, pose)
+      } else member.presence = releasePosition(member.presence)
+      broadcastPresence(room); return { presence: presenceSnapshot(room) }
+    })
+    socket.on('presence:move', payload => {
+      if (session.socketId !== socket.id) return
+      const room = rooms.get(session.roomId), member = room?.members.get(session.id)
+      if (!member?.connected || !member.presence?.active || member.presence.seatId) return
+      if (now() - motionWindow >= 1000) { motionWindow = now(); motionRequests = 0 }
+      if (++motionRequests > 25) return
+      const next = movement(payload, member.presence)
+      if (next) { member.presence = next; session.lastSeen = now(); room.presenceDirty = true }
+    })
     handle('playback:ready', payload => {
       const room = requireRoom(session), p = room.playback, member = room.members.get(session.id)
       if (payload.generation !== p.generation) return { room: snapshot(room) }
@@ -287,6 +320,8 @@ export function attachListeningRoomServer(httpServer, options = {}) {
       const room = rooms.get(session.roomId), member = room?.members.get(session.id)
       if (!member) return
       member.connected = false; member.buffering = false
+      member.presence = { ...releasePosition(member.presence), active: false }
+      broadcastPresence(room)
       if (session.id === room.hostId) {
         const position = playbackPosition(room.playback, now())
         stopPreparing(room); setAnchor(room, position, false); room.desiredPlaying = false
@@ -300,11 +335,16 @@ export function attachListeningRoomServer(httpServer, options = {}) {
     for (const [token, session] of sessions) if (!session.socketId && !session.roomId && now() - session.lastSeen > 3600000) sessions.delete(token)
   }, 60000)
   cleanup.unref?.()
+  // At most 20 compact room broadcasts/second; song queues never enter these packets.
+  const presenceTimer = setInterval(() => {
+    for (const room of rooms.values()) if (room.presenceDirty) { room.presenceDirty = false; broadcastPresence(room) }
+  }, 50)
+  presenceTimer.unref?.()
   return {
     io,
     listRooms,
     close() {
-      clearInterval(cleanup); for (const timer of timers) clearTimeout(timer); timers.clear()
+      clearInterval(cleanup); clearInterval(presenceTimer); for (const timer of timers) clearTimeout(timer); timers.clear()
       rooms.clear(); sessions.clear()
       return new Promise(resolve => io.close(resolve))
     },
