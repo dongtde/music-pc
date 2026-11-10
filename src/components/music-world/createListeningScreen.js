@@ -1,120 +1,123 @@
 import { canvasSurface } from './worldSurfaces.js'
-import { ink, font, text, rounded, cropImage, createScreenImages, formatTime } from './screenDrawing.js'
+import { font, text, createScreenImages, formatTime } from './screenDrawing.js'
 import { hasWordTiming, layoutLyric, wordFill } from './lyricTypography.js'
-import { drawTransportButton } from '../playerTransportDrawing.js'
+import { drawPlayerIcon } from '../playerTransportDrawing.js'
+import { drawListeningBackdrop, screenInk } from './listeningScreenArt.js'
+
+const WIDTH = 2048, HEIGHT = 840
+const TRANSPORT = [{ x: 89, action: 'previous' }, { x: 157, action: 'toggle' }, { x: 225, action: 'next' }]
 
 export function createListeningScreen(invalidate) {
-  const surface = canvasSurface(2048, 840, { dynamic: true, onReady: invalidate }), zones = []
+  const surface = canvasSurface(WIDTH, HEIGHT, { dynamic: true, onReady: invalidate })
   const layers = [
-    { x: 680, y: 176, width: 1296, height: 544 },
-    { x: 0, y: 728, width: 2048, height: 112 },
+    { x: 364, y: 256, width: 1320, height: 328 },
+    { x: 32, y: 736, width: 1984, height: 90 },
   ].map(region => ({ ...region, ...canvasSurface(region.width, region.height, { dynamic: true, onReady: invalidate }) }))
-  let staticSignature = '', lyricSignature = '', progressClock = '', previousCover = ''
-  let dirty = true, signature = '', lastLine = '', changedAt = 0, lastDraw = 0, layout = null, layoutKey = '', wordTimed = false
+  let dirty = true, cover = '', staticKey = '', lyricKey = '', transportKey = ''
+  let lastLine = '', changedAt = 0, lastLyrics = -Infinity, layout = null, layoutKey = '', wordTimed = false
+  let playback = {}, hitLine = null
   const images = createScreenImages(() => { dirty = true; invalidate() }, 4)
-  const zone = (x, y, w, h, action, payload) => zones.push({ x, y, w, h, action, payload })
+
   function draw(state, now = performance.now()) {
-    let ctx = surface.context
-    const line = state.line, track = state.track || {}, lyricKey = `${track.id}:${line?.seconds}:${line?.text}`
-    if (track.coverUrl !== previousCover) { previousCover = track.coverUrl; dirty = true }
-    if (lyricKey !== lastLine) { lastLine = lyricKey; changedAt = now }
-    const animation = !state.reducedMotion && (now - changedAt < 600 || state.loading)
-    const timed = hasWordTiming(line), clockRate = timed && !state.reducedMotion ? 30 : 8
-    const next = [track.id, track.name, track.artist, state.playing, state.loading, state.loading&&!state.reducedMotion?Math.floor(now/40):0, Math.floor(state.currentTime*clockRate), state.duration, lyricKey, state.previousLine?.text, state.nextLine?.text, state.commentsTotal, line?.translation, timed, state.reducedMotion].join('|')
-    if (!dirty && next === signature && !animation || !dirty && now - lastDraw < 32) return animation
-    const nextStatic = [track.id, track.name, track.artist, state.playing, state.loading, state.duration, state.commentsTotal, timed, Boolean(line && !line.placeholder)].join('|')
-    const refreshBase = dirty || nextStatic !== staticSignature
-    const nextLyricSignature = [lyricKey, state.previousLine?.text, state.nextLine?.text, line?.translation, timed, state.reducedMotion, timed ? Math.floor(state.currentTime * clockRate) : 0].join('|')
-    const nextProgressClock = [Math.floor(state.currentTime * 8), state.loading && !state.reducedMotion ? Math.floor(now / 40) : 0].join('|')
-    const refreshLyrics = refreshBase || animation || nextLyricSignature !== lyricSignature
-    const refreshProgress = refreshBase || nextProgressClock !== progressClock
-    lastDraw = now; signature = next; dirty = false; zones.length = 0
-    wordTimed = timed
-    if (refreshBase) {
-      const art = images.get(track.coverUrl)
-      ctx.fillStyle = ink.bg; ctx.fillRect(0, 0, 2048, 840)
-      if (art) {
-        ctx.save(); ctx.globalAlpha = .15; cropImage(ctx, art, 0, -540, 2048); ctx.restore()
-        const veil = ctx.createLinearGradient(0, 0, 2048, 0); veil.addColorStop(0, '#081d2a55'); veil.addColorStop(.36, '#081d2af2'); veil.addColorStop(1, '#081d2ae8'); ctx.fillStyle = veil; ctx.fillRect(0, 0, 2048, 840)
-      }
-      text(ctx, '澜音  /  LIVE SESSION', 64, 53, 22, ink.muted)
-      text(ctx, state.loading ? '正在准备音乐…' : state.playing ? '● 正在播放' : '○ 静候播放', 1740, 53, 22, state.playing ? ink.ice : ink.muted)
-      rounded(ctx, 64, 96, 516, 516, 8, '#c3d6d31a')
-      if (art) cropImage(ctx, art, 76, 108, 492, 3)
-      else {
-        rounded(ctx, 76, 108, 492, 492, 3, ink.panel)
-        for (let r = 30; r < 216; r += 8) { ctx.beginPath(); ctx.arc(322, 354, r, 0, Math.PI * 2); ctx.strokeStyle = r % 3 ? '#8eb5c11f' : '#cde4da3a'; ctx.stroke() }
-        rounded(ctx, 293, 325, 58, 58, 29, ink.copper); rounded(ctx, 317, 349, 10, 10, 5, ink.bg)
-      }
-      text(ctx, track.id ? track.name : '挑一首歌，坐下来听', 64, 673, 40, ink.light, 535, 500)
-      text(ctx, track.id ? track.artist || '未知歌手' : '右侧发现屏，遇见下一首喜欢', 66, 715, 23, ink.muted, 530)
-      text(ctx, wordTimed ? '逐字同步' : line && !line.placeholder ? '逐行同步' : '音乐与此刻', 700, 139, 20, ink.ice)
-      text(ctx, 'LYRICS', 1876, 139, 18, ink.muted)
-      surface.refresh()
+    playback = state
+    const track = state.track || {}, line = state.line && !state.line.placeholder ? state.line : null
+    const nextLine = [track.id, line?.seconds, line?.text].join(':')
+    if (nextLine !== lastLine) { lastLine = nextLine; changedAt = now }
+    if (track.coverUrl !== cover) { cover = track.coverUrl; dirty = true }
+    wordTimed = hasWordTiming(line); hitLine = line
+    const entering = !state.reducedMotion && now - changedAt < 460
+    const nextStatic = [track.id, track.name, track.artist].join('|')
+    const redraw = dirty || nextStatic !== staticKey
+    if (redraw) {
+      const ctx = surface.context
+      drawListeningBackdrop(ctx, images.get(cover))
+      if (track.id) text(ctx, [track.name || '未命名歌曲', track.artist].filter(Boolean).join('  ·  '), 303, 804, 25, screenInk.muted, 1220)
+      surface.refresh(); staticKey = nextStatic; dirty = false
     }
-    if (refreshLyrics) {
-      ctx = layers[0].context
-      ctx.clearRect(0, 0, layers[0].width, layers[0].height)
-      ctx.save(); ctx.translate(-layers[0].x, -layers[0].y)
-      const displayLine = line && !line.placeholder ? line : { text: track.id ? '让旋律继续。' : '整个空间，为这一首歌而亮。' }
-      const key = `${displayLine.text}:${wordTimed}:${line?.seconds}`
-      if (key !== layoutKey || layout?.source !== displayLine) {
-        let size = 64, result
-        do { ctx.font = font(size, 500); result = layoutLyric(displayLine, char => ctx.measureText(char).width, 1220); if (result.rows <= 3 || size <= 32) break; size -= 4 } while (true)
-        layout = { ...result, size, source: displayLine }; layoutKey = key
+    const clock = wordTimed ? Math.floor(state.currentTime * (state.reducedMotion ? 8 : 30)) : 0
+    const secondary = line?.translation || (line ? state.nextLine?.text || '' : track.id ? track.artist || '暂无同步歌词' : '在控制终端或发现屏添加音乐')
+    const nextLyric = [nextLine, secondary, wordTimed, clock, state.loading, state.reducedMotion].join('|')
+    if (redraw || (now - lastLyrics >= 32 && (entering || nextLyric !== lyricKey))) {
+      const layer = layers[0], ctx = layer.context
+      ctx.clearRect(0, 0, layer.width, layer.height); ctx.save(); ctx.translate(-layer.x, -layer.y)
+      const displayLine = line || { text: state.loading ? '正在准备音乐…' : track.id ? track.name || '暂无同步歌词' : '选一首歌，开始聆听' }
+      const key = [displayLine.text, wordTimed, line?.seconds].join(':')
+      if (key !== layoutKey || line && layout?.source !== line) {
+        let size = line ? 72 : 62, result
+        do {
+          ctx.font = font(size, 500); result = layoutLyric(displayLine, char => ctx.measureText(char).width, 1050)
+          if (result.rows <= 2 || size <= 30) break
+          size -= 4
+        } while (true)
+        const widths = Array(result.rows).fill(0)
+        for (const glyph of result.glyphs) widths[glyph.row] = Math.max(widths[glyph.row], glyph.x + glyph.width)
+        layout = { ...result, widths, size, source: line }; layoutKey = key
       }
-      const entering = state.reducedMotion ? 1 : Math.min(1, (now - changedAt) / 520), ease = 1 - (1 - entering) ** 3
-      const top = 404 - Math.min(2, layout.rows - 1) * layout.size * .72 + (1 - ease) * 22
-      const lastBaseline = top + (layout.rows - 1) * layout.size * 1.45
-      text(ctx, state.previousLine?.text || '', 700, top - layout.size * 1.6, 28, '#678895', 1220)
-      ctx.save(); ctx.beginPath(); ctx.rect(684, 244, 1290, 350); ctx.clip(); ctx.globalAlpha = .35 + ease * .65
-      ctx.font = font(layout.size, 500)
+      const ease = state.reducedMotion ? 1 : 1 - (1 - Math.max(0, Math.min(1, (now - changedAt) / 460))) ** 3
+      const rows = layout.rows, lineHeight = Math.min(layout.size * 1.32, 204 / Math.max(1, rows - 1))
+      const top = 401 - (rows - 1) * lineHeight * .55 + (1 - ease) * 10
+      ctx.globalAlpha = .35 + ease * .65; ctx.font = font(layout.size, 500)
+      ctx.shadowColor = '#020813'; ctx.shadowBlur = 12
       for (const glyph of layout.glyphs) {
-        const x = 700 + glyph.x, y = top + glyph.row * layout.size * 1.45, progress = wordFill(glyph.word, state.currentTime)
-        ctx.fillStyle = progress === null ? ink.light : '#7d969f'; ctx.fillText(glyph.char, x, y)
+        const x = WIDTH / 2 - layout.widths[glyph.row] / 2 + glyph.x, y = top + glyph.row * lineHeight
+        const progress = wordFill(glyph.word, state.currentTime)
+        ctx.fillStyle = progress === null ? screenInk.white : '#91a6bd'; ctx.fillText(glyph.char, x, y)
         if (progress !== null) {
           const width = Math.max(0, Math.min(glyph.width, glyph.total * progress - glyph.offset))
           if (width) {
             ctx.save(); ctx.beginPath(); ctx.rect(x - .5, y - layout.size * 1.2, width + .5, layout.size * 1.6); ctx.clip()
-            ctx.fillStyle = ink.light; ctx.shadowColor = ink.ice; ctx.shadowBlur = state.reducedMotion || progress >= 1 ? 0 : 12; ctx.fillText(glyph.char, x, y); ctx.restore()
+            ctx.fillStyle = screenInk.white; ctx.fillText(glyph.char, x, y); ctx.restore()
           }
         }
       }
-      ctx.restore()
-      text(ctx, line?.translation || (!line || line.placeholder ? '此曲暂无同步歌词' : ''), 700, Math.min(617,lastBaseline + 64), 25, ink.muted, 1220)
-      text(ctx, state.nextLine?.text || '', 700, Math.min(688,lastBaseline + 130), 30, '#7595a0', 1220)
-      ctx.restore(); layers[0].refresh()
+      ctx.shadowBlur = 0; ctx.globalAlpha = .85; ctx.textAlign = 'center'
+      text(ctx, secondary, WIDTH / 2, Math.min(559, top + (rows - 1) * lineHeight + 71), 32, '#d0d8e4', 1050)
+      ctx.restore(); layer.refresh(); lyricKey = nextLyric; lastLyrics = now
     }
-    if (line && !line.placeholder) zone(684, 244, 1290, 350, 'lyric', line.seconds)
-    if (refreshProgress) {
-      ctx = layers[1].context
-      ctx.clearRect(0, 0, layers[1].width, layers[1].height)
-      ctx.save(); ctx.translate(-layers[1].x, -layers[1].y)
-      rounded(ctx, 64, 751, 1920, 3, 2, '#99bdca36')
+    const nextTransport = [Math.floor(state.currentTime * 8), state.duration, state.playing, state.loading, state.loading && !state.reducedMotion ? Math.floor(now / 50) : 0, state.reducedMotion].join('|')
+    if (redraw || nextTransport !== transportKey) {
+      const layer = layers[1], ctx = layer.context
+      ctx.clearRect(0, 0, layer.width, layer.height); ctx.save(); ctx.translate(-layer.x, -layer.y)
       const progress = state.duration > 0 ? Math.max(0, Math.min(1, state.currentTime / state.duration)) : 0
-      rounded(ctx, 64, 751, Math.max(2, 1920 * progress), 3, 2, ink.ice)
-      text(ctx, `${formatTime(state.currentTime)}  /  ${formatTime(state.duration)}`, 64, 802, 22, ink.muted)
-      ;[{ x: 909, action: 'previous' }, { x: 1024, action: 'toggle' }, { x: 1139, action: 'next' }].forEach(button => {
-        drawTransportButton(ctx,button.action,button.x,799,button.action==='toggle'?58:42,state,{now})
-      })
-      text(ctx, `歌曲评论  ·  ${state.commentsTotal || 0} 条  ↗`, 1630, 804, 22, ink.copper, 350)
-      ctx.restore(); layers[1].refresh()
+      ctx.fillStyle = '#a2c8e12b'; ctx.fillRect(64, 747, 1920, 2)
+      if (progress) {
+        const gradient = ctx.createLinearGradient(64, 0, 1984, 0)
+        gradient.addColorStop(0, '#79c4e9'); gradient.addColorStop(1, '#d9e3ff')
+        ctx.fillStyle = gradient; ctx.fillRect(64, 747, 1920 * progress, 2)
+      }
+      for (const control of TRANSPORT) {
+        const icon = control.action === 'toggle' ? state.loading ? 'loading' : state.playing ? 'pause' : 'play' : control.action
+        ctx.save(); if (state.loading && control.action !== 'toggle') ctx.globalAlpha = .35
+        drawPlayerIcon(ctx, icon, control.x, 795, control.action === 'toggle' ? 29 : 25, screenInk.white, icon === 'loading' && !state.reducedMotion ? now / 150 : 0)
+        ctx.restore()
+      }
+      ctx.save(); ctx.strokeStyle = screenInk.muted; ctx.lineWidth = 1.7
+      ctx.beginPath(); ctx.roundRect(1603, 783, 28, 20, 5); ctx.moveTo(1610, 803); ctx.lineTo(1607, 808); ctx.lineTo(1618, 803); ctx.stroke(); ctx.restore()
+      ctx.textAlign = 'right'; ctx.font = '400 25px Bahnschrift, "Segoe UI", sans-serif'; ctx.fillStyle = screenInk.white
+      ctx.fillText(formatTime(state.currentTime) + '  /  ' + formatTime(state.duration), 1984, 804)
+      ctx.restore(); layer.refresh(); transportKey = nextTransport
     }
-    zone(64, 733, 1920, 35, 'progress')
-    if (!state.loading) for (const button of [{ x: 909, action: 'previous' }, { x: 1024, action: 'toggle' }, { x: 1139, action: 'next' }]) zone(button.x-36,767,72,65,button.action)
-    zone(1620, 768, 380, 64, 'comments')
-    staticSignature = nextStatic; lyricSignature = nextLyricSignature; progressClock = nextProgressClock
-    return animation
+    return entering || state.loading && !state.reducedMotion
   }
+
   return {
     texture: surface.texture, layers, draw,
     setResolution(width) {
-      const scale = width / 2048
+      const scale = width / WIDTH
       let changed = surface.setScale(scale)
       for (const layer of layers) changed = layer.setScale(scale) || changed
       if (changed) dirty = true
     },
-    hitTest(uv) { const x = uv.x * 2048, y = (1 - uv.y) * 840, hit = zones.find(z => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h); return hit ? { action: hit.action, payload: hit.action === 'progress' ? (x - hit.x) / hit.w : hit.payload } : null },
+    hitTest(uv) {
+      const x = uv.x * WIDTH, y = (1 - uv.y) * HEIGHT
+      if (y >= 735 && y <= 765 && x >= 64 && x <= 1984) return { action: 'progress', payload: (x - 64) / 1920 }
+      if (y >= 767 && y <= 825) {
+        if (x >= 1583 && x <= 1651) return { action: 'comments' }
+        if (!playback.loading) for (const control of TRANSPORT) if (Math.abs(x - control.x) <= 30) return { action: control.action }
+      }
+      if (hitLine && x >= 364 && x <= 1684 && y >= 256 && y <= 584) return { action: 'lyric', payload: hitLine.seconds }
+      return null
+    },
     getState: () => ({ wordTimed, line: lastLine }),
     dispose() { images.dispose(); surface.texture.dispose(); layers.forEach(layer => layer.texture.dispose()) },
   }

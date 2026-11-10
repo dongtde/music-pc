@@ -49,11 +49,13 @@ export function createScreenRaster(canvas, publish) {
   for (const method of methods) ctx[method] = (...args) => commands.push([method, ...args])
   ctx.save = () => { stack.push({ ...state }); commands.push(['save']) }
   ctx.restore = () => { state = stack.pop() || state; commands.push(['restore']) }
-  ctx.createLinearGradient = (...points) => {
-    const gradient = { gradient: true, points, stops: [] }
-    // Methods cannot be structured-cloned; the recorded value is plain data.
-    Object.defineProperty(gradient, 'addColorStop', { value: (...stop) => gradient.stops.push(stop) })
-    return gradient
+  for (const method of ['createLinearGradient', 'createRadialGradient']) {
+    ctx[method] = (...points) => {
+      const gradient = { gradient: method, points, stops: [] }
+      // Methods cannot be structured-cloned; the recorded value is plain data.
+      Object.defineProperty(gradient, 'addColorStop', { value: (...stop) => gradient.stops.push(stop) })
+      return gradient
+    }
   }
   ctx.measureText = text => {
     const key = `${state.font}\n${state.direction}\n${text}`

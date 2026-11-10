@@ -29,7 +29,12 @@ export function createWorldScenes({scene,pavilion,renderer,ambient,sun,practical
   const loader=loadAsset||((file)=>new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/${file}`))
   const assets=new Map(),requests=new Map(),originalColors=new Map()
   let active=getWorldScene('rain'),revision=0,disposed=false,weatherTime=0
-  equipment.traverse(o=>{if(o.isMesh&&!originalColors.has(o.material))originalColors.set(o.material,o.material.color.clone())})
+  equipment.traverse(o=>{
+    if(!o.isMesh)return
+    for(const material of Array.isArray(o.material)?o.material:[o.material]){
+      if(material?.color&&!originalColors.has(material))originalColors.set(material,material.color.clone())
+    }
+  })
   const rain=createRain();scene.add(rain)
   function apply(config,asset){
     original.visible=config.id==='rain'

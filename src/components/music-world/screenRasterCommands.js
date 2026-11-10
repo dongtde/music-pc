@@ -3,7 +3,7 @@ const paths = new Map()
 export function paintScreen(ctx, frame, images) {
   const value = input => {
     if (input?.gradient) {
-      const gradient = ctx.createLinearGradient(...input.points)
+      const gradient = ctx[input.gradient === 'createRadialGradient' ? 'createRadialGradient' : 'createLinearGradient'](...input.points)
       for (const stop of input.stops) gradient.addColorStop(...stop)
       return gradient
     }
