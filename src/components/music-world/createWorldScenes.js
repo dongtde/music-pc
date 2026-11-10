@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { getWorldScene } from './worldScenes.js'
+import { optimizeWorldMaterials } from './optimizeWorldMaterials.js'
 
 function disposeTree(root){
   const materials=new Set(),geometries=new Set()
@@ -56,7 +57,7 @@ export function createWorldScenes({scene,pavilion,renderer,ambient,sun,practical
         if(!requests.has(config.id))requests.set(config.id,loader(config.asset).then(result=>{
           const group=result.scene||result
           if(disposed){disposeTree(group);throw new DOMException('World closed','AbortError')}
-          group.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true}});group.visible=false;assets.set(config.id,group);return group
+          group.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true}});optimizeWorldMaterials(group);group.visible=false;assets.set(config.id,group);return group
         }).catch(error=>{requests.delete(config.id);throw error}))
         asset=await requests.get(config.id)
       }

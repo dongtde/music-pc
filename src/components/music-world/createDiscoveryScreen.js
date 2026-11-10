@@ -23,7 +23,7 @@ function drawNavigationIcon(ctx, icon, x, y, color) {
 }
 
 export function createDiscoveryScreen(index, invalidate) {
-  const portal = DISCOVERY_PORTALS[index], surface = canvasSurface(FEED_LAYOUT.size, FEED_LAYOUT.size), ctx = surface.context
+  const portal = DISCOVERY_PORTALS[index], surface = canvasSurface(FEED_LAYOUT.size, FEED_LAYOUT.size, { dynamic: true, onReady: invalidate }), ctx = surface.context
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.76, 1.76), new THREE.MeshBasicMaterial({ map: surface.texture, toneMapped: false }))
   mesh.name = 'discovery-screen-' + portal.id; mesh.userData = { action: 'feed', payload: portal.id, hint: portal.name }
   let state = { items: [], scroll: 0, busy: true, initial: -1 }, playback = {}
@@ -110,6 +110,7 @@ export function createDiscoveryScreen(index, invalidate) {
 
   return {
     mesh, draw,
+    setResolution(width) { if (surface.setScale(width / FEED_LAYOUT.size)) dirty = true },
     setState(value) {
       if (!value || ['items', 'title', 'detail', 'scroll', 'busy', 'error', 'more', 'initial'].every(key => value[key] === state[key])) return
       if (value.items !== state.items || value.detail !== state.detail || value.scroll !== state.scroll) list.reset()

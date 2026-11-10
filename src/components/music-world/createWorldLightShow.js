@@ -18,13 +18,23 @@ export function createWorldLightShow(scene, concert) {
     const mesh=new THREE.Mesh(barGeometry,material);mesh.position.set(side*(7.8+i*.72),1,-20.12);panels.add(mesh);bars.push(mesh)
   }
   const color=new THREE.Color(),secondary=new THREE.Color()
-  let cue='等待音乐'
+  let cue='等待音乐',enabled=true
   return {
+    setEnabled(value){
+      const next=value!==false
+      if(next===enabled)return
+      enabled=next;director.reset();cue=enabled?'等待音乐':'灯光已关闭'
+      if(enabled)return
+      // Zero intensity keeps the precompiled light slots stable across toggles.
+      concert.fixtures.forEach(({spot,beam,pool,lens})=>{spot.intensity=0;beam.visible=pool.visible=false;lens.emissiveIntensity=0})
+      materials.forEach(material=>{material.emissiveIntensity=0})
+      panels.visible=false
+    },
     update(state,config,reducedMotion,dt,seated=false,quality='balanced',section){
+      if(!enabled)return false
       const show=director.update(state,dt,{reducedMotion,seated,intensity:config.lightIntensity,section})
       cue=show.cue
       concert.update(state,config.palette,reducedMotion,show.commands)
-      concert.fixtures.forEach((fixture,i)=>{fixture.spot.visible=state.power>.002&&(quality!=='smooth'||i%3===0)})
       color.set(config.palette.primary);secondary.set(config.palette.secondary)
       materials.forEach((material,i)=>{
         const command=show.commands[i]
@@ -40,7 +50,7 @@ export function createWorldLightShow(scene, concert) {
       })
       return show.settling
     },
-    getState(){return{cue,fixtures:concert.fixtures.map(f=>({x:f.spot.target.position.x,z:f.spot.target.position.z,angle:f.spot.angle,intensity:f.spot.intensity,color:f.spot.color.getHexString()}))}},
+    getState(){return{enabled,cue,fixtures:concert.fixtures.map(f=>({x:f.spot.target.position.x,z:f.spot.target.position.z,angle:f.spot.angle,intensity:f.spot.intensity,color:f.spot.color.getHexString()}))}},
     reset(){director.reset()},
   }
 }

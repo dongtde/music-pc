@@ -117,11 +117,13 @@ const pendingListKeys=shallowRef([]),listFeedback=createScreenListFeedback(keys=
 const listening=computed(()=>({track:player.state.currentTrack,playing:player.state.isPlaying,currentTime:player.state.currentTime,duration:player.state.duration,loading:player.state.isLoading,loadingTrack:player.state.loadingTrack,pendingKeys:pendingListKeys.value,volume:player.state.volume,queueLength:player.state.queue.length,queue:player.state.queue,queueVersion:player.state.queueVersion,playMode:player.state.playMode}))
 const commentOpen=ref(false),commentsState=shallowRef({items:[],index:0,total:0,busy:false})
 const danmakuEnabled=ref(readStorage('lanyin.world.danmaku','true')!=='false')
+const lightsEnabled=ref(readStorage('lanyin.world.lights','true')!=='false')
 const danmakuOpacity=ref(normalizeDanmakuOpacity(readStorage(DANMAKU_OPACITY_KEY,'1')))
 let opacitySaveTimer=0
 const feeds=createScreenFeeds({load:loadWorldScreen,onChange:value=>world?.setFeeds(value),onAdd:enqueueTracks})
 const comments=createSongComments({load:getSongCommentsData,onChange:value=>{commentsState.value=value;syncPlayback()}})
 function toggleDanmaku(){danmakuEnabled.value=!danmakuEnabled.value;writeStorage('lanyin.world.danmaku',String(danmakuEnabled.value));if(danmakuEnabled.value&&commentsState.value.error)comments.retry()}
+function toggleLights(){lightsEnabled.value=!lightsEnabled.value;writeStorage('lanyin.world.lights',String(lightsEnabled.value))}
 function saveDanmakuOpacity(){clearTimeout(opacitySaveTimer);opacitySaveTimer=0;writeStorage(DANMAKU_OPACITY_KEY,danmakuOpacity.value)}
 function changeDanmakuOpacity(value){danmakuOpacity.value=normalizeDanmakuOpacity(value);clearTimeout(opacitySaveTimer);opacitySaveTimer=setTimeout(saveDanmakuOpacity,180)}
 function returnTo2D(){environment.setMode('2d');if(route.name==='space')router.push(environment.state.returnPath||'/home')}
@@ -184,7 +186,7 @@ function toast(value){notice.value=value;clearTimeout(noticeTimer);noticeTimer=s
 function syncPlayback(){
   if(!props.suspended && !routeOpen.value && !listeningPanel.value && !failed.value && !document.hidden && player.state.isPlaying && !reducedMotion.value)sampler?.start();else sampler?.stop()
   const current=listening.value,index=worldLyricIndex(lyrics.value,current.currentTime)
-  world?.setPlayback({...current,line:lyrics.value[index],previousLine:lyrics.value[index-1],nextLine:lyrics.value[index+1],lyrics:lyrics.value,commentsTotal:commentsState.value.total,danmakuEnabled:danmakuEnabled.value,danmakuOpacity:danmakuOpacity.value,reducedMotion:reducedMotion.value})
+  world?.setPlayback({...current,line:lyrics.value[index],previousLine:lyrics.value[index-1],nextLine:lyrics.value[index+1],lyrics:lyrics.value,commentsTotal:commentsState.value.total,danmakuEnabled:danmakuEnabled.value,danmakuOpacity:danmakuOpacity.value,lightsEnabled:lightsEnabled.value,reducedMotion:reducedMotion.value})
 }
 async function initialize(){
   const requestedScene=sceneId.value
@@ -194,7 +196,7 @@ async function initialize(){
   if(disposed||signal.aborted)return
   try{
     sampler=createWorldAudioSampler(player.getAudioElement())
-    world=await createMusicWorld(canvas.value,{signal,sampleAudio:()=>sampler?.sample(),onProgress:value=>progress.value=value,onStatus:receiveStatus,onAction:handleAction,onPresence:listeningRoom.movePresence,onSeat:takeSeat})
+    world=await createMusicWorld(canvas.value,{signal,quality:quality.value,sampleAudio:()=>sampler?.sample(),onProgress:value=>progress.value=value,onStatus:receiveStatus,onAction:handleAction,onPresence:listeningRoom.movePresence,onSeat:takeSeat})
     if(signal.aborted)return
     syncPresence();await listeningRoom.setPresenceActive(!props.suspended&&!routeOpen.value)
     world.updateLibrary(data.exhibits.value);world.setFeeds(feeds.getState());world.setQuality(quality.value);world.setAccount(account.value);world.setListeningRoom(roomSummary.value);world.setActive(!props.suspended&&!routeOpen.value&&!listeningPanel.value);syncPlayback();await world.setScene(requestedScene);if(!signal.aborted){ready.value=true;if(!props.suspended&&!routeOpen.value&&!listeningPanel.value)canvas.value?.focus({preventScroll:true})}
@@ -228,6 +230,7 @@ async function handleAction(action,payload){
   else if(action==='feed-initial')feeds.setArtistInitial(payload.initial)
   else if(action==='comments')openComments()
   else if(action==='danmaku-toggle')toggleDanmaku()
+  else if(action==='lights-toggle')toggleLights()
   else if(action==='danmaku-opacity')changeDanmakuOpacity(payload)
   else if(action==='settings')router.push('/settings')
   else if(action==='account'){world?.clearMovement();world?.cancelTravel();auth.openLoginModal()}
@@ -252,7 +255,7 @@ async function handleAction(action,payload){
 }
 function visibility(){syncPlayback()}
 function syncMotion(){reducedMotion.value=mediaQuery.matches;syncPlayback()}
-watch(()=>[listening.value,danmakuEnabled.value,danmakuOpacity.value],syncPlayback)
+watch(()=>[listening.value,danmakuEnabled.value,danmakuOpacity.value,lightsEnabled.value],syncPlayback)
 watch(data.exhibits,value=>world?.updateLibrary(value))
 watch(account,value=>world?.setAccount(value))
 watch(roomSummary,value=>world?.setListeningRoom(value))

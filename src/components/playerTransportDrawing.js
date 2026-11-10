@@ -24,8 +24,11 @@ export function drawPlayerIcon(ctx, icon, x, y, size, color = '#ffffff', rotatio
   ctx.save(); ctx.translate(x, y); ctx.rotate(rotation); ctx.scale(size / 24, size / 24); ctx.translate(-12, -12)
   ctx.strokeStyle = ctx.fillStyle = color; ctx.lineWidth = 2; ctx.lineJoin = ctx.lineCap = 'round'
   if (modePaths[icon]) {
-    if (!cachedModePaths.has(icon)) cachedModePaths.set(icon,modePaths[icon].map(path=>new Path2D(path)))
-    cachedModePaths.get(icon).forEach(path=>ctx.stroke(path))
+    if (ctx.strokeSvg) modePaths[icon].forEach(path => ctx.strokeSvg(path))
+    else {
+      if (!cachedModePaths.has(icon)) cachedModePaths.set(icon,modePaths[icon].map(path=>new Path2D(path)))
+      cachedModePaths.get(icon).forEach(path=>ctx.stroke(path))
+    }
   } else if (icon === 'user') {
     ctx.beginPath();ctx.arc(12,8,4,0,Math.PI*2);ctx.stroke()
     ctx.beginPath();ctx.arc(12,21,8,Math.PI,Math.PI*2);ctx.stroke()

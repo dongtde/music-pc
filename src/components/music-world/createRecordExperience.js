@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { createCoverSurface } from './worldTextures'
+import { optimizeWorldMaterials } from './optimizeWorldMaterials.js'
 
 const ease = t => t*t*(3-2*t)
 
@@ -43,7 +44,7 @@ export function createRecordExperience({camera,invalidate,onChange}) {
     object.add(new THREE.Mesh(new THREE.BoxGeometry(1.43,1.43,.055),new THREE.MeshStandardMaterial({color:'#d4ccba',roughness:.8})))
     object.children[0].position.x=-.2;object.add(art.mesh)
     disc.object.rotation.x=Math.PI/2;disc.object.position.set(.32,.03,-.018);object.add(disc.object)
-    camera.add(object)
+    optimizeWorldMaterials(object);camera.add(object)
     const target=camera.aspect<1?new THREE.Vector3(0,.42,-3.2):new THREE.Vector3(.32,.08,-2.3),from=target.clone().add(new THREE.Vector3(0,-.22,-.6))
     if(source){source.getWorldPosition(from);camera.worldToLocal(from);source.visible=false}
     object.position.copy(from);object.rotation.set(-.08,-.15,-.045)

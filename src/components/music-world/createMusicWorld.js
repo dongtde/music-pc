@@ -14,12 +14,12 @@ import { createDiscoveryScreen } from './createDiscoveryScreen.js'
 import { FEED_IDS, FEED_LAYOUT } from './screenFeeds.js'
 import { createControlTerminal, TERMINAL_SLIDERS, TERMINAL_QUEUE } from './createControlTerminal.js'
 import { createWorldAvatars } from './createWorldAvatars.js'
+import { optimizeWorldMaterials } from './optimizeWorldMaterials.js'
 
 const KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'ShiftLeft', 'ShiftRight'])
-export async function createMusicWorld(canvas, { onStatus, onAction, onProgress, sampleAudio, onPresence, onSeat, signal } = {}) {
+export async function createMusicWorld(canvas, { onStatus, onAction, onProgress, sampleAudio, onPresence, onSeat, signal, quality: initialQuality = 'balanced' } = {}) {
   const scene = new THREE.Scene(); scene.background = new THREE.Color('#142330'); scene.fog = new THREE.FogExp2('#152737', .012)
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5))
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap
   renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = true
@@ -28,13 +28,29 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   const keys = new Set(), covers = [], hitTargets = [], textures = new Set(), practicals=[]
   const rhythm = createStageRhythm(), raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2()
   const visibleSurfaces = new THREE.Frustum(), viewProjection = new THREE.Matrix4()
+  const screenCorner = new THREE.Vector3()
+  let lastScreenResolution = -Infinity
+  function updateScreenResolution(surface, mesh) {
+    if (!surface.setResolution) return
+    const { width, height } = mesh.geometry.parameters
+    let left = Infinity, right = -Infinity, bottom = Infinity, top = -Infinity, near = false
+    for (const x of [-.5, .5]) for (const y of [-.5, .5]) {
+      screenCorner.set(x * width, y * height, 0).applyMatrix4(mesh.matrixWorld).project(viewCamera)
+      near ||= screenCorner.z < -1
+      left = Math.min(left, screenCorner.x); right = Math.max(right, screenCorner.x)
+      bottom = Math.min(bottom, screenCorner.y); top = Math.max(top, screenCorner.y)
+    }
+    // Match the projected drawing-buffer width with a little room for movement.
+    const pixels = Math.max((right - left) * canvas.width, (top - bottom) * canvas.height * width / height) * .5
+    surface.setResolution(near ? 2048 : Math.max(0, pixels) * 1.2)
+  }
   let frame = 0, last = 0, settle = 0, disposed = false, initialized = false, active = true, walking = false, reducedMotion = false
   let yaw = 0, pitch = .09, drag = null, previousTrack = '', previousScreen = '', lastStatus = 0, frameCount = 0
   let hoveredSurface = null
-  let previousLyrics=null
+  let previousLyrics=null,previousCover=''
   let playback = { track: {}, currentTime: 0, duration: 0, playing: false }, library = {}, lighting = { power: 0, live: false }
   let observer, screen, screenMesh, environment, concert, pavilion, records, lightShow, environments, terminal
-  let tour=null, pendingTravel=null, seated=false, seatId='', pointId='', seatMove=null, returnPose=null, quality='balanced'
+  let tour=null, pendingTravel=null, seated=false, seatId='', pointId='', seatMove=null, returnPose=null, quality=['smooth','balanced','high'].includes(initialQuality)?initialQuality:'balanced'
   let viewMode='third',bodyYaw=Math.PI,jumpHeight=0,jumpVelocity=0,seatEpoch=0,seatPending=false,membership='',roomConnected=false,lastPresence=0,lastPose=''
   const avatars=createWorldAvatars(invalidate);scene.add(avatars.group)
   const offset=new THREE.Vector3(),targetPosition=new THREE.Vector3()
@@ -281,6 +297,29 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   function visibility() { if (document.hidden) stop(); else invalidate() }
   function contextLost(event) { event.preventDefault(); stop(); active = false; onAction?.('error') }
 
+  function resizeRenderer() {
+    const { width, height } = canvas.getBoundingClientRect()
+    if (!width || !height) return
+    // A DPR cap alone turns a 1080p window into a 4.7-million-pixel render.
+    // Bound total pixels as well, keeping HiDPI detail in smaller windows.
+    const pixels = quality === 'smooth' ? 1280 * 720 : quality === 'high' ? 3840 * 2160 : 1920 * 1080
+    const ratio = Math.min(window.devicePixelRatio || 1, quality === 'smooth' ? 1 : quality === 'high' ? 2 : 1.5, Math.sqrt(pixels / (width * height)))
+    renderer.setDrawingBufferSize(width, height, ratio)
+    camera.aspect = width / height; camera.updateProjectionMatrix()
+    lastScreenResolution = -Infinity
+    records?.resize(); invalidate()
+  }
+
+  function setQuality(value) {
+    quality=['smooth','balanced','high'].includes(value)?value:'balanced'
+    terminal.setQuality(quality)
+    concert.setQuality(quality)
+    const size=quality==='smooth'?1024:2048
+    if(sun.shadow.mapSize.x!==size){sun.shadow.mapSize.set(size,size);sun.shadow.map?.dispose();sun.shadow.map=null}
+    renderer.shadowMap.needsUpdate=true
+    resizeRenderer()
+  }
+
   function setViewMode(value){viewMode=value==='first'?'first':'third';onStatus?.({viewMode});invalidate()}
   function jump(){
     if(disposed||!active||jumpVelocity||jumpHeight||seatMove||seatPending||records?.getState().inspecting)return
@@ -362,6 +401,11 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     const recordMotion=records.update(delta,lighting,reducedMotion)
     viewCamera.updateMatrixWorld()
     visibleSurfaces.setFromProjectionMatrix(viewProjection.multiplyMatrices(viewCamera.projectionMatrix,viewCamera.matrixWorldInverse))
+    if (now - lastScreenResolution > 250) {
+      lastScreenResolution = now
+      updateScreenResolution(screen, screenMesh); updateScreenResolution(terminal, terminal.mesh)
+      covers.forEach(({ surface }) => updateScreenResolution(surface, surface.mesh))
+    }
     let feedMotion = false
     covers.forEach(({ surface }) => {
       if (visibleSurfaces.intersectsObject(surface.mesh)) feedMotion = Boolean(surface.draw?.(now,audioLevels)) || feedMotion
@@ -411,7 +455,6 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     pavilion = gltf.scene; scene.add(pavilion)
     await avatars.load(renderer, event => onProgress?.(.65+(event.total ? event.loaded/event.total*.35 : 0)))
     if (disposed || signal?.aborted) throw new DOMException('World closed', 'AbortError')
-    onProgress?.(1)
     pavilion.traverse(object => {
       if (!object.isMesh) return
       object.castShadow = !object.material.transparent; object.receiveShadow = true
@@ -421,6 +464,11 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     })
     screen = createListeningScreen(invalidate)
     screenMesh = new THREE.Mesh(new THREE.PlaneGeometry(12.85,5.28), new THREE.MeshBasicMaterial({map:screen.texture,toneMapped:false}))
+    for (const layer of screen.layers) {
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(12.85*layer.width/2048,5.28*layer.height/840),new THREE.MeshBasicMaterial({map:layer.texture,toneMapped:false,transparent:true,depthWrite:false}))
+      mesh.position.set(12.85*((layer.x+layer.width/2)/2048-.5),5.28*(.5-(layer.y+layer.height/2)/840),.003)
+      screenMesh.add(mesh)
+    }
     screenMesh.name = 'world-music-screen'; pavilion.getObjectByName('music-screen').add(screenMesh); hitTargets.push(screenMesh)
     terminal=createControlTerminal(pavilion,hitTargets,invalidate)
     for (const side of ['archive','discover']) for (let index = 0; index < 4; index++) {
@@ -450,10 +498,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     lightShow=createWorldLightShow(scene,concert)
     records=createRecordExperience({camera:viewCamera,invalidate,onChange:onStatus})
     environments=createWorldScenes({scene,pavilion,renderer,ambient,sun,practicals,onChange:value=>{terminal.setScene(value.scene||environments?.getConfig().id||'rain',Boolean(value.sceneLoading));onStatus?.(value);invalidate()}})
-    observer = new ResizeObserver(() => {
-      const {width,height} = canvas.getBoundingClientRect(); if (!width || !height) return
-      renderer.setSize(width,height,false); camera.aspect=width/height; camera.updateProjectionMatrix();records?.resize(); invalidate()
-    }); observer.observe(canvas)
+    observer = new ResizeObserver(resizeRenderer); observer.observe(canvas)
     canvas.addEventListener('keydown',keydown); window.addEventListener('keyup',keyup); window.addEventListener('blur',clearMovement)
     canvas.addEventListener('blur',clearMovement); document.addEventListener('visibilitychange',visibility)
     canvas.addEventListener('pointerdown',pointerdown); canvas.addEventListener('pointermove',pointermove)
@@ -461,6 +506,13 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     canvas.addEventListener('pointerleave',clearScreenHover); canvas.addEventListener('blur',clearScreenHover); window.addEventListener('blur',clearScreenHover)
     canvas.addEventListener('wheel',wheel,{passive:false})
     scene.updateMatrixWorld(true)
+    optimizeWorldMaterials(scene)
+    setQuality(quality)
+    // Compile with the final, fixed light count before the page becomes interactive,
+    // including the beam materials that are invisible while playback is paused.
+    await renderer.compileAsync(scene,viewCamera)
+    if (disposed || signal?.aborted) throw new DOMException('World closed', 'AbortError')
+    onProgress?.(1)
     initialized=true;navigate('atrium',{immediate:true}); updateLibrary(library)
   } catch(error) { dispose(); throw error }
   return {
@@ -482,20 +534,14 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     inspectRecord(item){clearMovement();cancelTravel();stand(true);records.inspect(item)},
     dismissRecord(){records.dismiss()},
     openTerminal(){records.dismiss();navigate('terminal')},
-    setQuality(value){
-      quality=['smooth','balanced','high'].includes(value)?value:'balanced'
-      terminal.setQuality(quality)
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,quality==='smooth'?1:quality==='high'?2:1.5))
-      const size=quality==='smooth'?1024:2048
-      sun.shadow.mapSize.set(size,size);sun.shadow.map?.dispose();sun.shadow.map=null;renderer.shadowMap.needsUpdate=true
-      const {width,height}=canvas.getBoundingClientRect();renderer.setSize(width,height,false);invalidate()
-    },
+    setQuality,
     setActive(value) { active=Boolean(value); if(active)invalidate();else stop() },
     async setScene(id){const applied=await environments.select(id);if(applied)invalidate();return applied},
     setPlayback(value) {
       if(previousTrack!==value.track?.id || Math.abs((value.currentTime||0)-(playback.currentTime||0))>2) { rhythm.reset();lightShow?.reset(); previousTrack=value.track?.id }
       const stopMotion=Boolean(value.reducedMotion)&&!reducedMotion
       playback=value;reducedMotion=Boolean(value.reducedMotion)
+      lightShow.setEnabled(value.lightsEnabled!==false)
       if(stopMotion){
         if(seatMove){camera.position.copy(seatMove.to);if(seatMove.look)lookToward(seatMove.look);seatMove=null}
         if(pendingTravel){const next=pendingTravel;pendingTravel=null;beginTravel(next.station,next.onArrival,true)}
@@ -504,9 +550,11 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
       }
       const contentChanged=previousLyrics!==value.lyrics
       previousLyrics=value.lyrics
+      const coverChanged=previousCover!==value.track?.coverUrl
+      previousCover=value.track?.coverUrl
       covers.forEach(c => c.surface.setPlayback?.(value))
-      const signature=[value.track?.id,value.track?.name,value.track?.coverUrl,value.playing,value.loading,value.loadingTrack?.id,(value.pendingKeys||[]).join(','),value.volume,value.queueVersion,value.playMode,value.queueLength,value.line?.text,value.currentTime,value.commentsTotal,value.danmakuEnabled,value.danmakuOpacity,reducedMotion].join('|')
-      if(signature!==previousScreen||contentChanged){previousScreen=signature;invalidate()}
+      const signature=[value.track?.id,value.track?.name,value.playing,value.loading,value.loadingTrack?.id,(value.pendingKeys||[]).join(','),value.volume,value.queueVersion,value.playMode,value.queueLength,value.line?.text,value.currentTime,value.commentsTotal,value.danmakuEnabled,value.danmakuOpacity,value.lightsEnabled,reducedMotion].join('|')
+      if(signature!==previousScreen||contentChanged||coverChanged){previousScreen=signature;invalidate()}
     },
     getState() { return { x:camera.position.x,y:camera.position.y,z:camera.position.z,yaw,pitch,pointId,seatId,frameCount,avatar:avatarPose(),avatars:avatars.getState(),viewMode,lighting:{...lighting},lightShow:lightShow?.getState(),environment:environments?.getState(),covers:covers.length,seated,seatTransition:Boolean(seatMove),navigating:Boolean(tour||pendingTravel),quality,record:records?.getState(),screen:screen?.getState(),terminal:terminal?.getState(),feeds:covers.filter(c=>c.side==='discover').map(c=>c.surface.getState()) } },
   }

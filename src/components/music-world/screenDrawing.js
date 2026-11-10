@@ -13,10 +13,28 @@ export function text(ctx, value, x, y, size = 24, color = ink.light, width, weig
 export function rounded(ctx, x, y, w, h, radius, color) {
   ctx.fillStyle = color; ctx.beginPath(); ctx.roundRect(x, y, w, h, radius); ctx.fill()
 }
+const croppedImages = new WeakMap()
 export function cropImage(ctx, image, x, y, size, radius = 0) {
   ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, size, size, radius); ctx.clip()
   const side = Math.min(image.naturalWidth || image.width, image.naturalHeight || image.height)
-  ctx.drawImage(image, ((image.naturalWidth || image.width) - side) / 2, ((image.naturalHeight || image.height) - side) / 2, side, side, x, y, size, size); ctx.restore()
+  if (image.naturalWidth) {
+    const source = image.currentSrc || image.src, edge = Math.ceil(size)
+    let cached = croppedImages.get(image)
+    if (cached?.source !== source) { cached = { source, sizes: new Map() }; croppedImages.set(image, cached) }
+    let raster = cached.sizes.get(edge)
+    if (!raster) {
+      // Decode/crop each static cover at its display size once, instead of
+      // reading and scaling the full-resolution image on every music frame.
+      if (cached.sizes.size >= 8) cached.sizes.delete(cached.sizes.keys().next().value)
+      raster = document.createElement('canvas'); raster.width = raster.height = edge
+      raster.getContext('2d', { willReadFrequently: true }).drawImage(image, (image.naturalWidth-side)/2, (image.naturalHeight-side)/2, side, side, 0, 0, edge, edge)
+      cached.sizes.set(edge, raster)
+    }
+    ctx.drawImage(raster, x, y, size, size)
+  } else {
+    ctx.drawImage(image, (image.width-side)/2, (image.height-side)/2, side, side, x, y, size, size)
+  }
+  ctx.restore()
 }
 export function createScreenImages(invalidate, limit = 48) {
   const images = new Map(); let disposed = false

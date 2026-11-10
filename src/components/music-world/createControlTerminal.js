@@ -14,11 +14,11 @@ export const TERMINAL_MODES = [{value:'shuffle',label:'随机播放'},{value:'or
 const WIDTH=1600,HEIGHT=650,QUALITIES=[{id:'smooth',label:'流畅'},{id:'balanced',label:'均衡'},{id:'high',label:'精细'}]
 const EMPTY_QUEUE=[]
 export function createControlTerminal(pavilion, hitTargets, invalidate) {
-  const surface=canvasSurface(WIDTH,HEIGHT),ctx=surface.context
+  const surface=canvasSurface(WIDTH,HEIGHT,{dynamic:true,onReady:invalidate}),ctx=surface.context
   const mesh=new THREE.Mesh(new THREE.PlaneGeometry(4.14,1.68),new THREE.MeshBasicMaterial({map:surface.texture,toneMapped:false}))
   mesh.name='world-control-terminal-screen';mesh.userData={action:'terminal',hint:'控制终端 · 点歌、滚动列表或调节播放'}
   pavilion.getObjectByName('terminal-screen').add(mesh);hitTargets.push(mesh)
-  let dirty=true,signature='',zones=[],sceneId='rain',sceneLoading=false,quality='balanced',lastDraw=0
+  let dirty=true,signature='',zones=[],sceneId='rain',sceneLoading=false,quality='balanced',lastDraw=0,previousCover=''
   let playback={},queue=[],queueVersion,queueReference,currentId='',scroll=0,menu=''
   let account={isLoggedIn:false,displayName:'点击登录',avatarUrl:''}
   let room={id:'',isHost:false,connected:false,count:0,capacity:10,status:''}
@@ -47,6 +47,12 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
   function slider(x,y,w,value,action,color=ink.ice){
     rounded(ctx,x,y,w,5,3,'#7296a345');rounded(ctx,x,y,Math.max(2,w*value),5,3,color)
     rounded(ctx,x+w*value-6,y-4,13,13,7,ink.light);zone(x,y-20,w,45,action,undefined,action==='volume'?'调节音量':action==='progress'?'调节进度':'调节弹幕不透明度')
+  }
+  function settingToggle(y,label,enabled,action){
+    text(ctx,label,1154,y+26,21,ink.light)
+    rounded(ctx,1490,y,72,32,16,enabled?'#38786f':'#354b56')
+    rounded(ctx,enabled?1533:1496,y+5,22,22,11,enabled?ink.ice:ink.muted)
+    zone(1154,y-6,410,44,action,null,(enabled?'关闭':'开启')+label)
   }
   function drawQueue(state,now,audioLevels){
     text(ctx,'播放列表',36,116,25,ink.light)
@@ -99,15 +105,12 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
     })
     text(ctx,'画质',1154,360,18,ink.muted)
     QUALITIES.forEach((option,index)=>button(1154+index*140,378,130,40,option.label,'quality',option.id,{selected:quality===option.id,size:19}))
-    text(ctx,'弹幕',1154,467,21,ink.light)
-    const enabled=state.danmakuEnabled!==false
-    rounded(ctx,1490,439,72,32,16,enabled?'#38786f':'#354b56')
-    rounded(ctx,enabled?1533:1496,444,22,22,11,enabled?ink.ice:ink.muted)
-    zone(1475,431,89,50,'danmaku-toggle',null,enabled?'关闭弹幕':'开启弹幕')
-    text(ctx,'不透明度',1154,516,17,ink.muted)
+    settingToggle(430,'舞台灯光',state.lightsEnabled!==false,'lights-toggle')
+    settingToggle(478,'弹幕',state.danmakuEnabled!==false,'danmaku-toggle')
+    text(ctx,'不透明度',1154,548,17,ink.muted)
     const opacity=normalizeDanmakuOpacity(state.danmakuOpacity)
-    slider(1250,508,247,opacity,'danmaku-opacity')
-    text(ctx,Math.round(opacity*100)+'%',1510,517,17,ink.light)
+    slider(1250,540,247,opacity,'danmaku-opacity')
+    text(ctx,Math.round(opacity*100)+'%',1510,549,17,ink.light)
     button(1154,575,195,46,'设置 ↗','settings',null,{size:20})
     button(1365,575,199,46,'返回 2D ↗','environment','2d',{size:20})
   }
@@ -161,7 +164,8 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
     else if(currentId!==nextId){currentId=nextId;revealCurrent()}
     scroll=THREE.MathUtils.clamp(scroll,0,maxScroll())
     const track=state.track||{},motion=!state.reducedMotion&&(state.loading||queueList.getState().animating)
-    const next=[track.id,track.name,track.artist,track.coverUrl,state.playing,state.loading,state.loadingTrack?.id,(state.pendingKeys||[]).join(','),state.reducedMotion,Math.floor(state.currentTime*4),state.duration,state.volume,state.playMode,state.queueVersion,queue.length,state.danmakuEnabled,state.danmakuOpacity,sceneId,sceneLoading,quality,menu,scroll,motion?Math.floor(now/50):0].join('|')
+    if(track.coverUrl!==previousCover){previousCover=track.coverUrl;dirty=true}
+    const next=[track.id,track.name,track.artist,state.playing,state.loading,state.loadingTrack?.id,(state.pendingKeys||[]).join(','),state.reducedMotion,Math.floor(state.currentTime*4),state.duration,state.volume,state.playMode,state.queueVersion,queue.length,state.danmakuEnabled,state.danmakuOpacity,state.lightsEnabled,sceneId,sceneLoading,quality,menu,scroll,motion?Math.floor(now/50):0].join('|')
     if(!dirty&&(signature===next||now-lastDraw<40))return motion
     dirty=false;lastDraw=now;signature=next;zones=[]
     ctx.fillStyle='#0b202b';ctx.fillRect(0,0,WIDTH,HEIGHT)
@@ -209,6 +213,7 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
     return queue.length>0&&x>=area.x&&x<=area.x+area.width&&y>=area.y&&y<=area.y+area.height
   }
   return {mesh,draw,hitTest,select,closeMenus,containsQueue,scrollQueue,
+    setResolution(width){if(surface.setScale(width/WIDTH))dirty=true},
     setHover(uv){draw(playback);return queueList.setHover(uv?{x:uv.x*WIDTH,y:(1-uv.y)*HEIGHT}:null)},
     cancelClick:()=>queueList.cancelClick(),
     hint:uv=>rawHit(uv)?.label||'控制终端',
@@ -220,7 +225,7 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
       if(next.isLoggedIn===account.isLoggedIn&&next.displayName===account.displayName&&next.avatarUrl===account.avatarUrl)return
       account=next;changed()
     },
-    getState:()=>({scene:sceneId,loading:sceneLoading,quality,menu,scroll,account:{...account},room:{...room},queueLength:queue.length,...queueList.getState(),danmakuEnabled:playback.danmakuEnabled!==false,danmakuOpacity:normalizeDanmakuOpacity(playback.danmakuOpacity),controls:zones.map(z=>z.action)}),
+    getState:()=>({scene:sceneId,loading:sceneLoading,quality,menu,scroll,account:{...account},room:{...room},queueLength:queue.length,...queueList.getState(),lightsEnabled:playback.lightsEnabled!==false,danmakuEnabled:playback.danmakuEnabled!==false,danmakuOpacity:normalizeDanmakuOpacity(playback.danmakuOpacity),controls:zones.map(z=>z.action)}),
     dispose(){images.dispose();surface.texture.dispose()},
   }
 }

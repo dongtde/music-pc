@@ -150,7 +150,15 @@ export function createConcertLights(scene) {
     })
   }
 
-  return { update, fixtures }
+  function setQuality(quality) {
+    // Keep the light count stable across play/pause. Changing visibility changes
+    // every lit material's shader; intensity can fade without recompiling it.
+    fixtures.forEach(({ spot, index }) => {
+      spot.visible = quality === 'smooth' ? index === 2 : quality === 'balanced' ? index % 3 === 1 : true
+    })
+  }
+
+  return { update, fixtures, setQuality }
 }
 
 function combine(parts) {
