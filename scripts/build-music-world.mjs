@@ -98,21 +98,64 @@ box([13.12,5.55,.20],dark,[0,3.55,-19.64],.09)
 for(const x of [-6.7,6.7])box([.028,5.62,.028],light,[x,3.55,-19.67],.009)
 anchor('music-screen',[0,3.55,-19.5])
 
+const speakerShell=material('speaker-graphite','#202730',.62,.32)
+const speakerFace=material('speaker-baffle','#101820',.32,.48)
+const speakerTrim=material('speaker-titanium','#8896a2',.85,.26)
+const speakerCone=material('speaker-diaphragm','#526471',.48,.42)
+const speakerWood=material('speaker-smoked-walnut','#352920',.05,.64)
+const speakerBlue=material('speaker-light-blue','#529abd',.2,.32,{emissive:'#4fc9ef',emissiveIntensity:.22})
+const speakerViolet=material('speaker-light-violet','#767eb4',.2,.32,{emissive:'#a092f0',emissiveIntensity:.22})
 function speaker(x,z) {
  const group=anchor(`reference-speaker-${x}`,[x,0,z])
- box([1.62,4.6,1.65],wood,[0,2.48,0],.16,group)
- box([1.42,4.3,.12],dark,[0,2.48,.85],.11,group)
- box([1.85,.12,1.9],metal,[0,.16,0],.03,group)
- for(const x of [-.61,.61])for(const z of [-.55,.55])cylinder(.07,.2,rubber,[x,.24,z],group)
- for(const [y,r] of [[1.1,.48],[2.4,.48],[3.7,.24]]){
-  torus(r,.06,rubber,[0,y,.93],group)
-  const profile=[[.01,-.14],[r*.3,-.15],[r*.83,-.07],[r,.0]].map(p=>new THREE.Vector2(...p))
-  const cone=add(new THREE.LatheGeometry(profile,64),metal,[0,y,.93],group);cone.rotation.x=Math.PI/2
-  const cap=add(new THREE.SphereGeometry(r*.3,24,16),rubber,[0,y,.94],group);cap.scale.z=.36
-  for(let i=0;i<8;i++){const a=i/8*Math.PI*2;const bolt=cylinder(.017,.018,metal,[Math.cos(a)*(r+.08),y+Math.sin(a)*(r+.08),.94],group);bolt.rotation.x=Math.PI/2}
+ // The enclosure floats above a separate machined plinth on four isolators.
+ box([1.86,.13,1.94],speakerShell,[0,.14,0],.045,group)
+ box([1.8,.025,1.88],speakerTrim,[0,.217,0],.012,group)
+ for(const sx of [-.60,.60])for(const sz of [-.59,.59]){
+  cylinder(.10,.12,speakerTrim,[sx,.29,sz],group)
+  cylinder(.075,.09,rubber,[sx,.375,sz],group)
  }
- box([.035,4,.02],brass,[-.67,2.48,.93],.007,group)
- for(let i=0;i<8;i++)box([.065,.22,.06],dark,[-.35+i*.1,.62,.92],.025,group)
+ box([1.64,4.34,1.60],speakerShell,[0,2.61,0],.14,group)
+ for(const side of [-1,1]){
+  box([.055,3.95,1.25],speakerWood,[side*.815,2.62,-.06],.022,group)
+  for(let i=0;i<5;i++)box([.009,3.73,.012],speakerShell,[side*.846,2.62,-.48+i*.21],.003,group)
+ }
+ box([1.49,4.14,.095],speakerTrim,[0,2.61,.81],.10,group)
+ box([1.435,4.085,.085],speakerFace,[0,2.61,.866],.09,group)
+ box([1.39,.018,1.37],speakerBlue,[0,.444,.025],.008,group)
+ // Recessed waveguide and a small polished dome for the high-frequency driver.
+ const waveguide=add(new THREE.LatheGeometry([[.055,-.08],[.09,-.065],[.19,-.026],[.27,0],[.30,.015]].reverse().map(p=>new THREE.Vector2(...p)),48),speakerCone,[0,4.02,1],group);waveguide.rotation.x=Math.PI/2
+ torus(.304,.018,speakerTrim,[0,4.02,1.011],group)
+ torus(.277,.022,rubber,[0,4.02,.998],group)
+ const tweeter=add(new THREE.SphereGeometry(.083,24,12),speakerTrim,[0,4.02,.985],group);tweeter.scale.z=.6
+ for(const [index,y] of [1.43,2.76].entries()){
+  const radius=.48
+  const bezel=add(new THREE.LatheGeometry([[.452,-.03],[.567,-.03],[.567,.03],[.452,.03]].map(p=>new THREE.Vector2(...p)),64),speakerShell,[0,y,.936],group);bezel.rotation.x=Math.PI/2
+  torus(.548,.019,speakerTrim,[0,y,.98],group)
+  // Two slender luminous arcs, separated by dark precision-machined joints.
+  for(const half of [0,1]){
+   const ring=add(new THREE.TorusGeometry(.521,.009,6,64,Math.PI-.12),half?speakerViolet:speakerBlue,[0,y,1.001],group)
+   ring.rotation.z=half*Math.PI+.06
+  }
+  torus(radius,.039,rubber,[0,y,.975],group)
+  torus(.442,.009,speakerTrim,[0,y,.966],group)
+  const driver=joint(`speaker-driver-${x}-${index}`,[0,y,.99],group)
+  driver.userData.speakerDriver=true;driver.userData.driverIndex=index
+  const profile=[[.01,-.044],[.13,-.044]]
+  for(let i=0;i<=18;i++){const r=.14+i*.0165;profile.push([r,-.044+(r-.14)*.14+Math.sin(i*Math.PI/2)*.0025])}
+  profile.push([.447,0])
+  const cone=add(new THREE.LatheGeometry(profile.reverse().map(p=>new THREE.Vector2(...p)),64),speakerCone,[0,0,0],driver);cone.rotation.x=Math.PI/2
+  const cap=add(new THREE.SphereGeometry(.145,24,12),speakerShell,[0,0,-.027],driver);cap.scale.z=.38
+  for(let i=0;i<6;i++){
+   const a=i/6*Math.PI*2+Math.PI/6
+   const bolt=cylinder(.009,.008,speakerTrim,[Math.cos(a)*.566,y+Math.sin(a)*.566,.975],group);bolt.rotation.x=Math.PI/2
+  }
+ }
+ // A dark slot port with an inset metal lip replaces the old decorative grille.
+ box([.84,.15,.025],speakerTrim,[0,.69,.922],.045,group)
+ box([.79,.105,.03],rubber,[0,.69,.942],.035,group)
+ box([.66,.014,.008],speakerShell,[0,.657,.96],.004,group)
+ // Small inlaid sound-wave maker's mark, without extra copy.
+ for(let i=0;i<5;i++)box([.012,.025+(.045-Math.abs(i-2)*.015),.008],speakerTrim,[(i-2)*.035,4.48,.918],.004,group)
 }
 speaker(-8.3,-16.9);speaker(8.3,-16.9)
 
@@ -223,5 +266,4 @@ for(const [root,materials] of batches)for(const [mat,list] of materials){const m
 const result=await new GLTFExporter().parseAsync(scene,{binary:true,onlyVisible:true})
 await mkdir('public/models',{recursive:true})
 await writeFile('public/models/resonance-pavilion.glb',Buffer.from(result))
-await writeFile('public/models/README.md','# Resonance music environments\n\nRun `node scripts/build-music-world.mjs` for the glass pavilion and shared equipment. Run `node scripts/build-music-scenes.mjs` for the vinyl studio and live stage shells. Version 3 separates the architecture from the equipment so changing scenes retains the player, archive interactions and seating. The central control terminal includes a modeled housing, inclined touchscreen, supports and ventilation slots. All geometry is authored programmatically for this project with PBR materials; no external model licenses are required.\n')
 console.log(`Generated resonance-pavilion.glb: ${(result.byteLength/1024/1024).toFixed(2)} MB`)

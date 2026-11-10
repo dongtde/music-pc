@@ -15,6 +15,7 @@ import { FEED_IDS, FEED_LAYOUT } from './screenFeeds.js'
 import { createControlTerminal, TERMINAL_SLIDERS, TERMINAL_QUEUE } from './createControlTerminal.js'
 import { createWorldAvatars } from './createWorldAvatars.js'
 import { optimizeWorldMaterials } from './optimizeWorldMaterials.js'
+import { createSpeakerMotion } from './createSpeakerMotion.js'
 
 const KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'ShiftLeft', 'ShiftRight'])
 export async function createMusicWorld(canvas, { onStatus, onAction, onProgress, sampleAudio, onPresence, onSeat, signal, quality: initialQuality = 'balanced' } = {}) {
@@ -49,7 +50,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   let hoveredSurface = null
   let previousLyrics=null,previousCover=''
   let playback = { track: {}, currentTime: 0, duration: 0, playing: false }, library = {}, lighting = { power: 0, live: false }
-  let observer, screen, screenMesh, environment, concert, pavilion, records, lightShow, environments, terminal
+  let observer, screen, screenMesh, environment, concert, pavilion, records, lightShow, environments, terminal, speakers
   let tour=null, pendingTravel=null, seated=false, seatId='', pointId='', seatMove=null, returnPose=null, quality=['smooth','balanced','high'].includes(initialQuality)?initialQuality:'balanced'
   let viewMode='third',bodyYaw=Math.PI,jumpHeight=0,jumpVelocity=0,seatEpoch=0,seatPending=false,membership='',roomConnected=false,lastPresence=0,lastPose=''
   const avatars=createWorldAvatars(invalidate);scene.add(avatars.group)
@@ -396,6 +397,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     if(now-lastPresence>=50&&(signature!==lastPose||now-lastPresence>1000)){lastPresence=now;lastPose=signature;onPresence?.(pose)}
     const audioLevels = playback.playing && !reducedMotion ? sampleAudio?.() : null
     lighting = rhythm.update({ playing: playback.playing, reducedMotion, levels: audioLevels }, delta)
+    const speakerMotion = speakers.update(lighting, delta, { reducedMotion, lightsEnabled: playback.lightsEnabled !== false })
     const lightSettling=lightShow.update(lighting, environments.getConfig(), reducedMotion,delta,seated,quality)
     const weatherMotion=environments.update(delta,lighting,reducedMotion)
     const recordMotion=records.update(delta,lighting,reducedMotion)
@@ -421,7 +423,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
       const hint=target?.userData.hint|| (target?.userData.item?`拿起唱片 · ${target.userData.item.name}`:target?.userData.action==='sit'?'坐下听歌':target?.name==='world-music-screen'?'操作音乐大屏':target?.userData.station?'前往'+WORLD_STATIONS[target.userData.station]?.label:'')
       onStatus?.({ x: camera.position.x, z: camera.position.z, yaw, live: lighting.live, walking, jumping:jumpHeight>0,viewMode,frameCount,hint,lightingCue:lightShow.getState().cue,tempo:lighting.tempo })
     }
-    if (!frame && (tour || pendingTravel || seatMove || avatarMotion || jumpHeight || jumpVelocity || recordMotion || weatherMotion || lightSettling || screenMotion || terminalMotion || feedMotion || keys.size || drag || Math.abs(camera.fov-fov)>.03 || (playback.playing && !reducedMotion) || lighting.settling || now < settle)) frame = requestAnimationFrame(render)
+    if (!frame && (tour || pendingTravel || seatMove || avatarMotion || jumpHeight || jumpVelocity || recordMotion || weatherMotion || speakerMotion || lightSettling || screenMotion || terminalMotion || feedMotion || keys.size || drag || Math.abs(camera.fov-fov)>.03 || (playback.playing && !reducedMotion) || lighting.settling || now < settle)) frame = requestAnimationFrame(render)
   }
   function updateLibrary(data) {
     library = data
@@ -459,9 +461,10 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
       if (!object.isMesh) return
       object.castShadow = !object.material.transparent; object.receiveShadow = true
       const name = object.material.name
-      const kind = name === 'walnut' ? 'wood' : name === 'basalt' ? 'stone' : name === 'woven-fabric' ? 'fabric' : name === 'brushed-aluminium' ? 'metal' : ''
+      const kind = name === 'walnut' || name === 'speaker-smoked-walnut' ? 'wood' : name === 'basalt' ? 'stone' : name === 'woven-fabric' ? 'fabric' : name === 'brushed-aluminium' || name === 'speaker-titanium' ? 'metal' : ''
       if (kind && !object.material.bumpMap) { const texture = materialTexture(kind); textures.add(texture); object.material.bumpMap = texture; object.material.bumpScale = ({metal:.002,wood:.008,fabric:.012,stone:.018})[kind]; object.material.roughnessMap = texture }
     })
+    speakers = createSpeakerMotion(pavilion)
     screen = createListeningScreen(invalidate)
     screenMesh = new THREE.Mesh(new THREE.PlaneGeometry(12.85,5.28), new THREE.MeshBasicMaterial({map:screen.texture,toneMapped:false}))
     for (const layer of screen.layers) {
