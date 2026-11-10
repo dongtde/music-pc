@@ -91,8 +91,6 @@ export function createListeningScreen(invalidate) {
         drawPlayerIcon(ctx, icon, control.x, 795, control.action === 'toggle' ? 29 : 25, screenInk.white, icon === 'loading' && !state.reducedMotion ? now / 150 : 0)
         ctx.restore()
       }
-      ctx.save(); ctx.strokeStyle = screenInk.muted; ctx.lineWidth = 1.7
-      ctx.beginPath(); ctx.roundRect(1603, 783, 28, 20, 5); ctx.moveTo(1610, 803); ctx.lineTo(1607, 808); ctx.lineTo(1618, 803); ctx.stroke(); ctx.restore()
       ctx.textAlign = 'right'; ctx.font = '400 25px Bahnschrift, "Segoe UI", sans-serif'; ctx.fillStyle = screenInk.white
       ctx.fillText(formatTime(state.currentTime) + '  /  ' + formatTime(state.duration), 1984, 804)
       ctx.restore(); layer.refresh(); transportKey = nextTransport
@@ -112,7 +110,6 @@ export function createListeningScreen(invalidate) {
       const x = uv.x * WIDTH, y = (1 - uv.y) * HEIGHT
       if (y >= 735 && y <= 765 && x >= 64 && x <= 1984) return { action: 'progress', payload: (x - 64) / 1920 }
       if (y >= 767 && y <= 825) {
-        if (x >= 1583 && x <= 1651) return { action: 'comments' }
         if (!playback.loading) for (const control of TRANSPORT) if (Math.abs(x - control.x) <= 30) return { action: control.action }
       }
       if (hitLine && x >= 364 && x <= 1684 && y >= 256 && y <= 584) return { action: 'lyric', payload: hitLine.seconds }
