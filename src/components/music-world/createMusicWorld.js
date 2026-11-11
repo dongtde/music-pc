@@ -16,9 +16,11 @@ import { createControlTerminal, TERMINAL_SLIDERS, TERMINAL_QUEUE } from './creat
 import { createWorldAvatars } from './createWorldAvatars.js'
 import { optimizeWorldMaterials } from './optimizeWorldMaterials.js'
 import { createSpeakerMotion } from './createSpeakerMotion.js'
+import { createListeningLobbyScreen } from './createListeningLobbyScreen.js'
+import { createScreenProjection } from './createScreenProjection.js'
 
 const KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'ShiftLeft', 'ShiftRight'])
-export async function createMusicWorld(canvas, { onStatus, onAction, onProgress, sampleAudio, onPresence, onSeat, signal, quality: initialQuality = 'balanced' } = {}) {
+export async function createMusicWorld(canvas, { onStatus, onAction, onProgress, onListeningScreen, sampleAudio, onPresence, onSeat, signal, quality: initialQuality = 'balanced' } = {}) {
   const scene = new THREE.Scene(); scene.background = new THREE.Color('#142330'); scene.fog = new THREE.FogExp2('#152737', .012)
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1
@@ -48,9 +50,23 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   let frame = 0, last = 0, settle = 0, disposed = false, initialized = false, active = true, walking = false, reducedMotion = false
   let yaw = 0, pitch = .09, drag = null, previousTrack = '', previousScreen = '', lastStatus = 0, frameCount = 0
   let hoveredSurface = null
+  let listeningInputOpen = false, listeningTransform = ''
+  const projectListeningScreen = createScreenProjection()
+  function syncListeningScreen() {
+    if (!listeningInputOpen || !lobbyScreen) return
+    const rect = canvas.getBoundingClientRect(), parent = canvas.parentElement.getBoundingClientRect()
+    const placement = projectListeningScreen(lobbyScreen.mesh, viewCamera, { width: rect.width, height: rect.height, left: rect.left - parent.left, top: rect.top - parent.top })
+    if ((placement?.transform || '') !== listeningTransform) { listeningTransform = placement?.transform || ''; onListeningScreen?.(placement) }
+  }
+  function setListeningInputOpen(value) {
+    listeningInputOpen = Boolean(value)
+    if (listeningInputOpen) { clearMovement(); cancelTravel(); clearScreenHover(); syncListeningScreen() }
+    else { listeningTransform = ''; onListeningScreen?.(null) }
+    invalidate()
+  }
   let previousLyrics=null,previousCover=''
   let playback = { track: {}, currentTime: 0, duration: 0, playing: false }, library = {}, lighting = { power: 0, live: false }
-  let observer, screen, screenMesh, environment, concert, pavilion, records, lightShow, environments, terminal, speakers
+  let observer, screen, screenMesh, environment, concert, pavilion, records, lightShow, environments, terminal, speakers, lobbyScreen
   let tour=null, pendingTravel=null, seated=false, seatId='', pointId='', seatMove=null, returnPose=null, quality=['smooth','balanced','high'].includes(initialQuality)?initialQuality:'balanced'
   let viewMode='third',bodyYaw=Math.PI,jumpHeight=0,jumpVelocity=0,seatEpoch=0,seatPending=false,membership='',roomConnected=false,lastPresence=0,lastPose=''
   const avatars=createWorldAvatars(invalidate);scene.add(avatars.group)
@@ -68,7 +84,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   function clearMovement() { keys.clear(); drag = null; walking=false }
   function stop() { cancelAnimationFrame(frame); frame = 0; last = 0; clearMovement(); clearScreenHover();jumpHeight=jumpVelocity=0;if(!seated&&!seatMove)camera.position.y=WORLD_EYE_HEIGHT;if(initialized)onPresence?.(avatarPose(),true) }
   function updateScreenHover(hit) {
-    const next = hit?.object.userData.action === 'terminal' ? terminal : hit?.object.userData.action === 'feed' ? covers.find(entry => entry.surface.mesh === hit.object)?.surface : null
+    const next = hit?.object.userData.action === 'terminal' ? terminal : hit?.object.userData.action === 'lobby' ? lobbyScreen : hit?.object.userData.action === 'feed' ? covers.find(entry => entry.surface.mesh === hit.object)?.surface : null
     if (hoveredSurface !== next) { hoveredSurface?.setHover(null); hoveredSurface?.cancelClick() }
     hoveredSurface = next
     hoveredSurface?.setHover(hit.uv)
@@ -139,7 +155,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     selectDestination(screen.id,{ station: 'discover', focusedScreen: id, location: screen.label })
   }
   function focusRecord(index, { immediate = false } = {}) {
-    const display=WORLD_RECORD_DISPLAYS[index];if(!display)return
+    const display=WORLD_RECORD_DISPLAYS.find(item=>item.target===index);if(!display)return
     terminal?.closeMenus();records?.dismiss();travelTo(display.view,null,immediate)
     selectDestination(display.id,{station:'archive',focusedScreen:'',location:display.label})
   }
@@ -171,6 +187,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     else navigate(point.id,options)
   }
   function setKey(code, pressed) {
+    if (listeningInputOpen) return
     if(!KEYS.has(code)||records?.getState().inspecting)return
     if(pressed){
       clearScreenHover()
@@ -183,6 +200,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     }else keys.delete(code)
   }
   function keydown(event) {
+    if (listeningInputOpen) { event.stopPropagation(); if (event.code === 'Escape') { event.preventDefault(); onAction?.('lobby-input-close') } return }
     if (event.ctrlKey || event.metaKey || event.altKey) return
     if (KEYS.has(event.code)) { event.preventDefault(); setKey(event.code, true) }
     if (event.code === 'Home') { event.preventDefault(); navigate('atrium') }
@@ -193,11 +211,13 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
       raycaster.setFromCamera(new THREE.Vector2(0,0),viewCamera)
       const object = firstHit()?.object, delta = event.code === 'PageDown' ? 1 : -1
       if (object?.userData.action === 'feed') { event.preventDefault(); onAction?.('feed-scroll', { id: object.userData.payload, delta: delta * 4 }) }
+      if (object?.userData.action === 'lobby') { event.preventDefault(); lobbyScreen.scroll(delta * 3) }
     }
     if (event.code === 'Escape') {clearMovement();cancelTravel();terminal?.closeMenus();records?.dismiss();stand()}
   }
   function keyup(event) { keys.delete(event.code) }
   function pointerdown(event) {
+    if (listeningInputOpen) { event.preventDefault(); onAction?.('lobby-input-close'); return }
     if (event.button !== 0 || records?.getState().inspecting) return
     cancelTravel()
     canvas.focus({ preventScroll: true }); canvas.setPointerCapture(event.pointerId)
@@ -222,12 +242,13 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     drag = { id: event.pointerId, x: event.clientX, y: event.clientY, distance: 0, action:queueDrag?'terminal-queue':action, feed: hit?.object.userData.payload, units, accumulated: 0 }; invalidate()
   }
   function pointermove(event) {
+    if (listeningInputOpen) return
     if (!drag) {
       setPointer(event); raycaster.setFromCamera(pointer,viewCamera)
       const hit=firstHit(),action=hit?.object.userData.action
       updateScreenHover(hit)
-      canvas.style.cursor = ['feed','terminal'].includes(action) ? 'pointer' : 'grab'
-      canvas.title=action==='terminal'?terminal.hint(hit.uv):''
+      canvas.style.cursor = ['feed','terminal','lobby'].includes(action) ? 'pointer' : 'grab'
+      canvas.title=action==='terminal'?terminal.hint(hit.uv):action==='lobby'?lobbyScreen.hint(hit.uv):''
       return
     }
     if (drag.id !== event.pointerId) return
@@ -247,17 +268,20 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
         drag.accumulated = 0
       }
     }
-    else if (drag.action === 'terminal') { /* A swipe across the terminal keeps the display in view. */ }
+    else if (drag.action === 'terminal' || drag.action === 'lobby') { /* Keep touch displays in view while swiping. */ }
     else { if(seatMove)seatMove.look=null; yaw -= x * .003; pitch = THREE.MathUtils.clamp(pitch - y * .0025, -.9, 1.12) }
     drag.x = event.clientX; drag.y = event.clientY; invalidate()
   }
   function wheel(event) {
+    if (listeningInputOpen) { event.preventDefault(); return }
     hoveredSurface?.cancelClick()
     setPointer(event); raycaster.setFromCamera(pointer,viewCamera)
     const hit=firstHit(),target=hit?.object
     if (target?.userData.action === 'feed') {
       event.preventDefault(); cancelTravel()
       onAction?.('feed-scroll', { id: target.userData.payload, delta: event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 600 : 1) / 140 })
+    } else if(target?.userData.action==='lobby') {
+      event.preventDefault();cancelTravel();lobbyScreen.scroll(event.deltaY)
     } else if(target?.userData.action==='terminal'&&terminal.containsQueue(hit.uv)) {
       event.preventDefault();cancelTravel();terminal.scrollQueue(event.deltaY*(event.deltaMode===1?16:event.deltaMode===2?600:1)/100)
     }
@@ -285,6 +309,9 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
       else onAction?.('listen')
     } else if(hit.object.userData.action==='terminal'){
       const action=terminal.select(hit.uv,options)
+      if(action)onAction?.(action.action,action.payload)
+    } else if(hit.object.userData.action==='lobby'){
+      const action=lobbyScreen.select(hit.uv)
       if(action)onAction?.(action.action,action.payload)
     } else if(hit.object.userData.action==='feed'){
       const action = covers.find(c => c.surface.mesh === hit.object)?.surface.select(hit.uv,options)
@@ -415,6 +442,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     const screenMotion = visibleSurfaces.intersectsObject(screenMesh) ? screen.draw(playback, now) : false
     const terminalMotion = visibleSurfaces.intersectsObject(terminal.mesh) ? terminal.draw(playback, now,audioLevels) : false
     try { renderer.render(scene, viewCamera) } catch { active=false;stop();onAction?.('error');return }
+    syncListeningScreen()
     frameCount++
     if (now - lastStatus > 200) {
       lastStatus = now
@@ -428,14 +456,14 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   function updateLibrary(data) {
     library = data
     covers.forEach(({ surface, side, index }) => {
-      if(side==='discover')return
-      const item = (side === 'archive' ? library.archive : library.discover)?.[index]
+      if(side!=='archive')return
+      const item = library.archive?.[index>2?index-1:index]
       surface.update(item, index); surface.mesh.userData.item = item || null
     }); invalidate()
   }
   function dispose() {
     if (disposed) return
-    disposed = true; stop(); observer?.disconnect()
+    disposed = true; stop(); observer?.disconnect(); onListeningScreen?.(null)
     canvas.removeEventListener('keydown', keydown); window.removeEventListener('keyup', keyup); window.removeEventListener('blur', clearMovement)
     canvas.removeEventListener('blur', clearMovement); document.removeEventListener('visibilitychange', visibility)
     canvas.removeEventListener('pointerdown', pointerdown); canvas.removeEventListener('pointermove', pointermove)
@@ -475,9 +503,10 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     screenMesh.name = 'world-music-screen'; pavilion.getObjectByName('music-screen').add(screenMesh); hitTargets.push(screenMesh)
     terminal=createControlTerminal(pavilion,hitTargets,invalidate)
     for (const side of ['archive','discover']) for (let index = 0; index < 4; index++) {
-      const surface = side==='discover'?createDiscoveryScreen(index,invalidate):createCoverSurface(invalidate)
+      const isLobby=side==='archive'&&index===2
+      const surface = isLobby?(lobbyScreen=createListeningLobbyScreen(invalidate)):side==='discover'?createDiscoveryScreen(index,invalidate):createCoverSurface(invalidate)
       pavilion.getObjectByName(`cover-${side}-${index}`).add(surface.mesh)
-      covers.push({surface,side,index}); hitTargets.push(surface.mesh)
+      covers.push({surface,side:isLobby?'lobby':side,index}); hitTargets.push(surface.mesh)
     }
     for (const [text,sub,pos,rotation,station] of [
       ['唱片档案','YOUR MUSIC, COLLECTED.',[-11.9,4.5,1],Math.PI/2,'archive'],
@@ -520,12 +549,19 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   } catch(error) { dispose(); throw error }
   return {
     navigate, navigateToPoint, focusScreen, sit, stand, cancelTravel, setKey, clearMovement, dispose, updateLibrary, jump, setViewMode,
-    setPresence(value,{memberId,roomId='',connected=false}={}){
+    setPresence(value,{memberId,roomId='',connected=false,preservePosition=false}={}){
       avatars.setPeers(value,memberId,connected)
       const self=value?.players?.find(item=>item.id===memberId)
       if((membership!==roomId||(!roomConnected&&connected))&&self){
-        cancelTravel();stand(true,false);jumpHeight=jumpVelocity=0
-        camera.position.set(self.x,WORLD_EYE_HEIGHT,self.z);bodyYaw=self.yaw;selectDestination('')
+        if(membership!==roomId&&preservePosition){
+          // A new room starts where its creator is, not at the server spawn point.
+          clearMovement();cancelTravel()
+          onPresence?.(avatarPose(),true)
+          if(seated)void onSeat?.(seatId)
+        }else{
+          cancelTravel();stand(true,false);jumpHeight=jumpVelocity=0
+          camera.position.set(self.x,WORLD_EYE_HEIGHT,self.z);bodyYaw=self.yaw;selectDestination('')
+        }
       }
       if((!connected||!roomId)&&seated&&membership)stand(true,false)
       if(self||!roomId)membership=roomId
@@ -533,6 +569,8 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     },
     setAccount(value){terminal.setAccount(value)},
     setListeningRoom(value){terminal.setRoom(value)},
+    setListeningLobby(value){lobbyScreen.setState(value)},
+    setListeningInputOpen,
     setFeeds(value) { covers.filter(c => c.side === 'discover').forEach(c => c.surface.setState(value[FEED_IDS[c.index]])); invalidate() },
     inspectRecord(item){clearMovement();cancelTravel();stand(true);records.inspect(item)},
     dismissRecord(){records.dismiss()},

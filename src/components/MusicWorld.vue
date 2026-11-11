@@ -7,7 +7,7 @@
       <button type="button" :title="status.seated?'起身':'跳跃 · 空格'" :aria-label="status.seated?'起身':'跳跃'" @click="jumpAvatar"><ArrowUp :size="18" /></button>
       <span v-if="listeningRoom.state.room" class="world-avatar-controls__online">{{ listeningRoom.state.connected ? (listeningRoom.state.presence?.players.length||0)+' 人在场' : '重连中' }}</span>
     </div>
-    <WorldListeningRoom v-if="listeningPanel" :mode="listeningPanel" :display-name="account.isLoggedIn?account.displayName:''" @close="closeListeningRoom" />
+    <WorldListeningRoom v-if="listeningPanel && ready && !suspended && !routeOpen" :mode="listeningPanel" :lobby="lobby" :placement="listeningPlacement" @close="closeListeningRoom" />
     <WorldDanmaku
       v-if="ready && commentsState.items.length"
       class="world-danmaku"
@@ -32,7 +32,7 @@
       <button v-if="failed" type="button" @click="returnTo2D">返回 2D</button>
     </div>
 
-    <span v-if="exploring && !panel && !routeOpen" class="world-reticle" aria-hidden="true" />
+    <span v-if="exploring && !panel && !routeOpen && !listeningPanel" class="world-reticle" aria-hidden="true" />
 
     <section v-if="selectedRecord && !routeOpen" ref="recordPanel" class="world-record-inspector" aria-label="查看选中的唱片">
       <div class="world-record-inspector__copy"><span class="world-eyebrow">FROM YOUR RECORD SHELF</span><h2>{{ selectedRecord.name }}</h2><p>{{ selectedRecord.artist || '未知歌手' }}</p><small>{{ selectedRecord.album || '在控制终端，开始这一次聆听。' }}</small></div>
@@ -40,7 +40,7 @@
       <small class="world-record-inspector__hint">封面与唱片来自你的曲库 <span>·</span> Esc 返回</small>
     </section>
 
-    <WorldMap v-if="ready&&!suspended&&!panel&&!routeOpen&&!selectedRecord&&!commentOpen" :position="status" :archive-tracks="data.exhibits.value.archive" @open="openMap" @navigate="goToMapPoint" />
+    <WorldMap v-if="ready&&!suspended&&!panel&&!routeOpen&&!selectedRecord&&!commentOpen&&!listeningPanel" :position="status" :archive-tracks="data.exhibits.value.archive" @open="openMap" @navigate="goToMapPoint" />
 
     <Transition name="world-panel">
       <section v-if="panel && !routeOpen" ref="panelEl" class="world-panel" aria-label="音乐馆曲库" @keydown.esc.stop="closePanel">
@@ -95,6 +95,7 @@ import { createSongComments } from './music-world/songComments.js'
 import { getSongCommentsData } from '../services/netease'
 import { readStorage, writeStorage } from '../utils/storage'
 import { DANMAKU_OPACITY_KEY, normalizeDanmakuOpacity } from './music-world/danmakuSettings.js'
+import { useListeningLobby } from './music-world/useListeningLobby.js'
 
 const player=usePlayerStore(),data=useWorldLibrary(),router=useRouter(),route=useRoute()
 const environment=useEnvironmentStore()
@@ -102,7 +103,7 @@ const auth=useAuthStore()
 const account=computed(()=>({isLoggedIn:auth.state.isLoggedIn,displayName:auth.displayName.value,avatarUrl:auth.avatarUrl.value}))
 const WorldDanmaku=defineAsyncComponent(()=>import('./music-world/WorldDanmaku.vue'))
 const WorldListeningRoom=defineAsyncComponent(()=>import('./music-world/WorldListeningRoom.vue'))
-const listeningRoom=useListeningRoomStore(),listeningPanel=ref('')
+const listeningRoom=useListeningRoomStore(),listeningPanel=ref(''),listeningPlacement=shallowRef(null)
 const roomSummary=computed(()=>({id:listeningRoom.state.room?.id||'',isHost:listeningRoom.state.room?.hostId===listeningRoom.state.memberId,connected:listeningRoom.state.connected,count:listeningRoom.state.room?.members.length||0,capacity:listeningRoom.state.room?.capacity||10,status:listeningRoom.state.syncStatus}))
 const props=defineProps({suspended:{type:Boolean,default:false}})
 const canvas=ref(null),canvasKey=ref(0),ready=ref(false),failed=ref(false),progress=ref(0),exploring=ref(true),panel=ref(false),panelEl=ref(null),notice=ref('')
@@ -110,6 +111,10 @@ const sceneId=ref(getWorldScene(readStorage('lanyin.world.scene','rain')).id)
 const stationId=ref('atrium'),routeOpen=computed(()=>route.name!=='space')
 const status=reactive({x:0,z:12.8,yaw:0,live:false,seated:false,navigating:false,hint:'',sceneLoading:false,scenePending:'',lightingCue:'等待音乐',audioMode:'waiting'}),lyrics=ref([]),reducedMotion=ref(false)
 const selectedRecord=ref(null),recordPanel=ref(null),placingRecord=ref(false),quality=ref(readStorage('lanyin.world.quality','balanced'))
+const lobby=useListeningLobby(listeningRoom,{
+  active:computed(()=>ready.value&&!props.suspended&&!routeOpen.value&&!failed.value&&(Boolean(listeningPanel.value)||status.pointId==='lobby'||Math.hypot(status.x+8.2,status.z-2.4)<6)),
+  displayName:computed(()=>account.value.isLoggedIn?account.value.displayName:''),
+})
 const searchTypes=[{id:1,name:'歌曲'},{id:100,name:'歌手'},{id:1000,name:'歌单'}],discoveryTabs=[{id:'recommend',name:'为你推荐'},{id:'playlists',name:'歌单'},{id:'charts',name:'排行榜'},{id:'artists',name:'歌手'}]
 const queue=computed(()=>data.items.value.filter(item=>item.kind==='song'))
 let world=null,sampler=null,abort=null,mediaQuery=null,noticeTimer=0,lyricsToken=0,disposed=false
@@ -130,7 +135,7 @@ function returnTo2D(){environment.setMode('2d');if(route.name==='space')router.p
 function openMap(){world?.clearMovement();world?.cancelTravel()}
 function toggleView(){world?.setViewMode(status.viewMode==='first'?'third':'first');canvas.value?.focus({preventScroll:true})}
 function jumpAvatar(){world?.jump();canvas.value?.focus({preventScroll:true})}
-function syncPresence(){world?.setPresence(listeningRoom.state.presence,{memberId:listeningRoom.state.memberId,roomId:listeningRoom.state.room?.id||'',connected:listeningRoom.state.connected})}
+function syncPresence(){world?.setPresence(listeningRoom.state.presence,{memberId:listeningRoom.state.memberId,roomId:listeningRoom.state.room?.id||'',connected:listeningRoom.state.connected,preservePosition:listeningRoom.state.createdRoomId===listeningRoom.state.room?.id})}
 async function takeSeat(id){const ok=await listeningRoom.takeSeat(id);if(!ok&&id)toast(listeningRoom.state.presenceError||'暂时无法落座。');return ok}
 function goToMapPoint(id){panel.value=false;exploring.value=true;world?.navigateToPoint(id);canvas.value?.focus({preventScroll:true})}
 let lastVolume=player.state.volume||.8
@@ -160,8 +165,8 @@ function openComments(index){
   panel.value=false;commentOpen.value=true;exploring.value=true;world?.clearMovement();world?.cancelTravel()
 }
 function closeComments(){commentOpen.value=false;canvas.value?.focus({preventScroll:true})}
-function openListeningRoom(mode){world?.clearMovement();world?.cancelTravel();panel.value=false;commentOpen.value=false;listeningPanel.value=mode||'create'}
-async function closeListeningRoom(){listeningPanel.value='';await nextTick();canvas.value?.focus({preventScroll:true})}
+function openListeningInput(mode){if(!['code','settings','search','copy'].includes(mode))return;panel.value=false;commentOpen.value=false;world?.setListeningInputOpen(true);listeningPanel.value=mode}
+async function closeListeningRoom(){listeningPanel.value='';world?.setListeningInputOpen(false);await nextTick();canvas.value?.focus({preventScroll:true})}
 function receiveStatus(value){Object.assign(status,value);status.audioMode=sampler?.getStatus()||'waiting';if(value.scene){sceneId.value=value.scene;writeStorage('lanyin.world.scene',value.scene)}if(value.sceneError)toast(value.sceneError);if(value.station)stationId.value=value.station;if(value.inspecting===false)selectedRecord.value=null}
 function changeScene(id){world?.setScene(id)}
 function changeQuality(value){quality.value=['smooth','balanced','high'].includes(value)?value:'balanced';world?.setQuality(quality.value);writeStorage('lanyin.world.quality',quality.value)}
@@ -184,7 +189,7 @@ async function placeSelected(){
 }
 function toast(value){notice.value=value;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>notice.value='',3500)}
 function syncPlayback(){
-  if(!props.suspended && !routeOpen.value && !listeningPanel.value && !failed.value && !document.hidden && player.state.isPlaying && !reducedMotion.value)sampler?.start();else sampler?.stop()
+  if(!props.suspended && !routeOpen.value && !failed.value && !document.hidden && player.state.isPlaying && !reducedMotion.value)sampler?.start();else sampler?.stop()
   const current=listening.value,index=worldLyricIndex(lyrics.value,current.currentTime)
   world?.setPlayback({...current,line:lyrics.value[index],previousLine:lyrics.value[index-1],nextLine:lyrics.value[index+1],lyrics:lyrics.value,commentsTotal:commentsState.value.total,danmakuEnabled:danmakuEnabled.value,danmakuOpacity:danmakuOpacity.value,lightsEnabled:lightsEnabled.value,reducedMotion:reducedMotion.value})
 }
@@ -193,13 +198,14 @@ async function initialize(){
   abort?.abort();world?.dispose();sampler?.dispose();world=null;sampler=null
   abort=new AbortController();const signal=abort.signal
   ready.value=false;failed.value=false;progress.value=0;canvasKey.value++;await nextTick()
+  listeningPanel.value='';listeningPlacement.value=null
   if(disposed||signal.aborted)return
   try{
     sampler=createWorldAudioSampler(player.getAudioElement())
-    world=await createMusicWorld(canvas.value,{signal,quality:quality.value,sampleAudio:()=>sampler?.sample(),onProgress:value=>progress.value=value,onStatus:receiveStatus,onAction:handleAction,onPresence:listeningRoom.movePresence,onSeat:takeSeat})
+    world=await createMusicWorld(canvas.value,{signal,quality:quality.value,sampleAudio:()=>sampler?.sample(),onProgress:value=>progress.value=value,onStatus:receiveStatus,onAction:handleAction,onListeningScreen:value=>listeningPlacement.value=value,onPresence:listeningRoom.movePresence,onSeat:takeSeat})
     if(signal.aborted)return
     syncPresence();await listeningRoom.setPresenceActive(!props.suspended&&!routeOpen.value)
-    world.updateLibrary(data.exhibits.value);world.setFeeds(feeds.getState());world.setQuality(quality.value);world.setAccount(account.value);world.setListeningRoom(roomSummary.value);world.setActive(!props.suspended&&!routeOpen.value&&!listeningPanel.value);syncPlayback();await world.setScene(requestedScene);if(!signal.aborted){ready.value=true;if(!props.suspended&&!routeOpen.value&&!listeningPanel.value)canvas.value?.focus({preventScroll:true})}
+    world.updateLibrary(data.exhibits.value);world.setFeeds(feeds.getState());world.setQuality(quality.value);world.setAccount(account.value);world.setListeningRoom(roomSummary.value);world.setListeningLobby(lobby.snapshot);world.setActive(!props.suspended&&!routeOpen.value);syncPlayback();await world.setScene(requestedScene);if(!signal.aborted){ready.value=true;if(!props.suspended&&!routeOpen.value&&!listeningPanel.value)canvas.value?.focus({preventScroll:true})}
   }catch(error){if(error.name!=='AbortError'&&!signal.aborted){failed.value=true;sampler?.stop();console.warn('Music pavilion failed:',error)}}
 }
 async function goTo(id){
@@ -234,12 +240,23 @@ async function handleAction(action,payload){
   else if(action==='danmaku-opacity')changeDanmakuOpacity(payload)
   else if(action==='settings')router.push('/settings')
   else if(action==='account'){world?.clearMovement();world?.cancelTravel();auth.openLoginModal()}
-  else if(action==='room-open')openListeningRoom(payload)
+  else if(action==='room-open')goTo('lobby')
+  else if(action==='lobby-input')openListeningInput(payload)
+  else if(action==='lobby-input-close')closeListeningRoom()
+  else if(action==='lobby-create')await lobby.create()
+  else if(action==='lobby-join')await lobby.join(payload)
+  else if(action==='lobby-copy'){await lobby.copy();if(lobby.copyFallback)openListeningInput('copy')}
+  else if(action==='lobby-leave')await lobby.leave()
+  else if(action==='lobby-audio')await lobby.enableAudio()
+  else if(action==='lobby-retry-local')await lobby.retryLocal()
+  else if(action==='lobby-retry')await lobby.retry()
+  else if(action==='lobby-refresh')lobby.refresh()
+  else if(action==='lobby-filter')lobby.filter=payload
   else if(action==='environment'&&payload==='2d')returnTo2D()
   else if(action==='select')selectItem(payload)
   else if(action==='inspect')inspectRecord(payload,true)
   else if(action==='notice')toast(payload)
-  else if(action==='station')['screen','terminal','discover'].includes(payload)?goTo(payload):openSection(payload==='archive'?'liked':'radio')
+  else if(action==='station')['screen','terminal','discover','lobby'].includes(payload)?goTo(payload):openSection(payload==='archive'?'liked':'radio')
   else if(action==='listen')goTo('screen')
   else if(action==='toggle'){if(!player.state.isLoading)(player.state.currentTrack.id||player.state.queue.length)?player.togglePlay():openSection('recommend')}
   else if(action==='previous'||action==='next'){if(player.state.isLoading)return;const track=player.getRelativeQueueTrack(action==='next'?1:-1);if(track)await player.playTrack(track)}
@@ -259,9 +276,10 @@ watch(()=>[listening.value,danmakuEnabled.value,danmakuOpacity.value,lightsEnabl
 watch(data.exhibits,value=>world?.updateLibrary(value))
 watch(account,value=>world?.setAccount(value))
 watch(roomSummary,value=>world?.setListeningRoom(value))
+watch(()=>JSON.stringify(lobby.snapshot),()=>world?.setListeningLobby(lobby.snapshot))
 watch(()=>[listeningRoom.state.presence,listeningRoom.state.connected,listeningRoom.state.room?.id],syncPresence)
 watch(()=>[routeOpen.value,props.suspended],([covered,suspended])=>{void listeningRoom.setPresenceActive(!covered&&!suspended)})
-watch(()=>[routeOpen.value,props.suspended,listeningPanel.value],([covered,suspended,roomOpen])=>{world?.setActive(!covered&&!suspended&&!roomOpen);if(covered||suspended||roomOpen){world?.clearMovement();world?.dismissRecord();panel.value=false;commentOpen.value=false}syncPlayback()})
+watch(()=>[routeOpen.value,props.suspended,listeningPanel.value],([covered,suspended,roomOpen])=>{world?.setActive(!covered&&!suspended);world?.setListeningInputOpen(!covered&&!suspended&&Boolean(roomOpen));if(covered||suspended){listeningPanel.value='';listeningPlacement.value=null}if(covered||suspended||roomOpen){world?.clearMovement();world?.dismissRecord();panel.value=false;commentOpen.value=false}syncPlayback()})
 watch(()=>listening.value.track?.id,async()=>{
   const token=++lyricsToken;lyrics.value=[];comments.setTrack(listening.value.track)
   if(!listening.value.track?.id)return

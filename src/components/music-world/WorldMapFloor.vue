@@ -105,7 +105,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, useId } from 'vue'
-import { AudioLines, Disc3, ListMusic, MicVocal, SlidersHorizontal, Sparkles, Trophy } from 'lucide-vue-next'
+import { AudioLines, Disc3, ListMusic, MicVocal, SlidersHorizontal, Sparkles, Trophy, UsersRound } from 'lucide-vue-next'
 import { WORLD_MAP_DESTINATIONS } from './worldNavigation.js'
 
 const props = defineProps({
@@ -143,12 +143,13 @@ const playerTransform = computed(() => {
 })
 
 function iconFor(place) {
+  if (place.id === 'lobby') return UsersRound
   if (place.kind === 'record') return Disc3
   return { recommend: Sparkles, playlists: ListMusic, artists: MicVocal, charts: Trophy }[place.target] || SlidersHorizontal
 }
 
 function destinationTitle(place) {
-  const track = place.kind === 'record' ? props.archiveTracks[place.target] : null
+  const track = place.kind === 'record' ? props.archiveTracks[place.target>2?place.target-1:place.target] : null
   return (place.kind === 'seat' ? '落座' : '前往') + place.label + (track?.name ? ' · ' + track.name : '')
 }
 

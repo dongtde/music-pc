@@ -9,7 +9,6 @@ import { createScreenList } from './createScreenList.js'
 export const TERMINAL_SLIDERS = ['progress','volume','danmaku-opacity']
 export const TERMINAL_QUEUE = {x:28,y:143,width:392,height:480,rowHeight:72}
 export const TERMINAL_ACCOUNT = {x:1304,y:10,width:272,height:57}
-export const TERMINAL_LISTENING = {create:{x:540,y:17,width:178,height:43},join:{x:732,y:17,width:178,height:43}}
 export const TERMINAL_MODES = [{value:'shuffle',label:'随机播放'},{value:'order',label:'顺序播放'},{value:'single',label:'单曲循环'},{value:'list',label:'列表循环'}]
 const WIDTH=1600,HEIGHT=650,QUALITIES=[{id:'smooth',label:'流畅'},{id:'balanced',label:'均衡'},{id:'high',label:'精细'}]
 const EMPTY_QUEUE=[]
@@ -147,14 +146,10 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
   function drawListening(){
     if(room.id){
       const label=room.connected?`一起听 · ${room.id} · ${room.count}/${room.capacity}`:'一起听 · 正在重新连接'
-      button(510,17,480,43,label,'room-open','details',{selected:true,size:19})
+      button(510,17,480,43,label,'station','lobby',{selected:true,size:19})
       text(ctx,room.isHost?'你是房主':'共同控制',1008,46,17,ink.muted,130)
     }else{
-      for(const [mode,label] of [['create','创建房间'],['join','加入房间']]){
-        const area=TERMINAL_LISTENING[mode]
-        button(area.x,area.y,area.width,area.height,label,'room-open',mode,{size:19})
-      }
-      text(ctx,'多人一起听',933,46,17,ink.muted,140)
+      button(540,17,350,43,'一起听  ↗','station','lobby',{size:19})
     }
   }
   function draw(state,now=performance.now(),audioLevels=null){
