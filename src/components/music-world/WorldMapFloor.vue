@@ -106,7 +106,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, useId } from 'vue'
 import { AudioLines, Disc3, ListMusic, MicVocal, SlidersHorizontal, Sparkles, Trophy, UsersRound } from 'lucide-vue-next'
-import { WORLD_MAP_DESTINATIONS } from './worldNavigation.js'
+import { WORLD_MAP_DESTINATIONS, WORLD_LOBBY_DISPLAY } from './worldNavigation.js'
 
 const props = defineProps({
   position: { type: Object, required: true },
@@ -149,7 +149,7 @@ function iconFor(place) {
 }
 
 function destinationTitle(place) {
-  const track = place.kind === 'record' ? props.archiveTracks[place.target>2?place.target-1:place.target] : null
+  const track = place.kind === 'record' ? props.archiveTracks[place.target>WORLD_LOBBY_DISPLAY.index?place.target-1:place.target] : null
   return (place.kind === 'seat' ? '落座' : '前往') + place.label + (track?.name ? ' · ' + track.name : '')
 }
 

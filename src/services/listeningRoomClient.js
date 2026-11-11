@@ -79,7 +79,7 @@ export function createListeningRoomClient({ player, state, storage = availableSe
     lifecycle++; clearPlaybackWork()
     for (const [event, callback] of audioListeners) driver?.audio.removeEventListener(event, callback)
     audioListeners = []; driver?.release(); driver = null
-    state.room = null; state.presence = null; state.presenceError = ''; state.createdRoomId = ''; state.localError = ''; state.autoplayBlocked = false; state.syncStatus = 'idle'
+    state.room = null; state.presence = null; state.presenceError = ''; state.enteredRoomId = ''; state.localError = ''; state.autoplayBlocked = false; state.syncStatus = 'idle'
     state.notice = reason; queueVersion = -1; pendingSnapshot = null; saveSession()
   }
   function bindDriver() {
@@ -260,7 +260,8 @@ export function createListeningRoomClient({ player, state, storage = availableSe
       const epoch = lifecycle
       const result = await request(`room:${kind}`, payload)
       if (epoch !== lifecycle) return false
-      state.createdRoomId = kind === 'create' ? result.room.id : ''
+      // Explicit entry preserves the local pose; session restoration uses the server pose.
+      state.enteredRoomId = result.room.id
       accept(pendingSnapshot?.id === result.room.id && pendingSnapshot.revision > result.room.revision ? pendingSnapshot : result.room)
       pendingSnapshot = null
       await setPresenceActive(state.presenceActive, state.avatar)

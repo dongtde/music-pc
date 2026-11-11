@@ -20,17 +20,31 @@ export function createListeningLobbyScreen(invalidate) {
     zones.push({ x, y, w, h, action, payload, id, label, disabled })
   }
   function icon(x, y, glyph, label, action, payload, disabled = false, feedback = {}) {
-    const id = `${action}:${payload || ''}`
-    ctx.save(); ctx.translate(x + 32, y + 32); ctx.scale(feedback.scale || 1, feedback.scale || 1)
-    rounded(ctx, -32, -32, 64, 64, 8, feedback.active ? '#34506d' : hovered === id && !disabled ? '#2d4764' : '#1a3048')
-    drawPlayerIcon(ctx, glyph, 0, 0, 29, feedback.active ? GOLD : disabled ? '#617991' : WHITE, feedback.rotation || 0)
+    const id = `${action}:${payload || ''}`, size = feedback.size || 64
+    ctx.save(); ctx.translate(x + size / 2, y + size / 2); ctx.scale(feedback.scale || 1, feedback.scale || 1)
+    rounded(ctx, -size / 2, -size / 2, size, size, 8, feedback.active ? '#34506d' : hovered === id && !disabled ? '#2d4764' : feedback.quiet ? 'transparent' : '#1a3048')
+    drawPlayerIcon(ctx, glyph, 0, 0, feedback.iconSize || 29, feedback.active ? GOLD : disabled ? '#617991' : WHITE, feedback.rotation || 0)
     ctx.restore()
-    zones.push({ x, y, w: 64, h: 64, action, payload, id, label, disabled })
+    zones.push({ x, y, w: size, h: size, action, payload, id, label, disabled })
   }
   function avatar(x, y, label, color = '#9fbfee', r = 30) {
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = '#233f5b'; ctx.fill()
     ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke()
     ctx.save(); ctx.textAlign = 'center'; text(ctx, Array.from(label || '友')[0], x, y + 11, 29, WHITE); ctx.restore()
+  }
+  function drawRoomHeader() {
+    ctx.save(); ctx.textBaseline = 'middle'
+    text(ctx, '一起听', 44, 82, 42, WHITE, 150, 600)
+    const id = 'lobby-copy:', label = state.copied ? '邀请已复制' : '复制邀请'
+    rounded(ctx, 212, 56, 198, 52, 10, hovered === id ? '#2d4764' : '#9fbfee0c')
+    ctx.font = '26px Consolas, monospace'; ctx.fillStyle = state.copied ? GOLD : '#b8cada'
+    ctx.fillText(state.room.id, 228, 82)
+    drawPlayerIcon(ctx, state.copied ? 'check' : 'copy', 382, 82, 23, state.copied ? GOLD : MUTED)
+    zones.push({ x: 212, y: 56, w: 198, h: 52, action: 'lobby-copy', id, label })
+    ctx.textAlign = 'right'
+    text(ctx, `${state.room.members?.length || 0} / ${state.room.capacity} 人`, 900, 82, 25, MUTED, 210)
+    ctx.restore()
+    icon(928, 56, 'logout', state.isHost ? '结束一起听' : '退出房间', 'lobby-leave', null, state.busy, { size: 52, iconSize: 26, quiet: true })
   }
   function draw(now = performance.now()) {
     const refreshing = refreshStart !== null && !state.room && (state.loading || now < refreshEnd)
@@ -43,19 +57,13 @@ export function createListeningLobbyScreen(invalidate) {
     ctx.fillStyle = bg; ctx.fillRect(0, 0, SIZE, SIZE)
     ctx.strokeStyle = '#b5d3ff15'; ctx.lineWidth = 1
     for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.moveTo(560 + i * 75, 0); ctx.lineTo(820 + i * 75, 230); ctx.stroke() }
-    text(ctx, '一起听', 44, 96, 49, WHITE, 700, 600)
-    if (state.room) {
-      text(ctx, `# ${state.room.id}`, 232, 92, 29, GOLD, 184, 500)
-      icon(434, 43, state.copied ? 'check' : 'copy', state.copied ? '邀请已复制' : '复制邀请', 'lobby-copy')
-      ctx.save(); ctx.textAlign = 'right'
-      text(ctx, `${state.room.members?.length || 0} / ${state.room.capacity} 人`, 884, 92, 25, MUTED, 210)
-      ctx.restore()
-      icon(916, 43, 'logout', state.isHost ? '结束一起听' : '退出房间', 'lobby-leave', null, state.busy)
-    } else {
+    if (state.room) drawRoomHeader()
+    else {
+      text(ctx, '一起听', 44, 96, 49, WHITE, 700, 600)
       text(ctx, `${state.rooms?.length || 0} 个房间`, 222, 94, 25, MUTED, 650)
       icon(916, 43, 'settings', '昵称与连接设置', 'lobby-input', 'settings', state.busy)
     }
-    ctx.fillStyle = '#b4cceb24'; ctx.fillRect(44, 157, 936, 1)
+    ctx.fillStyle = '#b4cceb24'; ctx.fillRect(44, state.room ? 140 : 157, 936, 1)
     if (state.room) drawRoom()
     else drawDirectory(now, refreshing)
     const feedback = state.errorMessage || (state.room ? state.notice : '')
@@ -110,27 +118,19 @@ export function createListeningLobbyScreen(invalidate) {
   }
   function drawRoom() {
     const room = state.room
-    rounded(ctx, 44, 195, 936, 154, 10, '#223b57')
-    text(ctx, room.playback?.track?.name || '一起选一首喜欢的歌', 74, 257, 34, WHITE, 868, 500)
-    text(ctx, room.playback?.track?.artist || '前往终端，所有人都能点歌', 75, 303, 24, MUTED, 860)
-    const playbackLabel = { playing: '同步播放中', paused: '已暂停', loading: '加载歌曲', scheduled: '即将同步', reconnecting: '正在重连', waiting: '等待准备', error: '需要重试' }[state.syncStatus]
-    if (playbackLabel) text(ctx, playbackLabel, 74, 390, 23, MUTED, 650)
-    ctx.save(); ctx.textAlign = 'right'
-    text(ctx, state.connected ? '已连接' : '正在重连', 950, 390, 23, MUTED, 200)
-    ctx.restore()
     const members = room.members || []
     for (let i = 0; i < Math.min(10, room.capacity); i++) {
-      const x = 135 + (i % 5) * 185, y = 500 + Math.floor(i / 5) * 220, member = members[i]
+      const x = 142 + (i % 5) * 185, y = 360 + Math.floor(i / 5) * 280, member = members[i]
       const isHost = Boolean(member && member.id === room.hostId)
-      avatar(x, y, member?.name || '＋', isHost ? GOLD : member ? '#9fbfee' : '#405675', 43)
+      avatar(x, y, member?.name || '＋', isHost ? GOLD : member ? '#9fbfee' : '#405675', 52)
       if (isHost) {
-        ctx.beginPath(); ctx.arc(x + 32, y - 32, 19, 0, Math.PI * 2)
+        ctx.beginPath(); ctx.arc(x + 38, y - 38, 21, 0, Math.PI * 2)
         ctx.fillStyle = GOLD; ctx.fill(); ctx.strokeStyle = '#0e2036'; ctx.lineWidth = 4; ctx.stroke()
-        drawPlayerIcon(ctx, 'crown', x + 32, y - 32, 24, '#172133')
+        drawPlayerIcon(ctx, 'crown', x + 38, y - 38, 26, '#172133')
       }
-      ctx.save(); ctx.textAlign = 'center'; text(ctx, member?.name || '待加入', x, y + 78, 23, member ? WHITE : MUTED, 158)
+      ctx.save(); ctx.textAlign = 'center'; text(ctx, member?.name || '待加入', x, y + 88, 25, member ? WHITE : MUTED, 158)
       const memberStatus = member && (!member.connected ? '重连中' : member.error ? '加载失败' : member.buffering ? '缓冲中' : '')
-      if (memberStatus) text(ctx, memberStatus, x, y + 110, 19, MUTED, 158)
+      if (memberStatus) text(ctx, memberStatus, x, y + 120, 19, MUTED, 158)
       ctx.restore()
     }
   }

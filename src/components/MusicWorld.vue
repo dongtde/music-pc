@@ -96,6 +96,7 @@ import { getSongCommentsData } from '../services/netease'
 import { readStorage, writeStorage } from '../utils/storage'
 import { DANMAKU_OPACITY_KEY, normalizeDanmakuOpacity } from './music-world/danmakuSettings.js'
 import { useListeningLobby } from './music-world/useListeningLobby.js'
+import { WORLD_LOBBY_DISPLAY } from './music-world/worldNavigation.js'
 
 const player=usePlayerStore(),data=useWorldLibrary(),router=useRouter(),route=useRoute()
 const environment=useEnvironmentStore()
@@ -112,7 +113,7 @@ const stationId=ref('atrium'),routeOpen=computed(()=>route.name!=='space')
 const status=reactive({x:0,z:12.8,yaw:0,live:false,seated:false,navigating:false,hint:'',sceneLoading:false,scenePending:'',lightingCue:'等待音乐',audioMode:'waiting'}),lyrics=ref([]),reducedMotion=ref(false)
 const selectedRecord=ref(null),recordPanel=ref(null),placingRecord=ref(false),quality=ref(readStorage('lanyin.world.quality','balanced'))
 const lobby=useListeningLobby(listeningRoom,{
-  active:computed(()=>ready.value&&!props.suspended&&!routeOpen.value&&!failed.value&&(Boolean(listeningPanel.value)||status.pointId==='lobby'||Math.hypot(status.x+8.2,status.z-2.4)<6)),
+  active:computed(()=>ready.value&&!props.suspended&&!routeOpen.value&&!failed.value&&(Boolean(listeningPanel.value)||status.pointId==='lobby'||Math.hypot(status.x-WORLD_LOBBY_DISPLAY.x,status.z-WORLD_LOBBY_DISPLAY.z)<6)),
   displayName:computed(()=>account.value.isLoggedIn?account.value.displayName:''),
 })
 const searchTypes=[{id:1,name:'歌曲'},{id:100,name:'歌手'},{id:1000,name:'歌单'}],discoveryTabs=[{id:'recommend',name:'为你推荐'},{id:'playlists',name:'歌单'},{id:'charts',name:'排行榜'},{id:'artists',name:'歌手'}]
@@ -135,7 +136,11 @@ function returnTo2D(){environment.setMode('2d');if(route.name==='space')router.p
 function openMap(){world?.clearMovement();world?.cancelTravel()}
 function toggleView(){world?.setViewMode(status.viewMode==='first'?'third':'first');canvas.value?.focus({preventScroll:true})}
 function jumpAvatar(){world?.jump();canvas.value?.focus({preventScroll:true})}
-function syncPresence(){world?.setPresence(listeningRoom.state.presence,{memberId:listeningRoom.state.memberId,roomId:listeningRoom.state.room?.id||'',connected:listeningRoom.state.connected,preservePosition:listeningRoom.state.createdRoomId===listeningRoom.state.room?.id})}
+function syncPresence(){
+  const state=listeningRoom.state
+  const preserved=world?.setPresence(state.presence,{memberId:state.memberId,roomId:state.room?.id||'',connected:state.connected,preservePosition:Boolean(state.enteredRoomId)&&state.enteredRoomId===state.room?.id})
+  if(preserved)state.enteredRoomId=''
+}
 async function takeSeat(id){const ok=await listeningRoom.takeSeat(id);if(!ok&&id)toast(listeningRoom.state.presenceError||'暂时无法落座。');return ok}
 function goToMapPoint(id){panel.value=false;exploring.value=true;world?.navigateToPoint(id);canvas.value?.focus({preventScroll:true})}
 let lastVolume=player.state.volume||.8

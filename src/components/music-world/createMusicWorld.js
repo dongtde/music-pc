@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { createListeningScreen } from './createListeningScreen.js'
 import { createConcertLights } from '../music-room/createConcertLights'
 import { createStageRhythm } from './createStageRhythm.js'
-import { WORLD_STATIONS, WORLD_DISCOVERY_SCREENS, WORLD_RECORD_DISPLAYS, WORLD_SEATS, WORLD_MAP_DESTINATIONS, WORLD_EYE_HEIGHT, WORLD_SEAT_HEIGHT, moveWorld } from './worldNavigation'
+import { WORLD_STATIONS, WORLD_DISCOVERY_SCREENS, WORLD_RECORD_DISPLAYS, WORLD_LOBBY_DISPLAY, WORLD_SEATS, WORLD_MAP_DESTINATIONS, WORLD_EYE_HEIGHT, WORLD_SEAT_HEIGHT, moveWorld } from './worldNavigation'
 import { createWorldTravel, stepWorldTravel, worldViewToward, smoothWorldView, angleDelta } from './worldTravel.js'
 import { createCoverSurface, makeSign, materialTexture } from './worldTextures'
 import { createRecordExperience } from './createRecordExperience'
@@ -457,7 +457,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     library = data
     covers.forEach(({ surface, side, index }) => {
       if(side!=='archive')return
-      const item = library.archive?.[index>2?index-1:index]
+      const item = library.archive?.[index>WORLD_LOBBY_DISPLAY.index?index-1:index]
       surface.update(item, index); surface.mesh.userData.item = item || null
     }); invalidate()
   }
@@ -503,7 +503,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     screenMesh.name = 'world-music-screen'; pavilion.getObjectByName('music-screen').add(screenMesh); hitTargets.push(screenMesh)
     terminal=createControlTerminal(pavilion,hitTargets,invalidate)
     for (const side of ['archive','discover']) for (let index = 0; index < 4; index++) {
-      const isLobby=side==='archive'&&index===2
+      const isLobby=side==='archive'&&index===WORLD_LOBBY_DISPLAY.index
       const surface = isLobby?(lobbyScreen=createListeningLobbyScreen(invalidate)):side==='discover'?createDiscoveryScreen(index,invalidate):createCoverSurface(invalidate)
       pavilion.getObjectByName(`cover-${side}-${index}`).add(surface.mesh)
       covers.push({surface,side:isLobby?'lobby':side,index}); hitTargets.push(surface.mesh)
@@ -552,10 +552,12 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     setPresence(value,{memberId,roomId='',connected=false,preservePosition=false}={}){
       avatars.setPeers(value,memberId,connected)
       const self=value?.players?.find(item=>item.id===memberId)
+      let preserved=false
       if((membership!==roomId||(!roomConnected&&connected))&&self){
         if(membership!==roomId&&preservePosition){
-          // A new room starts where its creator is, not at the server spawn point.
+          // Joining or creating keeps the local pose and publishes it to the new room.
           clearMovement();cancelTravel()
+          preserved=true
           onPresence?.(avatarPose(),true)
           if(seated)void onSeat?.(seatId)
         }else{
@@ -566,6 +568,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
       if((!connected||!roomId)&&seated&&membership)stand(true,false)
       if(self||!roomId)membership=roomId
       roomConnected=connected&&Boolean(self);invalidate()
+      return preserved
     },
     setAccount(value){terminal.setAccount(value)},
     setListeningRoom(value){terminal.setRoom(value)},

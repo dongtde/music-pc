@@ -26,9 +26,8 @@ export function useListeningLobby(store, { active, displayName }) {
     room: room.value ? {
       id: room.value.id, hostId: room.value.hostId, capacity: room.value.capacity,
       members: room.value.members.map(({ id, name, connected, error, buffering }) => ({ id, name, connected, error, buffering })),
-      playback: { track: room.value.playback.track ? { name: room.value.playback.track.name, artist: room.value.playback.track.artist } : null },
     } : null,
-    connected: store.state.connected, syncStatus: store.state.syncStatus,
+    connected: store.state.connected,
     copied: copied.value, isHost: room.value?.hostId === store.state.memberId,
     autoplayBlocked: store.state.autoplayBlocked, localError: store.state.localError, roomError: room.value?.error,
     notice: copied.value ? '邀请已复制，发给好友即可加入' : store.state.notice,

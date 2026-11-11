@@ -11,7 +11,7 @@ function defaultServer() {
 const state = reactive({
   room: null, memberId: '', connected: false, connecting: false, serverUrl: defaultServer(), name: '',
   error: '', notice: '', localError: '', autoplayBlocked: false, syncStatus: 'idle', latency: null, driftMs: 0, lanUrls: [], publicUrl: '',
-  presence: null, presenceActive: false, presenceError: '', createdRoomId: '', avatar: readStorage('lanyin.world.avatar', 'mint'),
+  presence: null, presenceActive: false, presenceError: '', enteredRoomId: '', avatar: readStorage('lanyin.world.avatar', 'mint'),
 })
 let client
 export function useListeningRoomStore() {
