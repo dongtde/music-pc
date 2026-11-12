@@ -38,7 +38,9 @@ export async function createSkyLounge({ root, pavilion, renderer, quality = 'bal
     textureLoader.loadAsync(BASE + (quality === 'high' ? 'city-panorama.jpg' : 'city-panorama-4k.jpg') + '?v=modern-buildings'),
     new HDRLoader().loadAsync(BASE + 'city-lighting.hdr?v=modern-buildings'),
     ...['potted_plant_01', 'modern_arm_chair_01'].map(id => modelLoader.loadAsync(BASE + id + '/model.gltf' + (id.startsWith('potted_plant_') ? '?v=compact-1' : ''))),
-    ...['marble', 'walnut', 'boucle'].flatMap(id => ['color', 'normal', 'roughness'].map(kind => textureLoader.loadAsync(`${BASE}${id}-${kind}.jpg`))),
+    // Upholstery uses a solid color; keep its empty color slot for the shared map layout.
+    ...['marble', 'walnut', 'boucle'].flatMap(id => ['color', 'normal', 'roughness'].map(kind =>
+      id === 'boucle' && kind === 'color' ? null : textureLoader.loadAsync(`${BASE}${id}-${kind}.jpg`))),
   ]
   const results = await Promise.allSettled(jobs)
   const values = results.map(result => result.status === 'fulfilled' ? result.value : null)
@@ -50,15 +52,15 @@ export async function createSkyLounge({ root, pavilion, renderer, quality = 'bal
   const [panorama, hdri, plantA, chair] = values
   const surfaces = Object.fromEntries(['marble', 'walnut', 'boucle'].map((name, i) => [name, values.slice(4 + i * 3, 7 + i * 3)]))
   for (const maps of Object.values(surfaces)) maps.forEach((texture, i) => {
+    if (!texture) return
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping; texture.anisotropy = anisotropy
     if (i === 0) texture.colorSpace = THREE.SRGBColorSpace
   })
   function finish(material, kind, repeat = [1, 1]) {
-    const maps = surfaces[kind].map(texture => { const clone = texture.clone(); clone.repeat.fromArray(repeat); textures.add(clone); return clone })
+    const maps = surfaces[kind].map(texture => { if (!texture) return null; const clone = texture.clone(); clone.repeat.fromArray(repeat); textures.add(clone); return clone })
     material.map = maps[0]; material.normalMap = maps[1]; material.roughnessMap = maps[2]; material.bumpMap = null
     material.normalScale.setScalar(kind === 'boucle' ? .55 : kind === 'marble' ? .12 : .24)
     material.roughness = kind === 'marble' ? .58 : kind === 'walnut' ? .72 : .96
-    if(kind==='boucle')material.map=null
     material.color.set(kind === 'boucle' ? '#b7ab98' : kind==='walnut' ? '#957257' : '#ece5d7'); material.needsUpdate = true
   }
   const finishedMaterials = new Set()

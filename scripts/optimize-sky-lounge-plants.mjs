@@ -4,7 +4,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { MeshoptSimplifier } from 'three/addons/libs/meshopt_simplifier.module.js'
 
-const ids = ['potted_plant_01', 'potted_plant_02']
+const ids = ['potted_plant_01']
 const types = { 5123: Uint16Array, 5125: Uint32Array, 5126: Float32Array }
 const widths = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 }
 

@@ -6,7 +6,7 @@ Run `node scripts/build-music-world.mjs` for the glass pavilion and shared equip
 
 `sky-lounge.glb` is the independently selectable 云端会所 shell. Rebuild with `node scripts/build-sky-lounge.mjs`. Its architecture contains a cantilevered terrace, a double-height glazed lounge, an oval skylight, suspended bronze light ribbons, fluted walls and stone side tables. Six music exhibits replace the cabinet decorations: a turntable, reel-to-reel tape machine and record library on the left; headphones, stereo speakers with an amplifier and an analog synthesizer on the right. Their thin stone tops, walnut cabinets, speaker-cloth fronts and brass task lamps stay within the existing furniture footprints. The rear bar, stools, bottle shelves, dedicated bar fixtures and all eight sculpted window piers remain removed. The shell and exhibits use 53 material batches, grouped by side with separate platter, reel and meter pivots. The shared pavilion retains screen and seat interaction anchors; switching scenes restores its original furnishings.
 
-`scripts/helpers/sky-lounge-music.mjs` authors the six exhibits and exports named anchors. `createLoungeMusicExperience.js` adds Chinese/English plaques and the current album cover, rotates the record and reels during playback, and drives four VU needles from the existing audio analysis. It uses the world render loop without extra lights or timers, stops rotation on pause, settles meters to idle and honors reduced motion. Only these pivots update their matrices; the static shell remains frozen. Run `node --test scripts/tests/lounge-music.test.mjs` to check the exported pivots and playback behavior.
+`scripts/helpers/sky-lounge-music.mjs` authors the six exhibits and exports named anchors. `createLoungeMusicExperience.js` adds Chinese/English plaques and the current album cover, rotates the record and reels during playback, and drives four VU needles from the existing audio analysis. It uses the world render loop without extra lights or timers, stops rotation on pause, settles meters to idle and honors reduced motion. Only these pivots update their matrices; the static shell remains frozen.
 
 `createSkyLounge.js` loads all local textures, plants and chairs before revealing the shell. Smooth and balanced quality use a 4096×2048 city panorama; high uses 8192×4096. Changing quality replaces and disposes the previous panorama texture, with a matching prefiltered HDR environment in all presets. Walnut and stone use separate color, normal and roughness maps; upholstery uses the textile normal/roughness maps with a restrained solid color. Smooth and balanced use the floor material's environment reflections. High adds a 512-pixel planar reflection, capped at 20 updates per second during camera movement and 10 when stationary, with at least 3 or 6 main frames between updates respectively. This keeps slow frames from causing an extra scene render on every frame. Repeated plants, chairs and contact shadows are instanced; static transforms are frozen. No third-party requests occur at runtime.
 
@@ -18,13 +18,9 @@ The high preset retains all twelve real moving spotlights. Their 48 opaque housi
 
 `indexGeometryExactly.js` indexes only bit-identical position/normal/UV attributes in the procedural fixture geometry. It changes no triangles or detail levels, retains UV seams, and reduces shared fixture/truss vertices from 11,520 to 3,492. Unchanged fixture transforms skip instance-buffer uploads and bound calculations. The 24 music-reactive floor/wall light strips use six shared-material meshes with the original sizes and light choreography.
 
-Run `node --test scripts/tests/world-light-grid.test.mjs scripts/tests/exact-geometry.test.mjs scripts/tests/concert-lights.test.mjs` for conservative light coverage, Three's shader loop expansion, geometry equivalence and matrix upload regressions.
-
 High-quality sky-lounge rendering with lights enabled now uses `worldRenderBudget.js` to adapt main-view pixel density to sustained GPU cost. The high preset still selects twelve spots, the 8K city texture, full material maps and the same 512px planar reflection. Asynchronous GPU queries target 12 ms of GPU work, with warm-up, 16-sample windows, bounded scale steps and slower recovery. Internal resolution never goes below the balanced preset's 1920×1080 pixel budget (or the original viewport if smaller). This is an explicit sharpness/performance tradeoff under load, not pixel-identical rendering or an effect toggle. DOM UI resolution and camera projection do not change. Turning lights off, changing scenes or leaving high quality restores full preset resolution. Timerless browsers use a conservative fallback that does not mistake native 48/50Hz pacing, idle gaps or CPU stalls for GPU load.
 
-Run `node --test scripts/tests/floor-reflection.test.mjs scripts/tests/world-render-budget.test.mjs` for reflection projection, cache invalidation, render-state recovery, GPU query lifetime, adaptive resolution and timing fallback. Run `node --test scripts/tests/*.test.mjs` for all scene regressions.
-
-The two plant models are reduced offline with meshoptimizer's attribute-aware simplifier, preserving UVs and normals with a 0.003 relative error limit. Their combined triangle count drops from 246,032 to 91,204 per model pair (63% fewer). The original GLTF/binary sources stay in ignored `output/sky-lounge-sources/`; `node scripts/optimize-sky-lounge-plants.mjs` regenerates the runtime models from those originals without repeated simplification.
+The terrace plant model is reduced offline with meshoptimizer's attribute-aware simplifier, preserving UVs and normals with a 0.003 relative error limit. Its triangle count drops from 176,226 to 55,725 (68% fewer). The original GLTF/binary sources stay in ignored `output/sky-lounge-sources/`; `node scripts/optimize-sky-lounge-plants.mjs` regenerates the runtime models from those originals without repeated simplification.
 
 The resources in `sky-lounge/` are CC0 assets from [Poly Haven](https://polyhaven.com/license):
 
@@ -32,7 +28,6 @@ The resources in `sky-lounge/` are CC0 assets from [Poly Haven](https://polyhave
 | --- | --- | --- |
 | [Modern Buildings](https://polyhaven.com/a/modern_buildings) | Greg Zaal | Clean modern riverfront panorama and matching HDR illumination |
 | [Potted Plant 01](https://polyhaven.com/a/potted_plant_01) | Rico Cilliers | Terrace foliage |
-| [Potted Plant 02](https://polyhaven.com/a/potted_plant_02) | Rico Cilliers | Retained source asset; no longer loaded by the music exhibits |
 | [Modern Arm Chair 01](https://polyhaven.com/a/modern_arm_chair_01) | Vibrant Nordic | Leather lounge chairs |
 | [Marble 01](https://polyhaven.com/a/marble_01) | Rob Tuytel | Stone finishes |
 | [Smoked Walnut Veneer](https://polyhaven.com/a/smoked_walnut_veneer) | Jenelle van Heerden | Cabinetry and wood floor |
@@ -44,7 +39,7 @@ The resources in `sky-lounge/` are CC0 assets from [Poly Haven](https://polyhave
 
 The deployed character uses `EXT_meshopt_compression`, `KHR_mesh_quantization`, and `KHR_texture_basisu`. Its embedded 4096×4096 base-color texture is KTX2 ETC1S with 13 mip levels. The model was processed with glTF Transform 4.5.1 and KTX-Software 4.4.2. File size: 5,005,404 → 3,304,412 bytes (34.0% smaller); all 34 joints and four animations are retained.
 
-The uncompressed room asset is preserved locally at `output/blender/fantasy-queen-walk/Fantasy_Queen_Room_Uncompressed.glb`. The `output/` folder contains authoring files and previews and is excluded from Git and deployment. The application only needs the compressed GLB checked into `public/models/`. When the local source is available, encode textures first, then apply Meshopt once:
+The `output/` folder is reserved for local authoring sources and is excluded from Git and deployment. The application only needs the compressed GLB checked into `public/models/`. When the local source is available, encode textures first, then apply Meshopt once:
 
 ```sh
 gltf-transform etc1s input.glb textures.glb --quality 192 --compression 2 --rdo false --jobs 4

@@ -24,7 +24,7 @@ async function metadata(id) {
 const sky = await metadata('modern_buildings')
 await download('city-source.jpg', sky.tonemapped, path.resolve('output/sky-lounge-sources'))
 await download('city-lighting.hdr', sky.hdri['1k'].hdr)
-for (const id of ['potted_plant_01', 'potted_plant_02', 'modern_arm_chair_01']) {
+for (const id of ['potted_plant_01', 'modern_arm_chair_01']) {
   const files = (await metadata(id)).gltf['1k'].gltf
   const modelRoot = id.startsWith('potted_plant_') ? path.resolve('output/sky-lounge-sources') : root
   await download(`${id}/model.gltf`, files, modelRoot)
@@ -33,7 +33,9 @@ for (const id of ['potted_plant_01', 'potted_plant_02', 'modern_arm_chair_01']) 
 }
 for (const [id, label] of [['marble_01', 'marble'], ['smoked_walnut_veneer', 'walnut'], ['wool_boucle', 'boucle']]) {
   const files = await metadata(id)
-  await Promise.all([['Diffuse', 'color'], ['nor_gl', 'normal'], ['Rough', 'roughness']].map(([key, name]) => download(`${label}-${name}.jpg`, files[key]['1k'].jpg)))
+  const maps = [['Diffuse', 'color'], ['nor_gl', 'normal'], ['Rough', 'roughness']]
+    .filter(([, name]) => label !== 'boucle' || name !== 'color')
+  await Promise.all(maps.map(([key, name]) => download(`${label}-${name}.jpg`, files[key]['1k'].jpg)))
 }
 await writeFile(path.join(root, 'sources.json'), JSON.stringify({
   license: 'CC0-1.0', provider: 'https://polyhaven.com', sources,
