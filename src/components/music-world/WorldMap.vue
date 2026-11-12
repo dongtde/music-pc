@@ -23,7 +23,7 @@
     <div class="world-map-dialog__body">
       <header class="world-map-dialog__header">
         <div class="world-map-dialog__identity">
-          <AudioLines :size="25" :stroke-width="1.5" aria-hidden="true" />
+          <AudioLines :size="21" :stroke-width="1.5" aria-hidden="true" />
           <h2 id="world-map-title">音乐馆地图</h2>
         </div>
         <button
@@ -132,7 +132,7 @@ function navigate(id) {
 
 .world-map-dialog {
   box-sizing: border-box;
-  width: min(900px, calc(100vw - 48px));
+  width: min(860px, calc(100vw - 48px));
   height: min(820px, calc(100dvh - 48px));
   max-width: none;
   max-height: none;
@@ -167,7 +167,7 @@ function navigate(id) {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 22px 30px;
+  padding: 18px 28px;
   border-bottom: 1px solid #afc9cb12;
   background: #e5f0ec03;
 }
@@ -175,7 +175,7 @@ function navigate(id) {
 .world-map-dialog__identity {
   display: flex;
   align-items: center;
-  gap: 13px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -187,9 +187,9 @@ function navigate(id) {
 .world-map-dialog__header h2 {
   margin: 0;
   font-family: Bahnschrift, 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
-  font-size: 21px;
+  font-size: 17px;
   font-weight: 500;
-  letter-spacing: .08em;
+  letter-spacing: .06em;
   line-height: 1.4;
 }
 
@@ -222,7 +222,7 @@ function navigate(id) {
 .world-map-dialog__floor {
   min-width: 0;
   min-height: 0;
-  padding: 20px 28px 24px;
+  padding: 26px 34px 30px;
   background: radial-gradient(ellipse at 50% 15%, #2c535941, transparent 70%);
   scrollbar-width: thin;
   scrollbar-color: #648b8e66 transparent;
@@ -244,7 +244,7 @@ function navigate(id) {
   .world-map-dialog { width: calc(100vw - 24px); height: fit-content; max-height: calc(100dvh - 24px); border-radius: 20px; }
   .world-map-dialog__body { height: auto; }
   .world-map-dialog__header { padding: 16px 20px; }
-  .world-map-dialog__header h2 { font-size: 19px; }
+  .world-map-dialog__header h2 { font-size: 16px; }
   .world-map-dialog__identity { gap: 10px; }
   .world-map-dialog__identity > svg { width: 22px; }
   .world-map-dialog__close { width: 44px; height: 44px; }

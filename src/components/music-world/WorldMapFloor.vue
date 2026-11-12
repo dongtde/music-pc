@@ -30,12 +30,12 @@
       <path class="world-floor__window" d="M112 211v40m0 38v40m0 38v40M528 211v40m0 38v40m0 38v40" />
       <path d="M235 84h170l57 125H178Z" :fill="'url(#' + prefix + '-stage)'" />
       <path class="world-floor__stage-line" d="M194 112q126 53 252 0M178 135q142 57 284 0" />
-      <rect class="world-floor__gallery world-floor__gallery--records" x="145" y="193" width="129" height="226" rx="18" />
-      <rect class="world-floor__gallery world-floor__gallery--discovery" x="366" y="193" width="129" height="226" rx="18" />
-      <circle class="world-floor__hub" cx="320" cy="321" r="47" />
-      <circle class="world-floor__hub world-floor__hub--inner" cx="320" cy="321" r="38" />
+      <rect class="world-floor__gallery world-floor__gallery--records" x="151" y="190" width="117" height="225" rx="20" />
+      <rect class="world-floor__gallery world-floor__gallery--discovery" x="372" y="190" width="117" height="225" rx="20" />
+      <circle class="world-floor__hub" cx="320" cy="321" r="39" />
+      <circle class="world-floor__hub world-floor__hub--inner" cx="320" cy="321" r="32" />
       <path class="world-floor__aisle" d="M320 236v28m0 114v28" />
-      <rect class="world-floor__lounge" x="165" y="414" width="310" height="81" rx="25" />
+      <rect class="world-floor__lounge" x="165" y="430" width="310" height="65" rx="22" />
       <path class="world-floor__entry" d="M283 565h74m-59 5h44" />
     </g>
 
@@ -63,34 +63,35 @@
       </template>
 
       <template v-else-if="place.kind === 'seat'">
-        <rect class="world-floor__hit-area" :x="place.id === 'seat-center' ? -40 : -48" :y="place.id === 'seat-center' ? -14 : -38" :width="place.id === 'seat-center' ? 80 : 96" height="58" rx="12" />
+        <rect class="world-floor__hit-area" :x="place.id === 'seat-center' ? -40 : -48" :y="place.id === 'seat-center' || place.z > 0 ? -14 : -38" :width="place.id === 'seat-center' ? 80 : 96" height="58" rx="12" />
         <rect class="world-floor__seat-base" :x="place.id === 'seat-center' ? -28 : -20" y="-6" :width="place.id === 'seat-center' ? 56 : 40" height="23" rx="7" />
         <rect class="world-floor__seat-cushion" :x="place.id === 'seat-center' ? -24 : -16" y="-11" :width="place.id === 'seat-center' ? 48 : 32" height="19" rx="5" />
         <path class="world-floor__seat-seam" :d="place.id === 'seat-center' ? 'M0-8V5M-23 11h46' : 'M-15 11h30'" />
-        <text class="world-floor__seat-label" :y="place.id === 'seat-center' ? 34 : -24">{{ place.label }}</text>
+        <text class="world-floor__seat-label" :y="place.id === 'seat-center' || place.z > 0 ? 33 : -25">{{ place.label }}</text>
       </template>
 
       <template v-else-if="place.id === 'screen'">
         <rect class="world-floor__hit-area" :x="wide ? -140 : -90" y="-13" :width="wide ? 280 : 180" height="58" rx="14" />
         <path class="world-floor__screen-back" :d="wide ? 'M-130 1q130-13 260 0v9q-130-12-260 0Z' : 'M-85 1q85-11 170 0v9q-85-10-170 0Z'" />
         <path class="world-floor__screen-edge" :d="wide ? 'M-126 0Q0-13 126 0' : 'M-82 0Q0-11 82 0'" />
-        <text class="world-floor__label" y="33">{{ place.label }}</text>
+        <text class="world-floor__label" y="30">{{ place.label }}</text>
       </template>
 
       <template v-else-if="place.id === 'atrium'">
         <path class="world-floor__lobby-line" d="M0 18v32" />
         <g transform="translate(0 72)">
-          <rect class="world-floor__tile" x="-62" y="-20" width="124" height="40" rx="12" />
-          <AudioLines x="-49" y="-10" :size="20" class="world-floor__icon" />
-          <text class="world-floor__tile-label" x="-20" y="0" dominant-baseline="central">{{ place.label }}</text>
+          <rect class="world-floor__tile" x="-53" y="-18" width="106" height="36" rx="10" />
+          <AudioLines x="-37" y="-8" :size="16" class="world-floor__icon" />
+          <text class="world-floor__tile-label" x="-12" y="0" dominant-baseline="central">{{ place.label }}</text>
         </g>
       </template>
 
       <template v-else>
-        <rect class="world-floor__tile-shadow" :x="wide ? -72 : -52" y="-17" :width="wide ? 144 : 104" height="42" rx="11" />
-        <rect class="world-floor__tile" :x="wide ? -72 : -52" y="-21" :width="wide ? 144 : 104" height="42" rx="11" />
-        <component :is="iconFor(place)" :x="wide ? -56 : -42" y="-10" :size="wide ? 20 : 18" class="world-floor__icon" />
-        <text class="world-floor__tile-label" :x="wide ? -25 : -16" y="0" dominant-baseline="central">{{ place.label }}</text>
+        <rect class="world-floor__hit-area" :x="wide ? -62 : -50" y="-24" :width="wide ? 124 : 100" height="48" rx="12" />
+        <rect class="world-floor__tile-shadow" :x="wide ? -60 : -48" y="-15" :width="wide ? 120 : 96" height="36" rx="10" />
+        <rect class="world-floor__tile" :x="wide ? -60 : -48" y="-18" :width="wide ? 120 : 96" height="36" rx="10" />
+        <component :is="iconFor(place)" :x="wide ? -42 : -35" y="-8" :size="16" class="world-floor__icon" />
+        <text class="world-floor__tile-label" :x="wide ? -15 : -11" y="0" dominant-baseline="central">{{ place.label }}</text>
       </template>
     </g>
 
@@ -175,8 +176,8 @@ onBeforeUnmount(() => observer?.disconnect())
   font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
 }
 .world-floor__foundation { fill: #091a23; stroke: #334e58; stroke-width: 1; }
-.world-floor__shell { stroke: #7c9b9e; stroke-opacity: .5; stroke-width: 1.3; }
-.world-floor__wall { fill: none; stroke: #7c9b9e; stroke-width: 2.7; stroke-linecap: round; opacity: .4; }
+.world-floor__shell { stroke: #7c9b9e; stroke-opacity: .38; stroke-width: 1; }
+.world-floor__wall { fill: none; stroke: #7c9b9e; stroke-width: 2; stroke-linecap: round; opacity: .3; }
 .world-floor__window { fill: none; stroke: #a8e7df; stroke-width: 2; stroke-linecap: round; opacity: .45; }
 .world-floor__stage-line { fill: none; stroke: #a8e7df; stroke-width: .9; opacity: .12; }
 .world-floor__gallery { stroke-width: .8; }
@@ -192,25 +193,26 @@ onBeforeUnmount(() => observer?.disconnect())
 .world-floor__destination.is-record { color: #d7bb8e; }
 .world-floor__destination.is-discovery { color: #a8e7df; }
 .world-floor__destination.is-terminal { color: #d7bb8e; }
-.world-floor__tile-shadow { fill: #06141c; opacity: .4; }
+.world-floor__tile-shadow { fill: #06141c; opacity: .25; }
 .world-floor__tile {
-  fill: #25434c;
+  fill: #223d46;
   stroke: currentColor;
-  stroke-opacity: .26;
-  stroke-width: 1;
+  stroke-opacity: .24;
+  stroke-width: .8;
   transition: fill 160ms, stroke-opacity 160ms;
 }
-.world-floor__destination.is-record .world-floor__tile { fill: #353e3e; }
-.world-floor__destination.is-terminal .world-floor__tile { fill: #354343; stroke-opacity: .55; }
+.world-floor__destination.is-record .world-floor__tile { fill: #303b3c; }
+.world-floor__destination.is-terminal .world-floor__tile { fill: #344342; stroke-opacity: .5; }
 .world-floor__hit-area { fill: transparent; stroke: transparent; stroke-width: 1; transition: fill-opacity 160ms; }
 .world-floor__icon { color: inherit; stroke-width: 1.6; pointer-events: none; }
-.world-floor__tile-label { fill: #e5f0ec; font-size: 16px; font-weight: 500; pointer-events: none; }
-.world-floor__label, .world-floor__seat-label { text-anchor: middle; fill: #c5d8d8; font-size: 15px; font-weight: 400; pointer-events: none; }
+.world-floor__tile-label { fill: #dbe8e5; font-size: 12px; font-weight: 400; letter-spacing: .025em; pointer-events: none; }
+.world-floor__label, .world-floor__seat-label { text-anchor: middle; fill: #b2c8ca; font-size: 11px; font-weight: 400; letter-spacing: .035em; pointer-events: none; }
+.world-floor__label { font-size: 12px; letter-spacing: .1em; }
 .world-floor__seat-base { fill: #172b34; stroke: #a8c8cb; stroke-opacity: .22; }
 .world-floor__seat-cushion { fill: #476068; stroke: #a8c8cb; stroke-opacity: .36; }
 .world-floor__seat-seam { fill: none; stroke: #a8c8cb; stroke-opacity: .38; stroke-width: .8; }
 .world-floor__screen-back { fill: #28474e; stroke: #a8e7df; stroke-opacity: .3; stroke-width: .8; }
-.world-floor__screen-edge { fill: none; stroke: #a8e7df; stroke-width: 3; stroke-linecap: round; }
+.world-floor__screen-edge { fill: none; stroke: #a8e7df; stroke-width: 2; stroke-linecap: round; }
 .world-floor__lobby-line { fill: none; stroke: #a8c8cb; stroke-width: 1; stroke-dasharray: 2 6; opacity: .3; }
 
 .world-floor__destination.is-selected { color: #efd0a0; }
@@ -234,11 +236,9 @@ onBeforeUnmount(() => observer?.disconnect())
 .world-floor--compact .world-floor__destination { pointer-events: none; }
 .world-floor--compact .world-floor__wall { stroke-width: 4; }
 .world-floor--compact .world-floor__gallery, .world-floor--compact .world-floor__hub { display: none; }
-.world-floor--wide .world-floor__tile-label { font-size: 15.5px; }
-
 @media (max-width: 600px) {
-  .world-floor__tile-label { font-size: 16px; }
-  .world-floor__label, .world-floor__seat-label { font-size: 15.5px; }
+  .world-floor__tile-label { font-size: 14px; letter-spacing: 0; }
+  .world-floor__label, .world-floor__seat-label { font-size: 12.5px; letter-spacing: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .world-floor__tile, .world-floor__hit-area { transition: none; }
