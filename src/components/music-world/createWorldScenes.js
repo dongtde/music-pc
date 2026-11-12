@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { getWorldScene } from './worldScenes.js'
 import { optimizeWorldMaterials } from './optimizeWorldMaterials.js'
+import { createSkyLounge } from './createSkyLounge.js'
 
 function disposeTree(root){
   const materials=new Set(),geometries=new Set()
@@ -23,11 +24,13 @@ function createRain(){
   return rain
 }
 
-export function createWorldScenes({scene,pavilion,renderer,ambient,sun,practicals,onChange,loadAsset}){
+export function createWorldScenes({scene,pavilion,renderer,ambient,sun,practicals,concert,onChange,onInvalidate,loadAsset}){
   const original=pavilion.getObjectByName('pavilion-shell'),equipment=pavilion.getObjectByName('pavilion-equipment')
   if(!original||!equipment)throw new Error('Music pavilion scene groups are missing')
   const loader=loadAsset||((file)=>new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/${file}`))
   const assets=new Map(),requests=new Map(),originalColors=new Map()
+  const originalEnvironment=scene.environment,originalSunPosition=sun.position.clone()
+  let skyLounge,quality='balanced'
   let active=getWorldScene('rain'),revision=0,disposed=false,weatherTime=0
   equipment.traverse(o=>{
     if(!o.isMesh)return
@@ -41,12 +44,17 @@ export function createWorldScenes({scene,pavilion,renderer,ambient,sun,practical
     assets.forEach(group=>{group.visible=false})
     if(asset){asset.visible=true;if(!asset.parent)scene.add(asset)}
     active=config;rain.visible=config.id==='rain'
-    scene.background.set(config.background);scene.fog.color.set(config.fog);scene.fog.density=config.id==='studio'?.007:.012
+    concert?.setLayout(config.id)
+    scene.background.set(config.background);scene.fog.color.set(config.fog);scene.fog.density=config.fogDensity??(config.id==='studio'?.007:.012)
+    scene.environment=config.id==='sky-lounge'?skyLounge.environment:originalEnvironment
     scene.environmentIntensity=config.environment;renderer.toneMappingExposure=config.exposure
-    ambient.color.set(config.id==='studio'?'#ffe0b7':'#bfdaed');ambient.groundColor.set(config.id==='studio'?'#493523':'#20233d')
-    sun.color.set(config.id==='studio'?'#ffdab0':'#9ebff5');sun.intensity=config.sun
-    practicals.forEach(light=>{light.color.set(config.id==='studio'?'#ffd293':config.palette.primary);light.intensity=38*config.practical})
+    ambient.color.set(config.ambientColor||(config.id==='studio'?'#ffe0b7':'#bfdaed'));ambient.groundColor.set(config.groundColor||(config.id==='studio'?'#493523':'#20233d'))
+    sun.color.set(config.sunColor||(config.id==='studio'?'#ffdab0':'#9ebff5'));sun.intensity=config.sun
+    if(config.sunPosition)sun.position.fromArray(config.sunPosition);else sun.position.copy(originalSunPosition)
+    practicals.forEach(light=>{light.color.set(config.practicalColor||(config.id==='studio'?'#ffd293':config.palette.primary));light.intensity=38*config.practical})
     originalColors.forEach((color,mat)=>mat.color.copy(color).set(config.materials[mat.name]||color))
+    skyLounge?.setActive(config.id==='sky-lounge')
+    scene.environmentRotation.y=config.id==='sky-lounge'?Math.PI*.55:0
     renderer.shadowMap.needsUpdate=true
     onChange?.({scene:config.id,sceneLoading:false,scenePending:'',sceneError:''})
   }
@@ -59,10 +67,17 @@ export function createWorldScenes({scene,pavilion,renderer,ambient,sun,practical
     try{
       let asset
       if(config.asset){
-        if(!requests.has(config.id))requests.set(config.id,loader(config.asset).then(result=>{
+        if(!requests.has(config.id))requests.set(config.id,loader(config.asset).then(async result=>{
           const group=result.scene||result
           if(disposed){disposeTree(group);throw new DOMException('World closed','AbortError')}
-          group.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true}});optimizeWorldMaterials(group);group.visible=false;assets.set(config.id,group);return group
+          group.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true}})
+          if(config.id==='sky-lounge'){
+            let prepared
+            try{prepared=await createSkyLounge({root:group,pavilion,renderer,quality,onUpdate:onInvalidate,isDisposed:()=>disposed})}catch(error){disposeTree(group);throw error}
+            if(disposed){prepared.dispose();disposeTree(group);throw new DOMException('World closed','AbortError')}
+            skyLounge=prepared;skyLounge.setQuality(quality)
+          }
+          optimizeWorldMaterials(group);group.visible=false;assets.set(config.id,group);return group
         }).catch(error=>{requests.delete(config.id);throw error}))
         asset=await requests.get(config.id)
       }
@@ -75,6 +90,7 @@ export function createWorldScenes({scene,pavilion,renderer,ambient,sun,practical
   }
   return {
     select,
+    setQuality(value){quality=value;skyLounge?.setQuality(value)},
     getConfig:()=>active,
     update(dt,state,reducedMotion){
       ambient.intensity=active.ambient*(1-state.power*.3)
@@ -83,7 +99,7 @@ export function createWorldScenes({scene,pavilion,renderer,ambient,sun,practical
       rain.material.uniforms.time.value=weatherTime
       return moving
     },
-    getState:()=>({id:active.id,loaded:[...assets.keys()],rain:rain.visible,activeShell:active.id==='rain'?original.name:assets.get(active.id)?.name}),
-    dispose(){disposed=true;revision++;rain.removeFromParent();rain.geometry.dispose();rain.material.dispose();assets.forEach(group=>{group.removeFromParent();disposeTree(group)});assets.clear()},
+    getState:()=>({id:active.id,loaded:[...assets.keys()],rain:rain.visible,activeShell:active.id==='rain'?original.name:assets.get(active.id)?.name,skyLounge:skyLounge?.getState()}),
+    dispose(){disposed=true;revision++;scene.environment=originalEnvironment;skyLounge?.dispose();rain.removeFromParent();rain.geometry.dispose();rain.material.dispose();assets.forEach(group=>{group.removeFromParent();disposeTree(group)});assets.clear()},
   }
 }

@@ -34,7 +34,7 @@ export function createConcertLights(scene) {
   const direction = new THREE.Vector3(), origin = new THREE.Vector3(), target = new THREE.Vector3()
   const primary = new THREE.Color(), secondary = new THREE.Color(), color = new THREE.Color()
   const highlight = new THREE.Color('#e6f5ff')
-  const fixtures = []
+  const fixtures = [], trusses = []
 
   for (const side of [-1, 1]) {
     const trussParts = []
@@ -47,7 +47,8 @@ export function createConcertLights(scene) {
       trussParts.push([diagonal, [side * 5.5, 6.75, z + 0.4]])
     }
     for (const z of [-9, -3, 3, 9]) trussParts.push([new THREE.CylinderGeometry(0.045, 0.045, 0.4, 10), [side * 5.5, 6.94, z]])
-    rig.add(new THREE.Mesh(combine(trussParts), alloy))
+    const truss = new THREE.Mesh(combine(trussParts), alloy)
+    rig.add(truss); trusses.push(truss)
 
     ROW_POSITIONS.forEach((z, index) => {
       const mount = new THREE.Group()
@@ -109,14 +110,14 @@ export function createConcertLights(scene) {
     const animated = state.live && !reducedMotion
     const phrase = Math.floor(state.beats / 4)
     fixtures.forEach((fixture,fixtureIndex) => {
-      const { side, index, z, pan, head, lens, spot, beam, pool } = fixture
+      const { side, index, z, mount, pan, head, lens, spot, beam, pool } = fixture
       const phase = animated ? state.phase : 0
       const sweep = Math.sin(phase + index * 0.48)
       const reach = animated ? 3.1 + sweep * (0.7 + state.energy * 1.6) : 3.2
       target.set(side * (5.5 - reach), 0.04, THREE.MathUtils.clamp(z - 0.6 + (animated ? Math.cos(phase * 0.7 + index * 0.6) * 1.7 : 0), -9.6, 9.7))
       const command=commands?.[fixtureIndex]
       if(command){target.set(command.x,command.y,command.z);spot.angle=command.angle}
-      direction.set(target.x - side * 5.5, target.y - 5.91, target.z - z)
+      direction.set(target.x - mount.position.x, target.y - (mount.position.y - .67 * mount.scale.y), target.z - z)
       pan.rotation.y = Math.atan2(direction.x, direction.z)
       head.rotation.x = Math.atan2(-direction.y, Math.hypot(direction.x, direction.z))
       head.updateWorldMatrix(true, false)
@@ -158,7 +159,15 @@ export function createConcertLights(scene) {
     })
   }
 
-  return { update, fixtures, setQuality }
+  function setLayout(layout) {
+    const lounge = layout === 'sky-lounge'
+    trusses.forEach(truss => { truss.visible = !lounge })
+    fixtures.forEach(({ mount, side, z }) => {
+      mount.position.set(side * (lounge ? 12.8 : 5.5), lounge ? 11.8 : 6.58, z)
+      mount.scale.setScalar(lounge ? .78 : 1)
+    })
+  }
+  return { update, fixtures, setQuality, setLayout }
 }
 
 function combine(parts) {

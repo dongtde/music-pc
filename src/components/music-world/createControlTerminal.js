@@ -99,8 +99,8 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
     text(ctx,'空间设置',1154,116,25,ink.light)
     text(ctx,sceneLoading?'正在切换场景…':'音乐场景',1154,156,18,ink.muted)
     WORLD_SCENES.forEach((place,index)=>{
-      const y=175+index*52,selected=sceneId===place.id
-      button(1154,y,410,44,place.name,'scene',place.id,{selected,size:21})
+      const y=171+index*43,selected=sceneId===place.id
+      button(1154,y,410,37,place.name,'scene',place.id,{selected,size:20})
     })
     text(ctx,'画质',1154,360,18,ink.muted)
     QUALITIES.forEach((option,index)=>button(1154+index*140,378,130,40,option.label,'quality',option.id,{selected:quality===option.id,size:19}))

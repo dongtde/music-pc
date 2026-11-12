@@ -163,6 +163,7 @@ speaker(-8.3,-16.9);speaker(8.3,-16.9)
 for(const side of [-1,1]) {
  const x=side*11.9
  for(const z of [-4,1,6]){
+  const shelf=anchor(`record-shelf-${side}-${z}`,[0,0,0]);shelf.userData.staticBatch=true;constructionRoot=shelf
   box([.16,3.25,3.5],wood,[x+side*1.12,1.65,z],.04)
   for(const edge of [-1.72,1.72])box([2.4,3.25,.12],wood,[x,1.65,z+edge],.035)
   for(const y of [.42,1.37,2.32,3.21]){
@@ -173,6 +174,7 @@ for(const side of [-1,1]) {
    const record=box([1.2,.72,.085],i%4===0?brass:i%3===0?fabric:dark,[x-side*.42,.85+row*.95,z-1.42+i*.145],0)
    record.rotation.x=(i%6===0?.08:0)
   }
+  constructionRoot=equipment
  }
 }
 
@@ -214,6 +216,7 @@ anchor('terminal-label',[0,.54,2.43])
 // Upholstered listening chairs with piping and a curved supporting frame.
 for(const side of [-1,1])for(const z of [-10.8,12]){
  const chair=anchor(`listening-chair-${side}-${z}`,[side*5,0,z],side*.22)
+ chair.userData.staticBatch=true
  box([1.55,.3,1.48],fabric,[0,.58,0],.16,chair)
  const back=box([1.55,1.1,.26],fabric,[0,1.07,.63],.13,chair);back.rotation.x=-.17
  for(const x of [-.8,.8]){

@@ -26,7 +26,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap
   renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = true
-  const camera = new THREE.PerspectiveCamera(65, 1, .1, 180); camera.rotation.order = 'YXZ'
+  const camera = new THREE.PerspectiveCamera(65, 1, .1, 600); camera.rotation.order = 'YXZ'
   const viewCamera = camera.clone(); viewCamera.rotation.order = 'YXZ'; scene.add(viewCamera)
   const keys = new Set(), covers = [], hitTargets = [], textures = new Set(), practicals=[]
   const rhythm = createStageRhythm(), raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2()
@@ -341,6 +341,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   function setQuality(value) {
     quality=['smooth','balanced','high'].includes(value)?value:'balanced'
     terminal.setQuality(quality)
+    environments?.setQuality(quality)
     concert.setQuality(quality)
     const size=quality==='smooth'?1024:2048
     if(sun.shadow.mapSize.x!==size){sun.shadow.mapSize.set(size,size);sun.shadow.map?.dispose();sun.shadow.map=null}
@@ -529,7 +530,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     concert = createConcertLights(scene)
     lightShow=createWorldLightShow(scene,concert)
     records=createRecordExperience({camera:viewCamera,invalidate,onChange:onStatus})
-    environments=createWorldScenes({scene,pavilion,renderer,ambient,sun,practicals,onChange:value=>{terminal.setScene(value.scene||environments?.getConfig().id||'rain',Boolean(value.sceneLoading));onStatus?.(value);invalidate()}})
+    environments=createWorldScenes({scene,pavilion,renderer,ambient,sun,practicals,concert,onInvalidate:invalidate,onChange:value=>{terminal.setScene(value.scene||environments?.getConfig().id||'rain',Boolean(value.sceneLoading));onStatus?.(value);invalidate()}})
     observer = new ResizeObserver(resizeRenderer); observer.observe(canvas)
     canvas.addEventListener('keydown',keydown); window.addEventListener('keyup',keyup); window.addEventListener('blur',clearMovement)
     canvas.addEventListener('blur',clearMovement); document.addEventListener('visibilitychange',visibility)
