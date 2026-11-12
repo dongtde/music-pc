@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { getWorldScene } from './worldScenes.js'
 import { optimizeWorldMaterials } from './optimizeWorldMaterials.js'
 import { createSkyLounge } from './createSkyLounge.js'
+import { createLoungeClimate } from './createLoungeClimate.js'
 
 function disposeTree(root){
   const materials=new Set(),geometries=new Set()
@@ -24,13 +25,14 @@ function createRain(){
   return rain
 }
 
-export function createWorldScenes({scene,pavilion,renderer,ambient,sun,practicals,concert,lightGrid,onChange,onInvalidate,loadAsset}){
+export function createWorldScenes({scene,pavilion,renderer,camera,ambient,sun,practicals,concert,lightGrid,onChange,onInvalidate,loadAsset}){
   const original=pavilion.getObjectByName('pavilion-shell'),equipment=pavilion.getObjectByName('pavilion-equipment')
   if(!original||!equipment)throw new Error('Music pavilion scene groups are missing')
   const loader=loadAsset||((file)=>new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/${file}`))
   const assets=new Map(),requests=new Map(),originalColors=new Map()
   const originalEnvironment=scene.environment,originalSunPosition=sun.position.clone()
   let skyLounge,quality='balanced'
+  const climate=createLoungeClimate({scene,renderer,ambient,sun,practicals,getLounge:()=>skyLounge,invalidate:onInvalidate})
   let active=getWorldScene('rain'),revision=0,disposed=false,weatherTime=0
   equipment.traverse(o=>{
     if(!o.isMesh)return
@@ -77,7 +79,14 @@ export function createWorldScenes({scene,pavilion,renderer,ambient,sun,practical
             if(disposed){prepared.dispose();disposeTree(group);throw new DOMException('World closed','AbortError')}
             skyLounge=prepared;skyLounge.setQuality(quality)
           }
-          optimizeWorldMaterials(group,lightGrid);group.visible=false;assets.set(config.id,group);return group
+          optimizeWorldMaterials(group,lightGrid)
+          if(config.id==='sky-lounge'&&camera){
+            // Compile both dry and rainy effects before revealing the lounge.
+            // The group is still detached, so this never flashes rain on screen.
+            try{await renderer.compileAsync(group,camera,scene)}catch(error){skyLounge?.dispose();skyLounge=null;disposeTree(group);throw error}
+            if(disposed){skyLounge?.dispose();skyLounge=null;disposeTree(group);throw new DOMException('World closed','AbortError')}
+          }
+          group.visible=false;assets.set(config.id,group);return group
         }).catch(error=>{requests.delete(config.id);throw error}))
         asset=await requests.get(config.id)
       }
@@ -90,6 +99,9 @@ export function createWorldScenes({scene,pavilion,renderer,ambient,sun,practical
   }
   return {
     select,
+    setClimate:climate.set,
+    getClimate:climate.getState,
+    setWeatherBudget(value){skyLounge?.setWeatherBudget(value)},
     setQuality(value){quality=value;skyLounge?.setQuality(value)},
     getConfig:()=>active,
     update(dt,state,reducedMotion,playback){
@@ -98,9 +110,10 @@ export function createWorldScenes({scene,pavilion,renderer,ambient,sun,practical
       if(moving)weatherTime+=dt
       rain.material.uniforms.time.value=weatherTime
       const musicMoving=skyLounge?.update(dt,state,reducedMotion,playback)||false
-      return moving||musicMoving
+      const climateMoving=active.id==='sky-lounge'&&climate.update(dt,state,reducedMotion,quality)
+      return moving||musicMoving||climateMoving
     },
-    getState:()=>({id:active.id,loaded:[...assets.keys()],rain:rain.visible,activeShell:active.id==='rain'?original.name:assets.get(active.id)?.name,skyLounge:skyLounge?.getState()}),
+    getState:()=>({id:active.id,loaded:[...assets.keys()],rain:rain.visible,activeShell:active.id==='rain'?original.name:assets.get(active.id)?.name,skyLounge:skyLounge?.getState(),climate:climate.getState()}),
     dispose(){disposed=true;revision++;scene.environment=originalEnvironment;skyLounge?.dispose();rain.removeFromParent();rain.geometry.dispose();rain.material.dispose();assets.forEach(group=>{group.removeFromParent();disposeTree(group)});assets.clear()},
   }
 }

@@ -1,6 +1,7 @@
 <template>
   <section class="music-world" :class="{'music-world--inspecting':selectedRecord,'music-world--seated':status.seated}" :inert="suspended" aria-label="声境 3D 音乐馆" @keydown="handleWorldKey">
     <canvas ref="canvas" :key="canvasKey" class="music-world__canvas" tabindex="0" aria-label="3D 音乐馆。WASD 行走，空格跳跃，V 切换视角，拖动环顾，E 互动，Home 返回中庭。" @pointerdown="exploring=true" />
+    <output v-if="status.performance" style="position:absolute;bottom:24px;right:24px;z-index:4;padding:8px 12px;border-radius:8px;background:#10232ddd;color:#bad4d1;font:11px monospace;pointer-events:none" aria-label="渲染性能" :data-metrics="JSON.stringify(status.performance)">{{ status.performance.fps }} FPS · P95 {{ status.performance.frameP95 }} ms · CPU {{ status.performance.cpuP95 }} ms · {{ status.performance.quality }} · {{ status.performance.width }} × {{ status.performance.height }}</output>
     <div v-if="ready&&!suspended&&!routeOpen&&!panel&&!commentOpen&&!selectedRecord&&!listeningPanel" class="world-avatar-controls" @keydown.stop>
       <span class="world-avatar-controls__model"><UserRound :size="18" /><span>Fantasy Queen</span></span>
       <button type="button" :title="status.viewMode==='first'?'第三人称 · V':'第一人称 · V'" aria-label="切换人物视角" @click="toggleView"><ScanEye :size="18" /><span>{{ status.viewMode==='first'?'第三人称':'第一人称' }}</span></button>
@@ -41,6 +42,7 @@
     </section>
 
     <WorldMap v-if="ready&&!suspended&&!panel&&!routeOpen&&!selectedRecord&&!commentOpen&&!listeningPanel" :position="status" :archive-tracks="data.exhibits.value.archive" @open="openMap" @navigate="goToMapPoint" />
+    <WorldClimate v-if="sceneId==='sky-lounge'&&ready&&!suspended&&!panel&&!routeOpen&&!selectedRecord&&!commentOpen&&!listeningPanel" ref="climatePanel" :model-value="climate" :current-hour="status.climateHour" @update:model-value="changeClimate" @open="openMap" />
 
     <Transition name="world-panel">
       <section v-if="panel && !routeOpen" ref="panelEl" class="world-panel" aria-label="音乐馆曲库" @keydown.esc.stop="closePanel">
@@ -84,6 +86,8 @@ import { createWorldAudioSampler } from './music-world/createWorldAudioSampler.j
 import { getWorldScene } from './music-world/worldScenes.js'
 import { createMusicWorld } from './music-world/createMusicWorld'
 import WorldMap from './music-world/WorldMap.vue'
+import WorldClimate from './music-world/WorldClimate.vue'
+import { LOUNGE_CLIMATE_KEY, normalizeLoungeClimate } from './music-world/loungeClimate.js'
 import WorldMusicLoading from './music-world/WorldMusicLoading.vue'
 import { useWorldLibrary } from './music-world/useWorldLibrary'
 import '../styles/music-world.css'
@@ -93,7 +97,7 @@ import { createScreenListFeedback } from './music-world/createScreenList.js'
 import { loadWorldScreen } from './music-world/worldDataSources.js'
 import { createSongComments } from './music-world/songComments.js'
 import { getSongCommentsData } from '../services/netease'
-import { readStorage, writeStorage } from '../utils/storage'
+import { readStorage, writeStorage, readJsonStorage, writeJsonStorage } from '../utils/storage'
 import { DANMAKU_OPACITY_KEY, normalizeDanmakuOpacity } from './music-world/danmakuSettings.js'
 import { useListeningLobby } from './music-world/useListeningLobby.js'
 import { WORLD_LOBBY_DISPLAY } from './music-world/worldNavigation.js'
@@ -109,6 +113,9 @@ const roomSummary=computed(()=>({id:listeningRoom.state.room?.id||'',isHost:list
 const props=defineProps({suspended:{type:Boolean,default:false}})
 const canvas=ref(null),canvasKey=ref(0),ready=ref(false),failed=ref(false),progress=ref(0),exploring=ref(true),panel=ref(false),panelEl=ref(null),notice=ref('')
 const sceneId=ref(getWorldScene(readStorage('lanyin.world.scene','rain')).id)
+const climate=ref(normalizeLoungeClimate(readJsonStorage(LOUNGE_CLIMATE_KEY))),climatePanel=ref(null)
+let climateClock=0
+function changeClimate(value){climate.value=normalizeLoungeClimate(value);world?.setClimate(climate.value);writeJsonStorage(LOUNGE_CLIMATE_KEY,climate.value)}
 const stationId=ref('atrium'),routeOpen=computed(()=>route.name!=='space')
 const status=reactive({x:0,z:12.8,yaw:0,live:false,seated:false,navigating:false,hint:'',sceneLoading:false,scenePending:'',lightingCue:'等待音乐',audioMode:'waiting'}),lyrics=ref([]),reducedMotion=ref(false)
 const selectedRecord=ref(null),recordPanel=ref(null),placingRecord=ref(false),quality=ref(readStorage('lanyin.world.quality','balanced'))
@@ -209,6 +216,7 @@ async function initialize(){
     sampler=createWorldAudioSampler(player.getAudioElement())
     world=await createMusicWorld(canvas.value,{signal,quality:quality.value,sampleAudio:()=>sampler?.sample(),onProgress:value=>progress.value=value,onStatus:receiveStatus,onAction:handleAction,onListeningScreen:value=>listeningPlacement.value=value,onPresence:listeningRoom.movePresence,onSeat:takeSeat})
     if(signal.aborted)return
+    world.setClimate(climate.value)
     syncPresence();await listeningRoom.setPresenceActive(!props.suspended&&!routeOpen.value)
     world.updateLibrary(data.exhibits.value);world.setFeeds(feeds.getState());world.setQuality(quality.value);world.setAccount(account.value);world.setListeningRoom(roomSummary.value);world.setListeningLobby(lobby.snapshot);world.setActive(!props.suspended&&!routeOpen.value);syncPlayback();await world.setScene(requestedScene);if(!signal.aborted){ready.value=true;if(!props.suspended&&!routeOpen.value&&!listeningPanel.value)canvas.value?.focus({preventScroll:true})}
   }catch(error){if(error.name!=='AbortError'&&!signal.aborted){failed.value=true;sampler?.stop();console.warn('Music pavilion failed:',error)}}
@@ -244,6 +252,7 @@ async function handleAction(action,payload){
   else if(action==='lights-toggle')toggleLights()
   else if(action==='danmaku-opacity')changeDanmakuOpacity(payload)
   else if(action==='settings')router.push('/settings')
+  else if(action==='climate')climatePanel.value?.open()
   else if(action==='account'){world?.clearMovement();world?.cancelTravel();auth.openLoginModal()}
   else if(action==='room-open')goTo('lobby')
   else if(action==='lobby-input')openListeningInput(payload)
@@ -275,7 +284,7 @@ async function handleAction(action,payload){
   else if(action==='lyric')seekListening(payload)
   else if(action==='error'){failed.value=true;sampler?.stop()}
 }
-function visibility(){syncPlayback()}
+function visibility(){syncPlayback();if(!document.hidden&&sceneId.value==='sky-lounge')world?.setClimate(climate.value)}
 function syncMotion(){reducedMotion.value=mediaQuery.matches;syncPlayback()}
 watch(()=>[listening.value,danmakuEnabled.value,danmakuOpacity.value,lightsEnabled.value],syncPlayback)
 watch(data.exhibits,value=>world?.updateLibrary(value))
@@ -290,6 +299,6 @@ watch(()=>listening.value.track?.id,async()=>{
   if(!listening.value.track?.id)return
   try{const result=await getCachedTrackLyrics(listening.value.track,{timeoutMs:6000});if(token===lyricsToken&&!disposed){lyrics.value=result;syncPlayback()}}catch{}
 },{immediate:true})
-onMounted(()=>{mediaQuery=matchMedia('(prefers-reduced-motion: reduce)');syncMotion();mediaQuery.addEventListener('change',syncMotion);document.addEventListener('visibilitychange',visibility);initialize();data.loadHome();feeds.loadAll()})
-onBeforeUnmount(()=>{disposed=true;void listeningRoom.setPresenceActive(false);listFeedback.dispose();if(opacitySaveTimer)saveDanmakuOpacity();lyricsToken++;feeds.dispose();comments.dispose();abort?.abort();world?.dispose();sampler?.dispose();clearTimeout(noticeTimer);mediaQuery?.removeEventListener('change',syncMotion);document.removeEventListener('visibilitychange',visibility)})
+onMounted(()=>{mediaQuery=matchMedia('(prefers-reduced-motion: reduce)');syncMotion();mediaQuery.addEventListener('change',syncMotion);document.addEventListener('visibilitychange',visibility);climateClock=setInterval(()=>{if(sceneId.value==='sky-lounge'&&climate.value.mode!=='manual'&&!props.suspended&&!routeOpen.value&&!document.hidden)world?.setClimate(climate.value)},15000);initialize();data.loadHome();feeds.loadAll()})
+onBeforeUnmount(()=>{disposed=true;clearInterval(climateClock);void listeningRoom.setPresenceActive(false);listFeedback.dispose();if(opacitySaveTimer)saveDanmakuOpacity();lyricsToken++;feeds.dispose();comments.dispose();abort?.abort();world?.dispose();sampler?.dispose();clearTimeout(noticeTimer);mediaQuery?.removeEventListener('change',syncMotion);document.removeEventListener('visibilitychange',visibility)})
 </script>

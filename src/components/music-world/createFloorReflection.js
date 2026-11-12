@@ -84,7 +84,9 @@ export function createFloorReflection() {
     // A moving camera can expose texels outside a stationary cropped cache.
     // Refresh that cache immediately once, then keep the original moving cadence
     // with full reflections. Crop only while the camera is stationary.
-    if (!this.forceUpdate && !(moving && croppedCache) && (framesSinceUpdate < (moving ? 3 : 6) || now - lastUpdate < (moving ? 50 : 100))) return
+    const budget = mesh.userData.budgetScale ?? 1
+    const interval = budget < .8 ? (moving ? 100 : 200) : (moving ? 50 : 100)
+    if (!this.forceUpdate && !(moving && croppedCache) && (framesSinceUpdate < (moving ? 3 : 6) || now - lastUpdate < interval)) return
     origin.setFromMatrixPosition(mesh.matrixWorld); eye.setFromMatrixPosition(camera.matrixWorld)
     rotation.extractRotation(mesh.matrixWorld); normal.set(0, 0, 1).applyMatrix4(rotation)
     view.subVectors(origin, eye)

@@ -161,6 +161,16 @@
   ],
   "derived": [
     {
+      "file": "weather-mask.png",
+      "source": "city-panorama-4k.jpg",
+      "process": "RGBA skyline, hand-authored window emission, distance haze and desaturated night facade detail; scripts/prepare-lounge-weather.py"
+    },
+    {
+      "file": "weather-noise.png",
+      "source": "procedural",
+      "process": "Deterministic periodic cloud density, lighting gradient and star atlas; scripts/prepare-lounge-weather.py"
+    },
+    {
       "file": "city-panorama.jpg",
       "source": "city-source.jpg",
       "process": "8192x4096 JPEG quality 91"

@@ -18,6 +18,7 @@ import { createWorldAvatars } from './createWorldAvatars.js'
 import { optimizeWorldMaterials } from './optimizeWorldMaterials.js'
 import { createWorldLightGrid } from './worldLightGrid.js'
 import { createWorldRenderBudget } from './worldRenderBudget.js'
+import { createWorldFrameMetrics } from './worldFrameMetrics.js'
 import { createSpeakerMotion } from './createSpeakerMotion.js'
 import { createListeningLobbyScreen } from './createListeningLobbyScreen.js'
 import { createScreenProjection } from './createScreenProjection.js'
@@ -31,6 +32,8 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap
   renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = true
   const renderBudget = createWorldRenderBudget(renderer)
+  const frameMetrics = import.meta.env.DEV && new URLSearchParams(location.search).has('renderStats') ? createWorldFrameMetrics() : null
+  let lastMetrics = 0
   const camera = new THREE.PerspectiveCamera(65, 1, .1, 600); camera.rotation.order = 'YXZ'
   const viewCamera = camera.clone(); viewCamera.rotation.order = 'YXZ'; scene.add(viewCamera)
   const keys = new Set(), covers = [], hitTargets = [], textures = new Set(), practicals=[]
@@ -437,8 +440,10 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   }
   function render(now) {
     frame = 0; if (disposed || !active || document.hidden) return
-    renderBudget.setEnabled(quality === 'high' && environments.getConfig().id === 'sky-lounge' && playback.lightsEnabled !== false)
+    frameMetrics?.begin(now)
+    renderBudget.setEnabled(environments.getConfig().id === 'sky-lounge')
     if (renderBudget.begin(now)) lastScreenResolution = -Infinity
+    environments.setWeatherBudget(renderBudget.getState().appliedScale)
     const delta = Math.min((now - (last || now - 16)) / 1000, .1); last = now
     const fov=updateMotion(delta)
     const firstPerson=updateView(delta),pose=avatarPose()
@@ -467,6 +472,8 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     lightGrid.invalidate()
     try { renderer.render(scene, viewCamera) } catch { renderBudget.abort();active=false;stop();onAction?.('error');return }
     renderBudget.end()
+    frameMetrics?.end()
+    if(frameMetrics&&now-lastMetrics>1000){lastMetrics=now;onStatus?.({performance:{...frameMetrics.getState(),...renderBudget.getState(),quality,width:renderer.domElement.width,height:renderer.domElement.height,calls:renderer.info.render.calls,triangles:renderer.info.render.triangles}})}
     syncListeningScreen()
     frameCount++
     if (now - lastStatus > 200) {
@@ -474,7 +481,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
       raycaster.setFromCamera(new THREE.Vector2(0,0),viewCamera)
       const target=firstHit()?.object
       const hint=target?.userData.hint|| (target?.userData.item?`拿起唱片 · ${target.userData.item.name}`:target?.userData.action==='sit'?'坐下听歌':target?.name==='world-music-screen'?'操作音乐大屏':target?.userData.station?'前往'+WORLD_STATIONS[target.userData.station]?.label:'')
-      onStatus?.({ x: camera.position.x, z: camera.position.z, yaw, live: lighting.live, walking, jumping:jumpHeight>0,viewMode,frameCount,hint,lightingCue:lightShow.getState().cue,tempo:lighting.tempo })
+      onStatus?.({ x: camera.position.x, z: camera.position.z, yaw, live: lighting.live, walking, jumping:jumpHeight>0,viewMode,frameCount,hint,lightingCue:lightShow.getState().cue,tempo:lighting.tempo,climateHour:environments.getClimate().currentHour })
     }
     if (!frame && (tour || pendingTravel || seatMove || movementActive || cameraSettling || avatarMotion || jumpHeight || jumpVelocity || recordMotion || weatherMotion || speakerMotion || lightSettling || screenMotion || terminalMotion || feedMotion || keys.size || drag || Math.abs(camera.fov-fov)>.03 || (playback.playing && !reducedMotion) || lighting.settling || now < settle)) frame = requestAnimationFrame(render)
   }
@@ -556,7 +563,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     concert = createConcertLights(scene)
     lightShow=createWorldLightShow(scene,concert)
     records=createRecordExperience({camera:viewCamera,invalidate,onChange:onStatus})
-    environments=createWorldScenes({scene,pavilion,renderer,ambient,sun,practicals,concert,lightGrid,onInvalidate:invalidate,onChange:value=>{terminal.setScene(value.scene||environments?.getConfig().id||'rain',Boolean(value.sceneLoading));onStatus?.(value);invalidate()}})
+    environments=createWorldScenes({scene,pavilion,renderer,camera:viewCamera,ambient,sun,practicals,concert,lightGrid,onInvalidate:invalidate,onChange:value=>{terminal.setScene(value.scene||environments?.getConfig().id||'rain',Boolean(value.sceneLoading));onStatus?.(value);invalidate()}})
     observer = new ResizeObserver(resizeRenderer); observer.observe(canvas)
     canvas.addEventListener('keydown',keydown); window.addEventListener('keyup',keyup); window.addEventListener('blur',clearMovement)
     canvas.addEventListener('blur',clearMovement); document.addEventListener('visibilitychange',visibility)
@@ -609,6 +616,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     setQuality,
     setActive(value) { active=Boolean(value); if(active)invalidate();else stop() },
     async setScene(id){const applied=await environments.select(id);if(applied)invalidate();return applied},
+    setClimate(value){environments.setClimate(value)},
     setPlayback(value) {
       if(previousTrack!==value.track?.id || Math.abs((value.currentTime||0)-(playback.currentTime||0))>2) { rhythm.reset();lightShow?.reset(); previousTrack=value.track?.id }
       const stopMotion=Boolean(value.reducedMotion)&&!reducedMotion

@@ -4,6 +4,7 @@ import { HDRLoader } from 'three/addons/loaders/HDRLoader.js'
 import { createFloorReflection } from './createFloorReflection.js'
 import { WORLD_SEATS } from './worldNavigation.js'
 import { createLoungeMusicExperience } from './createLoungeMusicExperience.js'
+import { createLoungeAtmosphere } from './createLoungeAtmosphere.js'
 
 const FINISHES = { 'sky-limestone': 'marble', 'sky-marble': 'marble', 'sky-walnut': 'walnut', 'sky-parquet': 'walnut', 'sky-carpet': 'boucle' }
 const BASE = `${import.meta.env.BASE_URL}models/sky-lounge/`
@@ -41,6 +42,8 @@ export async function createSkyLounge({ root, pavilion, renderer, quality = 'bal
     // Upholstery uses a solid color; keep its empty color slot for the shared map layout.
     ...['marble', 'walnut', 'boucle'].flatMap(id => ['color', 'normal', 'roughness'].map(kind =>
       id === 'boucle' && kind === 'color' ? null : textureLoader.loadAsync(`${BASE}${id}-${kind}.jpg`))),
+    textureLoader.loadAsync(BASE + 'weather-mask.png?v=4'),
+    textureLoader.loadAsync(BASE + 'weather-noise.png?v=2'),
   ]
   const results = await Promise.allSettled(jobs)
   const values = results.map(result => result.status === 'fulfilled' ? result.value : null)
@@ -136,6 +139,9 @@ export async function createSkyLounge({ root, pavilion, renderer, quality = 'bal
   panorama.colorSpace = THREE.SRGBColorSpace
   const sky = new THREE.Mesh(new THREE.SphereGeometry(480, 64, 32), new THREE.MeshBasicMaterial({ map: panorama, side: THREE.BackSide, depthWrite: false, fog: false, toneMapped: false }))
   sky.name = 'sky-lounge-photographic-city'; sky.rotation.y = Math.PI * .55; sky.renderOrder = -10; root.add(sky)
+  const atmosphere = createLoungeAtmosphere(root, sky, { mask: values[13], noise: values[14] })
+  renderer.initTexture(values[13]); renderer.initTexture(values[14])
+  atmosphere.setQuality(quality)
   hdri.mapping = THREE.EquirectangularReflectionMapping
   const generator = new THREE.PMREMGenerator(renderer)
   let environment
@@ -146,9 +152,18 @@ export async function createSkyLounge({ root, pavilion, renderer, quality = 'bal
   const music = createLoungeMusicExperience(root, onUpdate)
   root.updateMatrixWorld(true)
   root.traverse(object => { object.matrixAutoUpdate = false })
-  let active = false, closed = false, panoramaRevision = 0
+  let active = false, closed = false, panoramaRevision = 0, reflectionAllowed = quality === 'high', reflectionBudget = true
   return {
     environment: environment.texture,
+    setAtmosphere: atmosphere.update,
+    setWeatherBudget(value) {
+      atmosphere.setBudget(value); reflection.userData.budgetScale = value
+      // Hysteresis avoids toggling the expensive second scene render near a boundary.
+      if(value<.7)reflectionBudget=false
+      else if(value>.86)reflectionBudget=true
+      const visible=reflectionAllowed&&reflectionBudget
+      if(visible!==reflection.visible){reflection.visible=visible;reflection.forceUpdate=true}
+    },
     update(delta, state, reducedMotion, playback) { return active && music.update(delta, state, reducedMotion, playback) },
     setActive(value) {
       active = value
@@ -163,7 +178,8 @@ export async function createSkyLounge({ root, pavilion, renderer, quality = 'bal
     },
     setQuality(quality) {
       if (closed) return
-      reflection.visible = quality === 'high'; reflection.forceUpdate = true
+      atmosphere.setQuality(quality)
+      reflectionAllowed = quality === 'high'; reflection.visible = reflectionAllowed && reflectionBudget; reflection.forceUpdate = true
       const revision = ++panoramaRevision, file = quality === 'high' ? 'city-panorama.jpg' : 'city-panorama-4k.jpg'
       if (sky.material.map.image.width === (quality === 'high' ? 8192 : 4096)) return
       textureLoader.loadAsync(BASE + file + '?v=modern-buildings').then(texture => {
@@ -173,7 +189,7 @@ export async function createSkyLounge({ root, pavilion, renderer, quality = 'bal
         previous.dispose(); textures.delete(previous); reflection.forceUpdate = true; onUpdate()
       }).catch(() => { /* Keep the current panorama if a quality upgrade cannot load. */ })
     },
-    getState: () => ({ ready: true, active, photographicCity: true, furnishings, instancedProps: true, realtimeReflection: reflection.visible, reflectionResolution: reflection.getRenderTarget().width, reflection: { ...reflection.userData.reflectionMetrics }, panoramaWidth: sky.material.map.image.width }),
+    getState: () => ({ ready: true, active, photographicCity: true, atmosphere: atmosphere.getState(), furnishings, instancedProps: true, realtimeReflection: reflection.visible, reflectionResolution: reflection.getRenderTarget().width, reflection: { ...reflection.userData.reflectionMetrics }, panoramaWidth: sky.material.map.image.width }),
     dispose() {
       closed = true; panoramaRevision++
       music.dispose()

@@ -98,6 +98,7 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
   function drawSettings(state){
     text(ctx,'空间设置',1154,116,25,ink.light)
     text(ctx,sceneLoading?'正在切换场景…':'音乐场景',1154,156,18,ink.muted)
+    if(sceneId==='sky-lounge')button(1394,128,170,30,'天气与时间 ↗','climate',null,{size:17})
     WORLD_SCENES.forEach((place,index)=>{
       const y=171+index*43,selected=sceneId===place.id
       button(1154,y,410,37,place.name,'scene',place.id,{selected,size:20})

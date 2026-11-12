@@ -1,6 +1,5 @@
-// High quality keeps all effects. Only the main drawing-buffer pixel density
-// adapts; DOM UI, panorama/material textures and the 512px reflection stay intact.
-export function createRenderScaleController({ targetMs = 12, minimumScale = .5 } = {}) {
+// Bound GPU work across all presets. UI and material texture resolution stay intact.
+export function createRenderScaleController({ targetMs = 8, minimumScale = .5 } = {}) {
   const samples = []
   let scale = 1, minimum = minimumScale, fastWindows = 0, warmup = 24, lastCost = null
   return {
@@ -37,8 +36,9 @@ export function createWorldRenderBudget(renderer) {
   }
   function reset() {
     clearQueries(); generation++; lastFrame = null
-    // May go down to the balanced preset's pixel budget, never below it.
-    controller.reset(Math.sqrt(Math.min(width * height * ratio * ratio, 1920 * 1080) / (width * height * ratio * ratio)))
+    // Allow the 720p budget when needed, including on 1080p displays. The controller
+    // has a .5 scale floor so high-DPI images never collapse to unreadable detail.
+    controller.reset(Math.sqrt(Math.min(width * height * ratio * ratio, 1280 * 720) / (width * height * ratio * ratio)))
   }
   function visibility() { clearQueries(); lastFrame = null }
   document.addEventListener('visibilitychange', visibility)
