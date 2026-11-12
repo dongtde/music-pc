@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { createStageChoreography } from './stageChoreography.js'
 
 export function createWorldLightShow(scene, concert) {
@@ -6,11 +7,15 @@ export function createWorldLightShow(scene, concert) {
   const materials=[],geometry=new THREE.BoxGeometry(.055,.035,1.15),director=createStageChoreography()
   for(let i=0;i<6;i++){
     const material=new THREE.MeshStandardMaterial({color:'#1e363c',emissive:'#92d7cf',emissiveIntensity:0,metalness:.35,roughness:.35});materials.push(material)
+    const parts=[]
     for(const side of [-1,1]){
-      const floor=new THREE.Mesh(geometry,material);floor.position.set(side*2.17,.065,-14.5+i*2.3);group.add(floor)
-      const edge=new THREE.Mesh(geometry,material);edge.rotation.x=Math.PI/2;edge.scale.z=.72;edge.position.set(side*6.85,1.3+i*.84,-19.6);group.add(edge)
+      parts.push(geometry.clone().translate(side*2.17,.065,-14.5+i*2.3))
+      parts.push(geometry.clone().scale(1,1,.72).rotateX(Math.PI/2).translate(side*6.85,1.3+i*.84,-19.6))
     }
+    const ribbon=new THREE.Mesh(mergeGeometries(parts,false),material)
+    ribbon.name=`listening-light-ribbon-${i}`;group.add(ribbon);parts.forEach(part=>part.dispose())
   }
+  geometry.dispose()
   const panels=new THREE.Group();panels.name='live-spectrum-wings';scene.add(panels)
   const barGeometry=new THREE.BoxGeometry(.30,1,.07),bars=[]
   for(const side of [-1,1])for(let i=0;i<9;i++){
@@ -42,7 +47,7 @@ export function createWorldLightShow(scene, concert) {
         material.emissiveIntensity=command.intensity*(.65+state.bass*.8)
       })
       panels.visible=config.id==='stage'
-      bars.forEach((bar,i)=>{
+      if(panels.visible)bars.forEach((bar,i)=>{
         const strength=state.live&&!reducedMotion?(i%3===0?state.bass:i%3===1?state.mid:state.treble):.12
         const height=.15+strength*(3.1+Math.sin(state.phase+i*.6)*.8)
         bar.scale.y=height;bar.position.y=.65+height/2

@@ -6,7 +6,7 @@ import { createSkyLounge } from './createSkyLounge.js'
 
 function disposeTree(root){
   const materials=new Set(),geometries=new Set()
-  root.traverse(o=>{if(o.geometry)geometries.add(o.geometry);if(o.material)materials.add(o.material)})
+  root.traverse(o=>{if(o.geometry)geometries.add(o.geometry);if(o.material)materials.add(o.material);if(o.isInstancedMesh)o.dispose()})
   geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose())
 }
 
@@ -24,7 +24,7 @@ function createRain(){
   return rain
 }
 
-export function createWorldScenes({scene,pavilion,renderer,ambient,sun,practicals,concert,onChange,onInvalidate,loadAsset}){
+export function createWorldScenes({scene,pavilion,renderer,ambient,sun,practicals,concert,lightGrid,onChange,onInvalidate,loadAsset}){
   const original=pavilion.getObjectByName('pavilion-shell'),equipment=pavilion.getObjectByName('pavilion-equipment')
   if(!original||!equipment)throw new Error('Music pavilion scene groups are missing')
   const loader=loadAsset||((file)=>new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/${file}`))
@@ -77,7 +77,7 @@ export function createWorldScenes({scene,pavilion,renderer,ambient,sun,practical
             if(disposed){prepared.dispose();disposeTree(group);throw new DOMException('World closed','AbortError')}
             skyLounge=prepared;skyLounge.setQuality(quality)
           }
-          optimizeWorldMaterials(group);group.visible=false;assets.set(config.id,group);return group
+          optimizeWorldMaterials(group,lightGrid);group.visible=false;assets.set(config.id,group);return group
         }).catch(error=>{requests.delete(config.id);throw error}))
         asset=await requests.get(config.id)
       }
@@ -92,12 +92,13 @@ export function createWorldScenes({scene,pavilion,renderer,ambient,sun,practical
     select,
     setQuality(value){quality=value;skyLounge?.setQuality(value)},
     getConfig:()=>active,
-    update(dt,state,reducedMotion){
+    update(dt,state,reducedMotion,playback){
       ambient.intensity=active.ambient*(1-state.power*.3)
       const moving=active.id==='rain'&&state.power>.01&&!reducedMotion
       if(moving)weatherTime+=dt
       rain.material.uniforms.time.value=weatherTime
-      return moving
+      const musicMoving=skyLounge?.update(dt,state,reducedMotion,playback)||false
+      return moving||musicMoving
     },
     getState:()=>({id:active.id,loaded:[...assets.keys()],rain:rain.visible,activeShell:active.id==='rain'?original.name:assets.get(active.id)?.name,skyLounge:skyLounge?.getState()}),
     dispose(){disposed=true;revision++;scene.environment=originalEnvironment;skyLounge?.dispose();rain.removeFromParent();rain.geometry.dispose();rain.material.dispose();assets.forEach(group=>{group.removeFromParent();disposeTree(group)});assets.clear()},

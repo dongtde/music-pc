@@ -247,6 +247,7 @@ export function createMusicRoomScene(canvas, { onError, onStatus, onAction, onNo
     canvas.removeEventListener('webglcontextlost', onContextLost)
     const geometries = new Set(), materials = new Set(), textures = new Set()
     scene.traverse((object) => {
+      if (object.isInstancedMesh) object.dispose()
       if (object.geometry) geometries.add(object.geometry)
       const surfaces = Array.isArray(object.material) ? object.material : object.material ? [object.material] : []
       surfaces.forEach((material) => { materials.add(material); Object.values(material).forEach((value) => { if (value?.isTexture) textures.add(value) }) })

@@ -1,4 +1,5 @@
 import { ShaderChunk } from 'three'
+import { worldLightGridShader } from './worldLightGrid.js'
 
 const optimized = new WeakSet()
 // Test the finite light volume before normalization, attenuation and BRDF work.
@@ -33,7 +34,20 @@ const lighting = ShaderChunk.lights_fragment_begin.replace(
   },
 )
 
-export function optimizeWorldMaterials(root) {
+const clusteredLighting = lighting.replace('IncidentLight directLight;', `IncidentLight directLight;
+#if NUM_POINT_LIGHTS <= 16 && NUM_SPOT_LIGHTS <= 16
+uint worldLocalLightMask = worldLightMaskAt( geometryPosition );
+#endif`).replace(/(for \( int i = 0; i < NUM_(POINT|SPOT)_LIGHTS; i \+\+ \) \{)([\s\S]*?)(\n\t\}\n\t#pragma unroll_loop_end)/g,
+  (_, start, kind, body, end) => `${start}
+#if NUM_POINT_LIGHTS <= 16 && NUM_SPOT_LIGHTS <= 16
+    if ( ( worldLocalLightMask & ( 1u << uint( UNROLLED_LOOP_INDEX + ${kind === 'POINT' ? 0 : 16} ) ) ) != 0u ) {
+#endif
+${body}
+#if NUM_POINT_LIGHTS <= 16 && NUM_SPOT_LIGHTS <= 16
+    }
+#endif${end}`)
+
+export function optimizeWorldMaterials(root, lightGrid) {
   root.traverse(object => {
     if (!object.isMesh) return
     for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
@@ -42,10 +56,11 @@ export function optimizeWorldMaterials(root) {
       const compile = material.onBeforeCompile, cacheKey = material.customProgramCacheKey()
       material.onBeforeCompile = function (shader, renderer) {
         compile.call(this, shader, renderer)
-        shader.fragmentShader = shader.fragmentShader.replace('#include <lights_pars_begin>', '#include <lights_pars_begin>\n' + lightVolumes)
-        shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_begin>', lighting)
+        if (lightGrid) Object.assign(shader.uniforms, lightGrid.uniforms)
+        shader.fragmentShader = shader.fragmentShader.replace('#include <lights_pars_begin>', '#include <lights_pars_begin>\n' + lightVolumes + (lightGrid ? worldLightGridShader : ''))
+        shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_begin>', lightGrid ? clusteredLighting : lighting)
       }
-      material.customProgramCacheKey = () => `${cacheKey}|world-direct-lights-v2`
+      material.customProgramCacheKey = () => `${cacheKey}|world-direct-lights-v3${lightGrid ? '-grid' : ''}`
       material.needsUpdate = true
     }
   })

@@ -1,8 +1,9 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js'
-import { Reflector } from 'three/addons/objects/Reflector.js'
+import { createFloorReflection } from './createFloorReflection.js'
 import { WORLD_SEATS } from './worldNavigation.js'
+import { createLoungeMusicExperience } from './createLoungeMusicExperience.js'
 
 const FINISHES = { 'sky-limestone': 'marble', 'sky-marble': 'marble', 'sky-walnut': 'walnut', 'sky-parquet': 'walnut', 'sky-carpet': 'boucle' }
 const BASE = `${import.meta.env.BASE_URL}models/sky-lounge/`
@@ -18,39 +19,6 @@ function disposeModel(root) {
     }
   })
   geometries.forEach(value => value.dispose()); materials.forEach(value => value.dispose()); textures.forEach(value => value.dispose())
-}
-
-function createFloorReflection() {
-  const shader = {
-    uniforms: THREE.UniformsUtils.clone(Reflector.ReflectorShader.uniforms),
-    vertexShader: Reflector.ReflectorShader.vertexShader,
-    fragmentShader: Reflector.ReflectorShader.fragmentShader
-      .replace('vec4 base = texture2DProj( tDiffuse, vUv );', `
-        vec2 uv = vUv.xy / vUv.w, offset = vec2(.0025);
-        vec4 base = texture2D(tDiffuse, uv) * .4;
-        base += texture2D(tDiffuse, uv + offset) * .15;
-        base += texture2D(tDiffuse, uv - offset) * .15;
-        base += texture2D(tDiffuse, uv + vec2(offset.x, -offset.y)) * .15;
-        base += texture2D(tDiffuse, uv + vec2(-offset.x, offset.y)) * .15;`)
-      .replace('vec4( blendOverlay( base.rgb, color ), 1.0 )', 'vec4( base.rgb, .18 )'),
-  }
-  const mesh = new Reflector(new THREE.PlaneGeometry(6.02, 42), { textureWidth: 512, textureHeight: 512, multisample: 0, clipBias: .003, shader })
-  mesh.name = 'sky-lounge-floor-reflection'; mesh.rotation.x = -Math.PI / 2; mesh.position.set(0, .021, 1)
-  mesh.material.transparent = true; mesh.material.depthWrite = false
-  const renderReflection = mesh.onBeforeRender, lastCamera = new THREE.Matrix4(), lastProjection = new THREE.Matrix4()
-  let lastUpdate = -Infinity, framesSinceUpdate = 0
-  mesh.onBeforeRender = function (renderer, scene, camera) {
-    const now = performance.now()
-    const moving = !lastCamera.equals(camera.matrixWorld) || !lastProjection.equals(camera.projectionMatrix)
-    framesSinceUpdate++
-    // Time alone refreshes every frame once lighting pushes frame time past the
-    // interval. Reserve main-view frames even under load; never let the mirror
-    // double the entire scene on every slow frame.
-    if (!this.forceUpdate && (framesSinceUpdate < (moving ? 3 : 6) || now - lastUpdate < (moving ? 50 : 100))) return
-    renderReflection.call(this, renderer, scene, camera)
-    lastUpdate = now; framesSinceUpdate = 0; lastCamera.copy(camera.matrixWorld); lastProjection.copy(camera.projectionMatrix)
-  }
-  return mesh
 }
 
 function contactShadowTexture() {
@@ -69,7 +37,7 @@ export async function createSkyLounge({ root, pavilion, renderer, quality = 'bal
   const jobs = [
     textureLoader.loadAsync(BASE + (quality === 'high' ? 'city-panorama.jpg' : 'city-panorama-4k.jpg') + '?v=modern-buildings'),
     new HDRLoader().loadAsync(BASE + 'city-lighting.hdr?v=modern-buildings'),
-    ...['potted_plant_01', 'potted_plant_02', 'modern_arm_chair_01'].map(id => modelLoader.loadAsync(BASE + id + '/model.gltf' + (id.startsWith('potted_plant_') ? '?v=compact-1' : ''))),
+    ...['potted_plant_01', 'modern_arm_chair_01'].map(id => modelLoader.loadAsync(BASE + id + '/model.gltf' + (id.startsWith('potted_plant_') ? '?v=compact-1' : ''))),
     ...['marble', 'walnut', 'boucle'].flatMap(id => ['color', 'normal', 'roughness'].map(kind => textureLoader.loadAsync(`${BASE}${id}-${kind}.jpg`))),
   ]
   const results = await Promise.allSettled(jobs)
@@ -79,8 +47,8 @@ export async function createSkyLounge({ root, pavilion, renderer, quality = 'bal
     textures.forEach(texture => texture.dispose()); models.forEach(disposeModel)
     throw isDisposed() ? new DOMException('World closed', 'AbortError') : results.find(result => result.status === 'rejected').reason
   }
-  const [panorama, hdri, plantA, plantB, chair] = values
-  const surfaces = Object.fromEntries(['marble', 'walnut', 'boucle'].map((name, i) => [name, values.slice(5 + i * 3, 8 + i * 3)]))
+  const [panorama, hdri, plantA, chair] = values
+  const surfaces = Object.fromEntries(['marble', 'walnut', 'boucle'].map((name, i) => [name, values.slice(4 + i * 3, 7 + i * 3)]))
   for (const maps of Object.values(surfaces)) maps.forEach((texture, i) => {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping; texture.anisotropy = anisotropy
     if (i === 0) texture.colorSpace = THREE.SRGBColorSpace
@@ -93,12 +61,13 @@ export async function createSkyLounge({ root, pavilion, renderer, quality = 'bal
     if(kind==='boucle')material.map=null
     material.color.set(kind === 'boucle' ? '#b7ab98' : kind==='walnut' ? '#957257' : '#ece5d7'); material.needsUpdate = true
   }
+  const finishedMaterials = new Set()
   root.traverse(object => {
     if (!object.isMesh) return
     const material = object.material, kind = FINISHES[material.name]
     object.castShadow = !material.transparent && material.name !== 'sky-cove-light'
     object.receiveShadow = !material.transparent
-    if (kind) finish(material, kind, kind === 'boucle' ? [10, 10] : [1, 1])
+    if (kind && !finishedMaterials.has(material)) { finish(material, kind, kind === 'boucle' ? [10, 10] : [1, 1]); finishedMaterials.add(material) }
     if(material.name==='sky-carpet')material.color.set('#766658')
   })
   // Preserve shared interaction anchors while changing furniture and upholstery.
@@ -145,7 +114,6 @@ export async function createSkyLounge({ root, pavilion, renderer, quality = 'bal
   }
   for (const side of [-1, 1]) {
     for (const z of [-14, 12]) { place(plantA.scene, side * 16.9, -.06, z, 3.3, side * z * .17); shadow(side * 16.9, z, 2.7, 2.7, -.075) }
-    for (const z of [-4, 6]) place(plantB.scene, side * 11.9, 1.23, z + .25, .72, side * z)
     for (const z of [-4, 1, 6]) shadow(side * 11.9, z, 3.4, 4.5)
   }
   for (const seat of WORLD_SEATS.filter(seat => seat.id !== 'seat-center')) {
@@ -173,11 +141,13 @@ export async function createSkyLounge({ root, pavilion, renderer, quality = 'bal
   catch(error) { textures.forEach(texture => texture.dispose()); throw error }
   finally { generator.dispose(); hdri.dispose(); textures.delete(hdri) }
   const reflection = createFloorReflection(); root.add(reflection)
+  const music = createLoungeMusicExperience(root, onUpdate)
   root.updateMatrixWorld(true)
   root.traverse(object => { object.matrixAutoUpdate = false })
   let active = false, closed = false, panoramaRevision = 0
   return {
     environment: environment.texture,
+    update(delta, state, reducedMotion, playback) { return active && music.update(delta, state, reducedMotion, playback) },
     setActive(value) {
       active = value
       if (value) reflection.forceUpdate = true
@@ -201,9 +171,10 @@ export async function createSkyLounge({ root, pavilion, renderer, quality = 'bal
         previous.dispose(); textures.delete(previous); reflection.forceUpdate = true; onUpdate()
       }).catch(() => { /* Keep the current panorama if a quality upgrade cannot load. */ })
     },
-    getState: () => ({ ready: true, active, photographicCity: true, furnishings, instancedProps: true, realtimeReflection: reflection.visible, reflectionResolution: reflection.getRenderTarget().width, panoramaWidth: sky.material.map.image.width }),
+    getState: () => ({ ready: true, active, photographicCity: true, furnishings, instancedProps: true, realtimeReflection: reflection.visible, reflectionResolution: reflection.getRenderTarget().width, reflection: { ...reflection.userData.reflectionMetrics }, panoramaWidth: sky.material.map.image.width }),
     dispose() {
       closed = true; panoramaRevision++
+      music.dispose()
       originalVisibility.forEach((visible, object) => { object.visible = visible })
       originalMaterials.forEach(({ original }, material) => { Object.assign(material, original); material.needsUpdate = true })
       reflection.removeFromParent(); reflection.geometry.dispose(); reflection.dispose()

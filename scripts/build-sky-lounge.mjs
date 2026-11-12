@@ -4,6 +4,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js'
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js'
 import { mkdir, writeFile } from 'node:fs/promises'
+import { buildLoungeMusicExhibits } from './helpers/sky-lounge-music.mjs'
 
 globalThis.FileReader = class { readAsArrayBuffer(blob) { blob.arrayBuffer().then(value => { this.result = value; this.onloadend?.() }) } }
 const root = new THREE.Group(); root.name = 'sky-lounge-shell'
@@ -17,9 +18,7 @@ const marble = material('sky-marble', '#e0d9cb', .24, .08)
 const plaster = material('sky-plaster', '#ece2ce', .78)
 const walnut = material('sky-walnut', '#493428', .5)
 const parquet = material('sky-parquet', '#ffffff', .46)
-const leather = material('sky-leather', '#675443', .74)
 const porcelain = material('sky-porcelain', '#d7d1bd', .22)
-const book = material('sky-book', '#c8b491', .88)
 const bronze = material('sky-bronze', '#a48a60', .3, .78)
 const graphite = material('sky-graphite', '#202b31', .36, .55)
 const rug = material('sky-carpet', '#82796e', .97)
@@ -120,31 +119,12 @@ box([16.7, .38, .75], stone, [0, 10.55, -20.3], .1)
 box([14.4, .025, .05], light, [0, 9.66, -20.04])
 box([29.8, 2.1, .025], glass, [0, 11.65, -20.6])
 
-// Low, detailed millwork replaces tall storage in this scene and opens the city view.
+// Small side-table ceramics remain beside the listening chairs.
 function vase(x,y,z,scale=1) {
   const profile=[[.13,0],[.23,.04],[.27,.25],[.2,.45],[.095,.55],[.085,.73],[.105,.76]].map(([r,h])=>new THREE.Vector2(r*scale,h*scale))
   add(new THREE.LatheGeometry(profile,48),porcelain,[x,y,z])
 }
-function lamp(x,y,z) {
-  cylinder(.26,.035,bronze,[x,y+.025,z]);cylinder(.023,.64,bronze,[x,y+.34,z])
-  add(new THREE.CylinderGeometry(.28,.38,.38,48,1,true),porcelain,[x,y+.75,z])
-  cylinder(.2,.025,light,[x,y+.58,z])
-}
-for(const side of [-1,1])for(const z of [-4,1,6]) {
-  const x=side*11.9
-  box([2.35,.14,3.46],graphite,[x,.13,z],.035)
-  box([2.35,.94,3.46],walnut,[x,.65,z],.085)
-  box([2.46,.11,3.58],marble,[x,1.17,z],.04)
-  for(let zz=-1.6;zz<1.65;zz+=.13)box([.04,.78,.047],bronze,[x-side*1.19,.68,z+zz],.012)
-  box([.03,.025,3.2],light,[x-side*1.2,.22,z])
-  lamp(x,1.23,z-1.03)
-  for(let i=0;i<3;i++) {const volume=box([.54,.06,.7],i%2?leather:book,[x-side*.35,1.26+i*.065,z+.5],.008);volume.rotation.y=side*.13*i}
-  if(z!==1)vase(x,1.23,z+1.07,.62)
-  if(z===1){
-    const sculpture=add(new THREE.TorusKnotGeometry(.32,.068,96,12,2,3),bronze,[x,1.9,z+.85]);sculpture.rotation.z=.3
-    box([.58,.06,.58],graphite,[x,1.25,z+.85],.015)
-  }
-}
+buildLoungeMusicExhibits(root, { walnut, marble, bronze, graphite, light })
 // Layered lounge textiles and round stone side tables stay within the existing seat footprints.
 for(const side of [-1,1])for(const z of [-10.8,12]) {
   const x=side*5
@@ -152,14 +132,16 @@ for(const side of [-1,1])for(const z of [-10.8,12]) {
   cylinder(.31,.065,marble,[x+side*.81,.61,z-.55]);vase(x+side*.81,.65,z-.55,.25)
 }
 
-// Merge static geometry by material to keep the detailed scene inexpensive to draw.
+// Batch each side by material; preserve local pivots for platters, reels and needles.
 root.updateMatrixWorld(true)
 const batches = new Map(), meshes = []
 root.traverse(object => {
   if (!object.isMesh) return
   meshes.push(object)
+  let batchRoot = object.parent
+  while (batchRoot !== root && !batchRoot.userData.musicBatch && !batchRoot.userData.musicMotion) batchRoot = batchRoot.parent
   const geometry = object.geometry.index ? object.geometry.toNonIndexed() : object.geometry.clone()
-  geometry.applyMatrix4(object.matrixWorld); geometry.clearGroups()
+  geometry.applyMatrix4(new THREE.Matrix4().copy(batchRoot.matrixWorld).invert().multiply(object.matrixWorld)); geometry.clearGroups()
   if(object.material===walnut){
     const position=geometry.attributes.position,normal=geometry.attributes.normal,uv=geometry.attributes.uv
     for(let i=0;i<uv.count;i++){
@@ -167,16 +149,18 @@ root.traverse(object => {
       uv.setXY(i,vertical?position.getY(i):position.getZ(i),Math.abs(normal.getX(i))>.6?position.getZ(i):position.getX(i))
     }
   }
-  const list = batches.get(object.material) || []; list.push(geometry); batches.set(object.material, list)
+  if (!batches.has(batchRoot)) batches.set(batchRoot, new Map())
+  const materials = batches.get(batchRoot), list = materials.get(object.material) || []
+  list.push(geometry); materials.set(object.material, list)
 })
 meshes.forEach(mesh => { mesh.removeFromParent(); mesh.geometry.dispose() })
-let triangles = 0
-for (const [mat, list] of batches) {
+let triangles = 0, drawCalls = 0
+for (const [batchRoot, materials] of batches) for (const [mat, list] of materials) {
   const joined = mergeGeometries(list, false), geometry = mergeVertices(joined), mesh = new THREE.Mesh(geometry, mat)
-  mesh.name = mat.name; root.add(mesh); triangles += geometry.index.count / 3
+  mesh.name = mat.name; batchRoot.add(mesh); triangles += geometry.index.count / 3; drawCalls++
   joined.dispose(); list.forEach(g => g.dispose())
 }
 const data = await new GLTFExporter().parseAsync(root, { binary: true })
 await mkdir('public/models', { recursive: true })
 await writeFile('public/models/sky-lounge.glb', Buffer.from(data))
-console.log(`sky-lounge.glb: ${(data.byteLength / 1048576).toFixed(2)} MB, ${batches.size} material batches, ${triangles} triangles`)
+console.log(`sky-lounge.glb: ${(data.byteLength / 1048576).toFixed(2)} MB, ${drawCalls} material batches, ${triangles} triangles`)

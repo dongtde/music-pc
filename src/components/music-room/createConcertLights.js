@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
+import { indexGeometryExactly } from './indexGeometryExactly.js'
 
 const Z_AXIS = new THREE.Vector3(0, 0, 1)
 const ROW_POSITIONS = [-8, -4.7, -1.4, 1.9, 5.2, 8.5]
@@ -54,12 +55,9 @@ export function createConcertLights(scene) {
       const mount = new THREE.Group()
       mount.name = `concert-${side < 0 ? 'left' : 'right'}-${index + 1}`
       mount.position.set(side * 5.5, 6.58, z)
-      mount.add(new THREE.Mesh(mountGeometry, housing))
       const pan = new THREE.Group()
-      pan.add(new THREE.Mesh(yokeGeometry, housing))
       const head = new THREE.Group()
       head.position.y = -0.67
-      head.add(new THREE.Mesh(headGeometry, housing), new THREE.Mesh(trimGeometry, alloy))
       const lens = new THREE.MeshStandardMaterial({ color: '#09121c', emissive: '#80e9ff', emissiveIntensity: 0, metalness: 0.25, roughness: 0.16 })
       head.add(new THREE.Mesh(lensGeometry, lens))
       pan.add(head); mount.add(pan); rig.add(mount)
@@ -105,7 +103,46 @@ export function createConcertLights(scene) {
     })
   }
 
+  // The opaque housings share geometry/materials; keep the twelve independent
+  // articulation pivots but submit four instance batches per side (48 -> 8).
+  // Split the sides so looking left need not draw the right-hand fixtures.
+  const housingBatches = []
+  const localInstance = new THREE.Matrix4(), inverseRig = new THREE.Matrix4(), lastRig = new THREE.Matrix4()
+  for (const side of [-1, 1]) {
+    const members = fixtures.filter(fixture => fixture.side === side)
+    for (const [name, part, geometry, material] of [
+      ['mount', 'mount', mountGeometry, housing], ['yoke', 'pan', yokeGeometry, housing],
+      ['head', 'head', headGeometry, housing], ['trim', 'head', trimGeometry, alloy],
+    ]) {
+      const mesh = new THREE.InstancedMesh(geometry, material, members.length)
+      mesh.name = `concert-${side < 0 ? 'left' : 'right'}-${name}-batch`
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+      rig.add(mesh); housingBatches.push({ mesh, part, members, previous: members.map(() => new THREE.Matrix4()) })
+    }
+  }
+  function syncHousings(updateTransforms = false) {
+    if (updateTransforms) {
+      // Layout changes must work even when the light show is switched off.
+      rig.updateWorldMatrix(true, false)
+      fixtures.forEach(({ mount, pan, head }) => { mount.updateWorldMatrix(false, false); pan.updateWorldMatrix(false, false); head.updateWorldMatrix(false, false) })
+    }
+    const rigChanged = !lastRig.equals(rig.matrixWorld)
+    inverseRig.copy(rig.matrixWorld).invert()
+    for (const { mesh, part, members, previous } of housingBatches) {
+      let changed = false
+      members.forEach((fixture, index) => {
+        const world = fixture[part].matrixWorld
+        if (!rigChanged && previous[index].equals(world)) return
+        mesh.setMatrixAt(index, localInstance.multiplyMatrices(inverseRig, world)); previous[index].copy(world); changed = true
+      })
+      if (changed) { mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere() }
+    }
+    lastRig.copy(rig.matrixWorld)
+  }
+  syncHousings(true)
+
   function update(state, theme, reducedMotion, commands) {
+    rig.updateWorldMatrix(true, false)
     primary.set(theme.primary); secondary.set(theme.secondary)
     const animated = state.live && !reducedMotion
     const phrase = Math.floor(state.beats / 4)
@@ -120,7 +157,7 @@ export function createConcertLights(scene) {
       direction.set(target.x - mount.position.x, target.y - (mount.position.y - .67 * mount.scale.y), target.z - z)
       pan.rotation.y = Math.atan2(direction.x, direction.z)
       head.rotation.x = Math.atan2(-direction.y, Math.hypot(direction.x, direction.z))
-      head.updateWorldMatrix(true, false)
+      mount.updateWorldMatrix(false, false); pan.updateWorldMatrix(false, false); head.updateWorldMatrix(false, false)
       origin.set(0, 0, 0.385).applyMatrix4(head.matrixWorld)
       direction.subVectors(target, origin)
       const distance = direction.length()
@@ -149,6 +186,7 @@ export function createConcertLights(scene) {
       pool.material.uniforms.tint.value.copy(color)
       pool.material.uniforms.strength.value = intensity * 0.38
     })
+    syncHousings()
   }
 
   function setQuality(quality) {
@@ -166,6 +204,7 @@ export function createConcertLights(scene) {
       mount.position.set(side * (lounge ? 12.8 : 5.5), lounge ? 11.8 : 6.58, z)
       mount.scale.setScalar(lounge ? .78 : 1)
     })
+    syncHousings(true)
   }
   return { update, fixtures, setQuality, setLayout }
 }
@@ -179,5 +218,5 @@ function combine(parts) {
   })
   const geometry = mergeGeometries(geometries, false)
   geometries.forEach((part) => part.dispose())
-  return geometry
+  return indexGeometryExactly(geometry)
 }

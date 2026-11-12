@@ -16,6 +16,8 @@ import { FEED_IDS, FEED_LAYOUT } from './screenFeeds.js'
 import { createControlTerminal, TERMINAL_SLIDERS, TERMINAL_QUEUE } from './createControlTerminal.js'
 import { createWorldAvatars } from './createWorldAvatars.js'
 import { optimizeWorldMaterials } from './optimizeWorldMaterials.js'
+import { createWorldLightGrid } from './worldLightGrid.js'
+import { createWorldRenderBudget } from './worldRenderBudget.js'
 import { createSpeakerMotion } from './createSpeakerMotion.js'
 import { createListeningLobbyScreen } from './createListeningLobbyScreen.js'
 import { createScreenProjection } from './createScreenProjection.js'
@@ -23,10 +25,12 @@ import { createScreenProjection } from './createScreenProjection.js'
 const KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'ShiftLeft', 'ShiftRight'])
 export async function createMusicWorld(canvas, { onStatus, onAction, onProgress, onListeningScreen, sampleAudio, onPresence, onSeat, signal, quality: initialQuality = 'balanced' } = {}) {
   const scene = new THREE.Scene(); scene.background = new THREE.Color('#142330'); scene.fog = new THREE.FogExp2('#152737', .012)
+  const lightGrid = createWorldLightGrid(scene)
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap
   renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = true
+  const renderBudget = createWorldRenderBudget(renderer)
   const camera = new THREE.PerspectiveCamera(65, 1, .1, 600); camera.rotation.order = 'YXZ'
   const viewCamera = camera.clone(); viewCamera.rotation.order = 'YXZ'; scene.add(viewCamera)
   const keys = new Set(), covers = [], hitTargets = [], textures = new Set(), practicals=[]
@@ -338,7 +342,8 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     // Bound total pixels as well, keeping HiDPI detail in smaller windows.
     const pixels = quality === 'smooth' ? 1280 * 720 : quality === 'high' ? 3840 * 2160 : 1920 * 1080
     const ratio = Math.min(window.devicePixelRatio || 1, quality === 'smooth' ? 1 : quality === 'high' ? 2 : 1.5, Math.sqrt(pixels / (width * height)))
-    renderer.setDrawingBufferSize(width, height, ratio)
+    const scale = renderBudget.configure(width, height, ratio)
+    renderer.setDrawingBufferSize(width, height, ratio * scale)
     camera.aspect = width / height; camera.updateProjectionMatrix()
     lastScreenResolution = -Infinity
     records?.resize(); invalidate()
@@ -432,6 +437,8 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   }
   function render(now) {
     frame = 0; if (disposed || !active || document.hidden) return
+    renderBudget.setEnabled(quality === 'high' && environments.getConfig().id === 'sky-lounge' && playback.lightsEnabled !== false)
+    if (renderBudget.begin(now)) lastScreenResolution = -Infinity
     const delta = Math.min((now - (last || now - 16)) / 1000, .1); last = now
     const fov=updateMotion(delta)
     const firstPerson=updateView(delta),pose=avatarPose()
@@ -442,7 +449,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     lighting = rhythm.update({ playing: playback.playing, reducedMotion, levels: audioLevels }, delta)
     const speakerMotion = speakers.update(lighting, delta, { reducedMotion, lightsEnabled: playback.lightsEnabled !== false })
     const lightSettling=lightShow.update(lighting, environments.getConfig(), reducedMotion,delta,seated,quality)
-    const weatherMotion=environments.update(delta,lighting,reducedMotion)
+    const weatherMotion=environments.update(delta,lighting,reducedMotion,playback)
     const recordMotion=records.update(delta,lighting,reducedMotion)
     viewCamera.updateMatrixWorld()
     visibleSurfaces.setFromProjectionMatrix(viewProjection.multiplyMatrices(viewCamera.projectionMatrix,viewCamera.matrixWorldInverse))
@@ -457,7 +464,9 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     })
     const screenMotion = visibleSurfaces.intersectsObject(screenMesh) ? screen.draw(playback, now) : false
     const terminalMotion = visibleSurfaces.intersectsObject(terminal.mesh) ? terminal.draw(playback, now,audioLevels) : false
-    try { renderer.render(scene, viewCamera) } catch { active=false;stop();onAction?.('error');return }
+    lightGrid.invalidate()
+    try { renderer.render(scene, viewCamera) } catch { renderBudget.abort();active=false;stop();onAction?.('error');return }
+    renderBudget.end()
     syncListeningScreen()
     frameCount++
     if (now - lastStatus > 200) {
@@ -479,6 +488,8 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   }
   function dispose() {
     if (disposed) return
+    renderBudget.dispose()
+    lightGrid.dispose()
     disposed = true; stop(); observer?.disconnect(); onListeningScreen?.(null)
     canvas.removeEventListener('keydown', keydown); window.removeEventListener('keyup', keyup); window.removeEventListener('blur', clearMovement)
     canvas.removeEventListener('blur', clearMovement); document.removeEventListener('visibilitychange', visibility)
@@ -545,7 +556,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     concert = createConcertLights(scene)
     lightShow=createWorldLightShow(scene,concert)
     records=createRecordExperience({camera:viewCamera,invalidate,onChange:onStatus})
-    environments=createWorldScenes({scene,pavilion,renderer,ambient,sun,practicals,concert,onInvalidate:invalidate,onChange:value=>{terminal.setScene(value.scene||environments?.getConfig().id||'rain',Boolean(value.sceneLoading));onStatus?.(value);invalidate()}})
+    environments=createWorldScenes({scene,pavilion,renderer,ambient,sun,practicals,concert,lightGrid,onInvalidate:invalidate,onChange:value=>{terminal.setScene(value.scene||environments?.getConfig().id||'rain',Boolean(value.sceneLoading));onStatus?.(value);invalidate()}})
     observer = new ResizeObserver(resizeRenderer); observer.observe(canvas)
     canvas.addEventListener('keydown',keydown); window.addEventListener('keyup',keyup); window.addEventListener('blur',clearMovement)
     canvas.addEventListener('blur',clearMovement); document.addEventListener('visibilitychange',visibility)
@@ -554,7 +565,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     canvas.addEventListener('pointerleave',clearScreenHover); canvas.addEventListener('blur',clearScreenHover); window.addEventListener('blur',clearScreenHover)
     canvas.addEventListener('wheel',wheel,{passive:false})
     scene.updateMatrixWorld(true)
-    optimizeWorldMaterials(scene)
+    optimizeWorldMaterials(scene, lightGrid)
     setQuality(quality)
     // Compile with the final, fixed light count before the page becomes interactive,
     // including the beam materials that are invisible while playback is paused.
@@ -623,7 +634,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
 
 function disposeTree(root) {
   const geometries = new Set(), materials = new Set(), textures = new Set()
-  root.traverse(o => { if(o.geometry)geometries.add(o.geometry);o.shadow?.dispose();
+  root.traverse(o => { if(o.geometry)geometries.add(o.geometry);if(o.isInstancedMesh)o.dispose();o.shadow?.dispose();
     for(const m of Array.isArray(o.material)?o.material:o.material?[o.material]:[]){materials.add(m);Object.values(m).forEach(v=>{if(v?.isTexture)textures.add(v)})}
   })
   geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose())
