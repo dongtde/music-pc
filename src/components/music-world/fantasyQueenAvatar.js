@@ -70,7 +70,7 @@ export async function loadFantasyQueen(renderer, onProgress) {
       mixer.update(0)
       return {
         root,
-        pose(nextMotion = 'idle', delta = 0, clock = 0, reducedMotion = false) {
+        pose(nextMotion = 'idle', delta = 0, clock = 0, reducedMotion = false, speed) {
           if (!active) return false
           motion = Object.hasOwn(CLIPS, nextMotion) ? nextMotion : 'idle'
           const target = CLIPS[motion], blend = reducedMotion || !delta ? 1 : 1 - Math.exp(-delta * 14)
@@ -82,7 +82,8 @@ export async function loadFantasyQueen(renderer, onProgress) {
             action.setEffectiveWeight(close ? desired : weight)
             settling ||= !close
           }
-          actions.get('Walk_InPlace').setEffectiveTimeScale(motion === 'run' ? 1.65 : 1)
+          const moving=motion==='walk'||motion==='run'
+          actions.get('Walk_InPlace').setEffectiveTimeScale(moving&&Number.isFinite(speed)?THREE.MathUtils.clamp(speed/3.8,.2,2.2):motion==='run'?1.65:1)
           mixer.update(delta)
           return settling || motion === 'walk' || motion === 'run'
         },

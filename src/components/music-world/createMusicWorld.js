@@ -4,7 +4,8 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { createListeningScreen } from './createListeningScreen.js'
 import { createConcertLights } from '../music-room/createConcertLights'
 import { createStageRhythm } from './createStageRhythm.js'
-import { WORLD_STATIONS, WORLD_DISCOVERY_SCREENS, WORLD_RECORD_DISPLAYS, WORLD_LOBBY_DISPLAY, WORLD_SEATS, WORLD_MAP_DESTINATIONS, WORLD_EYE_HEIGHT, WORLD_SEAT_HEIGHT, moveWorld } from './worldNavigation'
+import { WORLD_STATIONS, WORLD_DISCOVERY_SCREENS, WORLD_RECORD_DISPLAYS, WORLD_LOBBY_DISPLAY, WORLD_SEATS, WORLD_MAP_DESTINATIONS, WORLD_EYE_HEIGHT, WORLD_SEAT_HEIGHT, resolveWorldPosition, worldCameraLimit } from './worldNavigation'
+import { createWorldMovement } from './worldMovement.js'
 import { createWorldTravel, stepWorldTravel, worldViewToward, smoothWorldView, angleDelta } from './worldTravel.js'
 import { createCoverSurface, makeSign, materialTexture } from './worldTextures'
 import { createRecordExperience } from './createRecordExperience'
@@ -29,6 +30,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   const camera = new THREE.PerspectiveCamera(65, 1, .1, 600); camera.rotation.order = 'YXZ'
   const viewCamera = camera.clone(); viewCamera.rotation.order = 'YXZ'; scene.add(viewCamera)
   const keys = new Set(), covers = [], hitTargets = [], textures = new Set(), practicals=[]
+  const movement = createWorldMovement()
   const rhythm = createStageRhythm(), raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2()
   const visibleSurfaces = new THREE.Frustum(), viewProjection = new THREE.Matrix4()
   const screenCorner = new THREE.Vector3()
@@ -69,6 +71,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   let observer, screen, screenMesh, environment, concert, pavilion, records, lightShow, environments, terminal, speakers, lobbyScreen
   let tour=null, pendingTravel=null, seated=false, seatId='', pointId='', seatMove=null, returnPose=null, quality=['smooth','balanced','high'].includes(initialQuality)?initialQuality:'balanced'
   let viewMode='third',bodyYaw=Math.PI,jumpHeight=0,jumpVelocity=0,seatEpoch=0,seatPending=false,membership='',roomConnected=false,lastPresence=0,lastPose=''
+  let movementSpeed=0, movementActive=false, cameraBoom=1, cameraSettling=false
   const avatars=createWorldAvatars(invalidate);scene.add(avatars.group)
   const offset=new THREE.Vector3(),targetPosition=new THREE.Vector3()
   const ambient = new THREE.HemisphereLight('#d4e3ef', '#39352d', 1.9); scene.add(ambient)
@@ -81,7 +84,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     settle = performance.now() + 400
     if (!frame && initialized && !disposed && active && !document.hidden) frame = requestAnimationFrame(render)
   }
-  function clearMovement() { keys.clear(); drag = null; walking=false }
+  function clearMovement() { keys.clear(); drag = null; walking=false;movementSpeed=0;movementActive=false;movement.reset() }
   function stop() { cancelAnimationFrame(frame); frame = 0; last = 0; clearMovement(); clearScreenHover();jumpHeight=jumpVelocity=0;if(!seated&&!seatMove)camera.position.y=WORLD_EYE_HEIGHT;if(initialized)onPresence?.(avatarPose(),true) }
   function updateScreenHover(hit) {
     const next = hit?.object.userData.action === 'terminal' ? terminal : hit?.object.userData.action === 'lobby' ? lobbyScreen : hit?.object.userData.action === 'feed' ? covers.find(entry => entry.surface.mesh === hit.object)?.surface : null
@@ -113,6 +116,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     const pose=returnPose;seated=false;seatId='';seatMove=null
     if(release)void onSeat?.('')
     if(pose){
+      const safe=resolveWorldPosition(pose.position);pose.position.x=safe.x;pose.position.z=safe.z
       if(immediate||reducedMotion)camera.position.copy(pose.position)
       else seatMove={from:camera.position.clone(),to:pose.position.clone(),elapsed:0,look:null}
     }
@@ -129,7 +133,8 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     beginTravel(station,onArrival,immediate)
   }
   function beginTravel(station,onArrival,immediate=false){
-    if(immediate||reducedMotion){camera.position.set(station.x,WORLD_EYE_HEIGHT,station.z);lookToward(station.look);onArrival?.();onStatus?.({navigating:false})}
+    const safe=resolveWorldPosition(station);station={...station,...safe}
+    if(immediate||reducedMotion){camera.position.set(station.x,WORLD_EYE_HEIGHT,station.z);lookToward(station.look);bodyYaw=yaw+Math.PI;onArrival?.();onStatus?.({navigating:false})}
     else {
       const route=createWorldTravel(camera.position,station)
       if(route){tour={...route,onArrival};onStatus?.({navigating:true})}
@@ -187,17 +192,18 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     else navigate(point.id,options)
   }
   function setKey(code, pressed) {
-    if (listeningInputOpen) return
+    if(!pressed){keys.delete(code);return}
+    if (listeningInputOpen || disposed || !active) return
     if(!KEYS.has(code)||records?.getState().inspecting)return
-    if(pressed){
+    if(!keys.has(code)){
       clearScreenHover()
       if(!code.startsWith('Shift')){
         cancelTravel()
         if(code.startsWith('Key')){if(seated)stand();if(pointId)selectDestination('')}
         if(seatMove)seatMove.look=null
       }
-      keys.add(code);walking=true;invalidate()
-    }else keys.delete(code)
+      keys.add(code);invalidate()
+    }
   }
   function keydown(event) {
     if (listeningInputOpen) { event.stopPropagation(); if (event.code === 'Escape') { event.preventDefault(); onAction?.('lobby-input-close') } return }
@@ -357,18 +363,23 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   }
   function avatarPose(){
     if(seated){const seat=WORLD_SEATS.find(item=>item.id===seatId),angle=Math.PI+(seat?.x<0?-.22:seat?.x>0?.22:0);return {x:seat.x+Math.sin(angle)*.54,z:seat.z+Math.cos(angle)*.54,y:seatId==='seat-center'?.27:.24,yaw:angle,motion:'sit',seatId,transition:Boolean(seatMove)}}
-    return {x:camera.position.x,z:camera.position.z,y:jumpHeight,yaw:bodyYaw,motion:jumpHeight>0?'jump':walking||tour?'walk':'idle',seatId:'',transition:Boolean(seatMove)}
+    return {x:camera.position.x,z:camera.position.z,y:jumpHeight,yaw:bodyYaw,motion:jumpHeight>0?'jump':walking?(movementSpeed>4.5?'run':'walk'):'idle',speed:movementSpeed,seatId:'',transition:Boolean(seatMove)}
   }
-  function updateView(){
-    const nearScreen=!seated&&(pointId==='terminal'||pointId.startsWith('discover-')||pointId.startsWith('archive-'))
-    const firstPerson=viewMode==='first'||nearScreen||Boolean(records?.getState().inspecting)
+  function updateView(delta){
+    cameraSettling=false
+    // Map destinations must not override the view mode chosen by the user.
+    const firstPerson=viewMode==='first'||Boolean(records?.getState().inspecting)
     viewCamera.fov=camera.fov;viewCamera.aspect=camera.aspect;viewCamera.updateProjectionMatrix()
     if(firstPerson){viewCamera.position.copy(camera.position);viewCamera.rotation.copy(camera.rotation)}
     else {
       offset.set(Math.sin(yaw)*3.3+(seated?Math.cos(yaw)*1.5:0),seated?2.2:1.10,Math.cos(yaw)*3.3-(seated?Math.sin(yaw)*1.5:0))
-      viewCamera.position.copy(camera.position).add(offset)
-      viewCamera.position.x=THREE.MathUtils.clamp(viewCamera.position.x,-13.8,13.8);viewCamera.position.z=THREE.MathUtils.clamp(viewCamera.position.z,-18.1,19)
-      targetPosition.copy(camera.position).add(new THREE.Vector3(-Math.sin(yaw)*2,Math.tan(pitch)*4-.45,-Math.cos(yaw)*2))
+      targetPosition.copy(camera.position).add(offset)
+      const limit=worldCameraLimit(camera.position,targetPosition)
+      // Retract immediately before clipping; ease back out after clearing it.
+      cameraBoom=limit<cameraBoom?limit:THREE.MathUtils.lerp(cameraBoom,limit,1-Math.exp(-delta*8))
+      cameraSettling=Math.abs(cameraBoom-limit)>.001
+      viewCamera.position.copy(camera.position).addScaledVector(offset,cameraBoom)
+      targetPosition.set(camera.position.x-Math.sin(yaw)*2,camera.position.y+Math.tan(pitch)*4-.45,camera.position.z-Math.cos(yaw)*2)
       viewCamera.lookAt(targetPosition)
     }
     viewCamera.updateMatrixWorld(true);return firstPerson
@@ -376,17 +387,19 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
 
   function updateMotion(delta){
     const previousX=camera.position.x,previousZ=camera.position.z
+    const traveling=Boolean(tour)
+    let arrivalTurn=false
     const forward = Number(keys.has('KeyW')) - Number(keys.has('KeyS')), right = Number(keys.has('KeyD')) - Number(keys.has('KeyA'))
-    walking=Boolean(forward||right)
-    if ((forward || right) && !tour && !pendingTravel && !seatMove && !records?.getState().inspecting) {
-      const speed = delta * (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 7 : 3.8) / Math.hypot(forward,right)
-      const next = moveWorld(camera.position, (-Math.sin(yaw)*forward + Math.cos(yaw)*right)*speed, (-Math.cos(yaw)*forward - Math.sin(yaw)*right)*speed)
+    if (!seated && !tour && !pendingTravel && !seatMove && !seatPending && !records?.getState().inspecting) {
+      const next = movement.update(camera.position,{forward,right,yaw,running:keys.has('ShiftLeft')||keys.has('ShiftRight')},delta)
       camera.position.x = next.x; camera.position.z = next.z
-    }
+      movementActive=next.active
+    }else{movement.reset();movementActive=false}
     if(tour){
       const next=stepWorldTravel(tour,{yaw,pitch},delta)
       camera.position.set(next.x,next.y,next.z);yaw=next.yaw;pitch=next.pitch
-      if(next.arrived){const done=tour.onArrival;tour=null;onStatus?.({navigating:false});done?.()}
+      arrivalTurn=tour.distance===tour.total
+      if(next.arrived&&Math.abs(angleDelta(yaw+Math.PI,bodyYaw))<.002){bodyYaw=yaw+Math.PI;const done=tour.onArrival;tour=null;onStatus?.({navigating:false});done?.()}
     }
     if(seatMove){
       seatMove.elapsed=Math.min(1,seatMove.elapsed+delta/.85);const t=seatMove.elapsed*seatMove.elapsed*(3-2*seatMove.elapsed)
@@ -402,11 +415,14 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
       }
     }
     else if(!seated){
-      if(jumpVelocity||jumpHeight){jumpVelocity-=12*delta;jumpHeight=Math.max(0,jumpHeight+jumpVelocity*delta);if(!jumpHeight)jumpVelocity=0}
+      if(jumpVelocity||jumpHeight){jumpHeight=Math.max(0,jumpHeight+jumpVelocity*delta-6*delta*delta);jumpVelocity-=12*delta;if(!jumpHeight)jumpVelocity=0}
       camera.position.y=WORLD_EYE_HEIGHT+jumpHeight
     }
     const dx=camera.position.x-previousX,dz=camera.position.z-previousZ
-    if(Math.hypot(dx,dz)>.001)bodyYaw=Math.atan2(dx,dz)
+    movementSpeed=delta?Math.hypot(dx,dz)/delta:0
+    walking=!seated&&!seatMove&&movementSpeed>.03
+    // Finish the arrival turn with the camera instead of retaining the last path heading.
+    if(walking||traveling)bodyYaw+=angleDelta(walking&&!arrivalTurn?Math.atan2(dx,dz):yaw+Math.PI,bodyYaw)*(reducedMotion?1:1-Math.exp(-delta*16))
     yaw += (Number(keys.has('ArrowLeft')) - Number(keys.has('ArrowRight'))) * delta
     pitch = THREE.MathUtils.clamp(pitch + (Number(keys.has('ArrowUp')) - Number(keys.has('ArrowDown'))) * delta * .7, -.9, 1.12)
     camera.rotation.set(pitch, yaw, 0)
@@ -418,8 +434,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     frame = 0; if (disposed || !active || document.hidden) return
     const delta = Math.min((now - (last || now - 16)) / 1000, .1); last = now
     const fov=updateMotion(delta)
-    const firstPerson=updateView(),pose=avatarPose()
-    if(pose.motion==='walk'&&(keys.has('ShiftLeft')||keys.has('ShiftRight')))pose.motion='run'
+    const firstPerson=updateView(delta),pose=avatarPose()
     const avatarMotion=avatars.update(pose,delta,{firstPerson,reducedMotion})
     const signature=[pose.x.toFixed(3),pose.y.toFixed(3),pose.z.toFixed(3),pose.yaw.toFixed(3),pose.motion].join(':')
     if(now-lastPresence>=50&&(signature!==lastPose||now-lastPresence>1000)){lastPresence=now;lastPose=signature;onPresence?.(pose)}
@@ -452,7 +467,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
       const hint=target?.userData.hint|| (target?.userData.item?`拿起唱片 · ${target.userData.item.name}`:target?.userData.action==='sit'?'坐下听歌':target?.name==='world-music-screen'?'操作音乐大屏':target?.userData.station?'前往'+WORLD_STATIONS[target.userData.station]?.label:'')
       onStatus?.({ x: camera.position.x, z: camera.position.z, yaw, live: lighting.live, walking, jumping:jumpHeight>0,viewMode,frameCount,hint,lightingCue:lightShow.getState().cue,tempo:lighting.tempo })
     }
-    if (!frame && (tour || pendingTravel || seatMove || avatarMotion || jumpHeight || jumpVelocity || recordMotion || weatherMotion || speakerMotion || lightSettling || screenMotion || terminalMotion || feedMotion || keys.size || drag || Math.abs(camera.fov-fov)>.03 || (playback.playing && !reducedMotion) || lighting.settling || now < settle)) frame = requestAnimationFrame(render)
+    if (!frame && (tour || pendingTravel || seatMove || movementActive || cameraSettling || avatarMotion || jumpHeight || jumpVelocity || recordMotion || weatherMotion || speakerMotion || lightSettling || screenMotion || terminalMotion || feedMotion || keys.size || drag || Math.abs(camera.fov-fov)>.03 || (playback.playing && !reducedMotion) || lighting.settling || now < settle)) frame = requestAnimationFrame(render)
   }
   function updateLibrary(data) {
     library = data
@@ -562,8 +577,9 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
           onPresence?.(avatarPose(),true)
           if(seated)void onSeat?.(seatId)
         }else{
-          cancelTravel();stand(true,false);jumpHeight=jumpVelocity=0
-          camera.position.set(self.x,WORLD_EYE_HEIGHT,self.z);bodyYaw=self.yaw;selectDestination('')
+          clearMovement();cancelTravel();stand(true,false);jumpHeight=jumpVelocity=0
+          const safe=resolveWorldPosition(self)
+          camera.position.set(safe.x,WORLD_EYE_HEIGHT,safe.z);bodyYaw=self.yaw;selectDestination('')
         }
       }
       if((!connected||!roomId)&&seated&&membership)stand(true,false)
@@ -590,7 +606,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
       if(stopMotion){
         if(seatMove){camera.position.copy(seatMove.to);if(seatMove.look)lookToward(seatMove.look);seatMove=null}
         if(pendingTravel){const next=pendingTravel;pendingTravel=null;beginTravel(next.station,next.onArrival,true)}
-        if(tour){const target=tour.destination,done=tour.onArrival;tour=null;camera.position.set(target.x,WORLD_EYE_HEIGHT,target.z);lookToward(target.look);onStatus?.({navigating:false});done?.()}
+        if(tour){const target=tour.destination,done=tour.onArrival;tour=null;camera.position.set(target.x,WORLD_EYE_HEIGHT,target.z);lookToward(target.look);bodyYaw=yaw+Math.PI;onStatus?.({navigating:false});done?.()}
         camera.rotation.set(pitch,yaw,0);camera.updateMatrixWorld(true)
       }
       const contentChanged=previousLyrics!==value.lyrics

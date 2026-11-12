@@ -24,9 +24,7 @@ const bronze = material('sky-bronze', '#a48a60', .3, .78)
 const graphite = material('sky-graphite', '#202b31', .36, .55)
 const rug = material('sky-carpet', '#82796e', .97)
 const light = material('sky-cove-light', '#fff0cf', .35, .2, { emissive: '#ffcf8b', emissiveIntensity: 2.3 })
-const onyx = material('sky-onyx', '#d4ac72', .32, .05, { emissive: '#b67537', emissiveIntensity: .35 })
 const glass = material('sky-glass', '#b4c9cc', .13, .12, { transparent: true, opacity: .055, side: THREE.DoubleSide, depthWrite: false })
-const bark = material('sky-olive-bark', '#645846', .92)
 const add = (geometry, mat, position = [0, 0, 0]) => { const mesh = new THREE.Mesh(geometry, mat); mesh.position.fromArray(position); root.add(mesh); return mesh }
 const box = (size, mat, position, radius = 0) => add(radius ? new RoundedBoxGeometry(...size, 2, radius) : new THREE.BoxGeometry(...size), mat, position)
 const cylinder = (radius, height, mat, position, top = radius, segments = 32) => add(new THREE.CylinderGeometry(top, radius, height, segments), mat, position)
@@ -64,16 +62,12 @@ for (const side of [-1, 1]) for (let x = 15.6; x < 20; x += .25) box([.235, .035
 for (let x = -14.5; x < 15; x += .26) box([.247, .035, 3.8], walnut, [x, -.1, 25.3])
 for (const [x, z, w, d] of [[0, -9.5, 5, 4], [-5, -10.8, 3.7, 3.3], [5, -10.8, 3.7, 3.3], [-5, 12, 3.7, 3.3], [5, 12, 3.7, 3.3]]) box([w, .008, d], rug, [x, .026, z], .06)
 
-// Glass curtain walls, bronze fins, and slender sculpted piers carry a deep cantilevered roof.
+// Glass curtain walls and bronze fins beneath a deep cantilevered roof.
 for (const side of [-1, 1]) {
   box([.28, .25, 46], stone, [side * 15, .12, 1])
   for (let z = -20; z < 23; z += 3.9) {
     box([.075, 11.8, .09], bronze, [side * 15, 6.05, z], .014)
     box([.02, 11.5, 3.78], glass, [side * 15, 6.05, z + 1.95])
-  }
-  for (const z of [-18, -7, 4, 15]) {
-    tube([[side * 14.72, .15, z], [side * 14.62, 5.7, z], [side * 15.02, 10.4, z], [side * 17.7, 12.05, z]], .21, stone, false, 48)
-    tube([[side * 14.48, .35, z - .07], [side * 14.38, 5.7, z - .07], [side * 14.8, 10.4, z - .07], [side * 17.6, 11.86, z - .07]], .022, bronze, false, 48)
   }
   box([.16, .14, 47], bronze, [side * 15, 11.95, 1])
   box([.08, .045, 45.5], light, [side * 14.82, 11.7, 1])
@@ -126,20 +120,6 @@ box([16.7, .38, .75], stone, [0, 10.55, -20.3], .1)
 box([14.4, .025, .05], light, [0, 9.66, -20.04])
 box([29.8, 2.1, .025], glass, [0, 11.65, -20.6])
 
-// Backlit onyx bar beyond the circulation boundary, with a floating stone counter.
-box([10.8, .95, 1.05], onyx, [0, .47, 21.1], .12)
-box([11.3, .13, 1.45], marble, [0, 1.04, 21.1], .08)
-box([10.5, .04, .035], light, [0, .91, 20.55])
-for (let x = -5.1; x <= 5.1; x += .18) box([.022, .77, .04], bronze, [x, .46, 20.54])
-for (const x of [-4.1, -2.05, 0, 2.05, 4.1]) {
-  cylinder(.34, .13, walnut, [x, .84, 19.75], .35)
-  cylinder(.035, .73, bronze, [x, .42, 19.75])
-  cylinder(.27, .035, graphite, [x, .04, 19.75])
-  cylinder(.025, .035, bronze, [x + .14, 1.15, 21.02])
-  cylinder(.075, .16, glass, [x + .14, 1.24, 21.02], .09)
-}
-for (const x of [-4.4, 4.4]) { cylinder(.17, .3, stone, [x, 1.26, 21.35], .09); tube([[x, 1.37, 21.35], [x + .1, 1.75, 21.35], [x - .1, 1.95, 21.36]], .012, bark) }
-
 // Low, detailed millwork replaces tall storage in this scene and opens the city view.
 function vase(x,y,z,scale=1) {
   const profile=[[.13,0],[.23,.04],[.27,.25],[.2,.45],[.095,.55],[.085,.73],[.105,.76]].map(([r,h])=>new THREE.Vector2(r*scale,h*scale))
@@ -164,24 +144,6 @@ for(const side of [-1,1])for(const z of [-4,1,6]) {
     const sculpture=add(new THREE.TorusKnotGeometry(.32,.068,96,12,2,3),bronze,[x,1.9,z+.85]);sculpture.rotation.z=.3
     box([.58,.06,.58],graphite,[x,1.25,z+.85],.015)
   }
-}
-// Artful bar back, suspended bottle shelves, varied glassware and warm task lighting.
-box([13.3,3.1,.28],walnut,[0,1.65,23.2],.08)
-for(const x of [-5.3,-2.65,0,2.65,5.3]) {
-  box([2.25,2.5,.04],onyx,[x,1.85,23.02],.04)
-  for(const y of [1.05,2.05,2.9]) {
-    box([2.38,.045,.48],bronze,[x,y,22.8],.012)
-    box([2.22,.018,.035],light,[x,y-.04,22.94])
-    for(let j=0;j<4;j++) {
-      const xx=x-.76+j*.48,hh=.28+random()*.22
-      cylinder(.065,hh,j%2?glass:leather,[xx,y+hh/2+.025,22.77],.065,20)
-      cylinder(.027,.09,bronze,[xx,y+hh+.07,22.77],.027,16)
-    }
-  }
-}
-for(const x of [-4.1,0,4.1]) {
-  cylinder(.027,4.4,bronze,[x,5.25,21.1]);cylinder(.36,.08,bronze,[x,3.06,21.1],.12)
-  cylinder(.25,.018,light,[x,3.008,21.1])
 }
 // Layered lounge textiles and round stone side tables stay within the existing seat footprints.
 for(const side of [-1,1])for(const z of [-10.8,12]) {

@@ -1,5 +1,7 @@
 export const WORLD_EYE_HEIGHT = 2
 export const WORLD_SEAT_HEIGHT = 1.22
+export const WORLD_PLAYER_RADIUS = .42
+export const WORLD_BOUNDS = { minX: -14.7, maxX: 14.7, minZ: -19.1, maxZ: 19.9 }
 export const WORLD_LOBBY_DISPLAY = { index: 3, x: -8.2, z: 7.1 }
 export const WORLD_STATIONS = {
   atrium: { x: 0, z: 12.8, look: [0, 4, -12], label: '音乐中庭', sub: 'THE ATRIUM' },
@@ -39,21 +41,161 @@ export const WORLD_MAP_DESTINATIONS = [
   {id:'atrium',kind:'station',label:'音乐中庭',x:0,z:12.8,view:WORLD_STATIONS.atrium,mapLabel:{x:240,y:480}},
 ]
 
+// Feet use a circle against furniture footprints. The same sweep is used by
+// manual movement and path smoothing, including the rounded furniture corners.
+const SKIN = .002, EPSILON = 1e-8
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
+export const WORLD_OBSTACLES = [
+  { x: 0, z: 1.5, halfX: 2.25, halfZ: .92, height: 2.35 },
+  { x: 0, z: -9, halfX: 1.67, halfZ: .95, height: 1.7 },
+  ...[-1, 1].flatMap(side => [
+    { x: side * 8.3, z: -16.9, halfX: .95, halfZ: 1.05, height: 4.8 },
+    ...[-10.8, 12].map(z => ({ x: side * 5, z, halfX: 1.08, halfZ: 1.1, height: 1.7 })),
+    ...[-4, 1, 6].map(z => ({ x: side * 11.9, z, halfX: 1.25, halfZ: 1.8, height: 3.35 })),
+    ...[-7, -2.3, 2.4, 7.1].map(z => ({ x: side * 8.2, z, halfX: .7, halfZ: 1, height: 3.05 })),
+  ]),
+]
+
+export function canWalkWorld(x, z, radius = WORLD_PLAYER_RADIUS) {
+  if (!Number.isFinite(x) || !Number.isFinite(z) ||
+    x < WORLD_BOUNDS.minX + radius || x > WORLD_BOUNDS.maxX - radius ||
+    z < WORLD_BOUNDS.minZ + radius || z > WORLD_BOUNDS.maxZ - radius) return false
+  return WORLD_OBSTACLES.every(obstacle => {
+    const dx = Math.abs(x - obstacle.x) - obstacle.halfX
+    const dz = Math.abs(z - obstacle.z) - obstacle.halfZ
+    return (dx >= 0 || dz >= 0) && Math.max(0, dx) ** 2 + Math.max(0, dz) ** 2 >= radius ** 2 - EPSILON
+  })
+}
+
+// Reconnects and interrupted seat transitions can start inside furniture.
+export function resolveWorldPosition(position, radius = WORLD_PLAYER_RADIUS) {
+  let x = Number.isFinite(position.x) ? position.x : WORLD_STATIONS.atrium.x
+  let z = Number.isFinite(position.z) ? position.z : WORLD_STATIONS.atrium.z
+  for (let pass = 0; pass < 12; pass++) {
+    x = clamp(x, WORLD_BOUNDS.minX + radius + SKIN, WORLD_BOUNDS.maxX - radius - SKIN)
+    z = clamp(z, WORLD_BOUNDS.minZ + radius + SKIN, WORLD_BOUNDS.maxZ - radius - SKIN)
+    let resolved = true
+    for (const obstacle of WORLD_OBSTACLES) {
+      const nearestX = clamp(x, obstacle.x - obstacle.halfX, obstacle.x + obstacle.halfX)
+      const nearestZ = clamp(z, obstacle.z - obstacle.halfZ, obstacle.z + obstacle.halfZ)
+      const dx = x - nearestX, dz = z - nearestZ, distance = Math.hypot(dx, dz)
+      if (distance >= radius) continue
+      resolved = false
+      if (distance > EPSILON) {
+        const push = (radius + SKIN - distance) / distance
+        x += dx * push; z += dz * push
+      } else {
+        const exits = [
+          { distance: x - (obstacle.x - obstacle.halfX - radius), x: obstacle.x - obstacle.halfX - radius - SKIN, z },
+          { distance: obstacle.x + obstacle.halfX + radius - x, x: obstacle.x + obstacle.halfX + radius + SKIN, z },
+          { distance: z - (obstacle.z - obstacle.halfZ - radius), x, z: obstacle.z - obstacle.halfZ - radius - SKIN },
+          { distance: obstacle.z + obstacle.halfZ + radius - z, x, z: obstacle.z + obstacle.halfZ + radius + SKIN },
+        ]
+        const exit = exits.reduce((best, next) => next.distance < best.distance ? next : best)
+        x = exit.x; z = exit.z
+      }
+    }
+    if (resolved) break
+  }
+  return { x, z }
+}
+
+function sweepWorld(position, dx, dz, radius) {
+  let hit = null
+  const consider = (time, nx, nz) => {
+    if (time < -EPSILON || time > 1 + EPSILON || dx * nx + dz * nz >= -EPSILON) return
+    time = clamp(time, 0, 1)
+    if (!hit || time < hit.time) hit = { time, nx, nz }
+  }
+  if (dx < -EPSILON) consider((WORLD_BOUNDS.minX + radius - position.x) / dx, 1, 0)
+  if (dx > EPSILON) consider((WORLD_BOUNDS.maxX - radius - position.x) / dx, -1, 0)
+  if (dz < -EPSILON) consider((WORLD_BOUNDS.minZ + radius - position.z) / dz, 0, 1)
+  if (dz > EPSILON) consider((WORLD_BOUNDS.maxZ - radius - position.z) / dz, 0, -1)
+  const lengthSquared = dx * dx + dz * dz
+  if (lengthSquared < EPSILON ** 2) return hit
+  for (const obstacle of WORLD_OBSTACLES) {
+    const minX = obstacle.x - obstacle.halfX, maxX = obstacle.x + obstacle.halfX
+    const minZ = obstacle.z - obstacle.halfZ, maxZ = obstacle.z + obstacle.halfZ
+    for (const sign of [-1, 1]) {
+      if (Math.abs(dx) > EPSILON) {
+        const time = ((sign < 0 ? minX : maxX) + sign * radius - position.x) / dx
+        const z = position.z + dz * time
+        if (z >= minZ && z <= maxZ) consider(time, sign, 0)
+      }
+      if (Math.abs(dz) > EPSILON) {
+        const time = ((sign < 0 ? minZ : maxZ) + sign * radius - position.z) / dz
+        const x = position.x + dx * time
+        if (x >= minX && x <= maxX) consider(time, 0, sign)
+      }
+    }
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const cx = sx < 0 ? minX : maxX, cz = sz < 0 ? minZ : maxZ
+      const ox = position.x - cx, oz = position.z - cz
+      const b = ox * dx + oz * dz, c = ox * ox + oz * oz - radius * radius
+      const discriminant = b * b - lengthSquared * c
+      if (discriminant < 0) continue
+      const time = (-b - Math.sqrt(discriminant)) / lengthSquared
+      const nx = position.x + dx * time - cx, nz = position.z + dz * time - cz
+      if (nx * sx >= -EPSILON && nz * sz >= -EPSILON) consider(time, nx / radius, nz / radius)
+    }
+  }
+  return hit
+}
+
+export function moveWorld(position, dx, dz, radius = WORLD_PLAYER_RADIUS) {
+  const result = resolveWorldPosition(position, radius), contacts = []
+  if (!Number.isFinite(dx) || !Number.isFinite(dz)) return { ...result, contacts }
+  for (let iteration = 0; iteration < 6 && Math.hypot(dx, dz) > EPSILON; iteration++) {
+    const hit = sweepWorld(result, dx, dz, radius)
+    if (!hit) { result.x += dx; result.z += dz; break }
+    const advance = Math.max(0, hit.time - SKIN / Math.hypot(dx, dz))
+    result.x += dx * advance; result.z += dz * advance
+    dx *= 1 - hit.time; dz *= 1 - hit.time
+    const into = Math.min(0, dx * hit.nx + dz * hit.nz)
+    dx -= into * hit.nx; dz -= into * hit.nz
+    contacts.push({ x: hit.nx, z: hit.nz })
+  }
+  return { ...resolveWorldPosition(result, radius), contacts }
+}
+
+export function isWorldPathClear(start, destination, radius = WORLD_PLAYER_RADIUS) {
+  if (!canWalkWorld(start.x, start.z, radius) || !canWalkWorld(destination.x, destination.z, radius)) return false
+  const hit = sweepWorld(start, destination.x - start.x, destination.z - start.z, radius)
+  return !hit || hit.time >= 1 - EPSILON
+}
+
+// Clip the camera boom against furniture height as well as room walls. A
+// seated camera may start inside its chair, so that chair must allow an exit.
+export function worldCameraLimit(origin, destination, radius = .18) {
+  let limit = 1
+  for (const [axis, min, max] of [['x', WORLD_BOUNDS.minX, WORLD_BOUNDS.maxX], ['z', WORLD_BOUNDS.minZ, WORLD_BOUNDS.maxZ]]) {
+    const delta = destination[axis] - origin[axis]
+    if (delta > EPSILON) limit = Math.min(limit, (max - radius - origin[axis]) / delta)
+    else if (delta < -EPSILON) limit = Math.min(limit, (min + radius - origin[axis]) / delta)
+  }
+  for (const obstacle of WORLD_OBSTACLES) {
+    const ranges = { x: [obstacle.x - obstacle.halfX - radius, obstacle.x + obstacle.halfX + radius], y: [-radius, obstacle.height + radius], z: [obstacle.z - obstacle.halfZ - radius, obstacle.z + obstacle.halfZ + radius] }
+    if (Object.entries(ranges).every(([axis, [min, max]]) => origin[axis] >= min && origin[axis] <= max)) continue
+    let near = 0, far = limit
+    for (const [axis, [min, max]] of Object.entries(ranges)) {
+      const delta = destination[axis] - origin[axis]
+      if (Math.abs(delta) < EPSILON) { if (origin[axis] < min || origin[axis] > max) { far = -1; break } }
+      else {
+        const a = (min - origin[axis]) / delta, b = (max - origin[axis]) / delta
+        near = Math.max(near, Math.min(a, b)); far = Math.min(far, Math.max(a, b))
+      }
+    }
+    if (near <= far) limit = Math.min(limit, Math.max(0, near - .02))
+  }
+  return clamp(limit, 0, 1)
+}
+
 // A small floor grid routes around the same furniture used by manual walking.
 export function planWorldPath(start, destination) {
   if (!canWalkWorld(start.x, start.z) || !canWalkWorld(destination.x, destination.z)) return []
   const clear = (a, b) => {
-    const clearance=canWalkWorld(a.x,a.z,.5)&&canWalkWorld(b.x,b.z,.5)?.5:.32
-    for(const obstacle of WORLD_OBSTACLES){
-      let near=0,far=1,intersects=true
-      for(const [axis,half] of [['x','halfX'],['z','halfZ']]){
-        const delta=b[axis]-a[axis],min=obstacle[axis]-obstacle[half]-clearance,max=obstacle[axis]+obstacle[half]+clearance
-        if(Math.abs(delta)<1e-8){if(a[axis]<min||a[axis]>max){intersects=false;break}}
-        else {const t1=(min-a[axis])/delta,t2=(max-a[axis])/delta;near=Math.max(near,Math.min(t1,t2));far=Math.min(far,Math.max(t1,t2));if(near>far){intersects=false;break}}
-      }
-      if(intersects)return false
-    }
-    return true
+    const clearance=canWalkWorld(a.x,a.z,.5)&&canWalkWorld(b.x,b.z,.5)?.5:WORLD_PLAYER_RADIUS
+    return isWorldPathClear(a,b,clearance)
   }
   if (clear(start,destination)) return [{x:destination.x,z:destination.z}]
   const step=.5, key=(x,z)=>`${x},${z}`, point=(x,z)=>({x:x*step,z:z*step})
@@ -85,27 +227,4 @@ export function planWorldPath(start, destination) {
     }
   }
   return []
-}
-export const WORLD_OBSTACLES = [
-  { x: 0, z: 1.5, halfX: 2.5, halfZ: 1.4 },
-  { x: 0, z: -9, halfX: 1.7, halfZ: 1.1 },
-  ...[-1, 1].flatMap((side) => [
-    { x: side * 8.3, z: -16.9, halfX: .9, halfZ: 1 },
-    ...[-10.8, 12].map(z => ({ x: side * 5, z, halfX: 1, halfZ: 1 })),
-    ...[-4, 1, 6].map(z => ({ x: side * 11.9, z, halfX: 1.35, halfZ: 1.9 })),
-    ...[-7, -2.3, 2.4, 7.1].map(z => ({ x: side * 8.2, z, halfX: .85, halfZ: 1.1 })),
-  ]),
-]
-export function canWalkWorld(x, z, clearance=.32) {
-  return Math.abs(x) < 14.3 && z > -18.7 && z < 19.5 && WORLD_OBSTACLES.every(o =>
-    Math.abs(x - o.x) > o.halfX + clearance || Math.abs(z - o.z) > o.halfZ + clearance)
-}
-export function moveWorld(position, dx, dz) {
-  const count = Math.max(1, Math.ceil(Math.hypot(dx, dz) / .1))
-  let { x, z } = position
-  for (let i = 0; i < count; i++) {
-    if (canWalkWorld(x + dx / count, z)) x += dx / count
-    if (canWalkWorld(x, z + dz / count)) z += dz / count
-  }
-  return { x, z }
 }

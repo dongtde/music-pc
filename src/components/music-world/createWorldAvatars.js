@@ -39,7 +39,7 @@ export function createWorldAvatars(invalidate) {
       clock+=delta
       if(pose.transition&&!reducedMotion)local.root.position.lerp(position.set(pose.x,pose.y,pose.z),1-Math.exp(-delta*12));else local.root.position.set(pose.x,pose.y,pose.z)
       local.root.rotation.y=pose.yaw;local.root.visible=!firstPerson
-      let moving=local.pose(pose.motion,delta,clock,reducedMotion)
+      let moving=local.pose(pose.motion,delta,clock,reducedMotion,pose.speed)
       for(const peer of peers.values()){
         const p=peer.target,root=peer.avatar.root,blend=1-Math.exp(-delta*18),distance=Math.hypot(root.position.x-p.x,root.position.z-p.z)
         if(distance>4)root.position.set(p.x,p.y,p.z);else root.position.lerp(position.set(p.x,p.y,p.z),blend)
