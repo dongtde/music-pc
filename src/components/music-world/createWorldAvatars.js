@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { loadFantasyQueen } from './fantasyQueenAvatar.js'
+import { createSeatMotion, sampleSeatMotion } from './worldSeatMotion.js'
 
 export function createWorldAvatars(invalidate) {
   const group=new THREE.Group(), peers=new Map();group.name='world-avatars'
@@ -28,6 +29,11 @@ export function createWorldAvatars(invalidate) {
       let peer=peers.get(p.id)
       if(!peer){const avatar=asset.create(),tag=label(p.name);avatar.root.add(tag);group.add(avatar.root);avatar.root.position.set(p.x,p.y,p.z);avatar.root.rotation.y=p.yaw;peer={avatar,label:tag,target:p,remaining:0};peers.set(p.id,peer)}
       const moved=Math.hypot(peer.target.x-p.x,peer.target.y-p.y,peer.target.z-p.z)>.002||Math.abs(deltaAngle(peer.target.yaw,p.yaw))>.002||peer.target.motion!==p.motion
+      if(peer.target.seatId!==p.seatId||(peer.target.seatIndex??0)!==(p.seatIndex??0)){
+        const root=peer.avatar.root
+        const from=peer.transition?sampleSeatMotion(peer.transition,peer.elapsed):{...peer.target,x:root.position.x,y:root.position.y,z:root.position.z,yaw:root.rotation.y}
+        peer.transition=createSeatMotion(from,p);peer.elapsed=0
+      }
       peer.target=p;if(moved)peer.remaining=.45
     }
     invalidate()
@@ -37,11 +43,20 @@ export function createWorldAvatars(invalidate) {
     update(pose,delta,{firstPerson=false,reducedMotion=false}={}) {
       if(disposed||!local)return false
       clock+=delta
-      if(pose.transition&&!reducedMotion)local.root.position.lerp(position.set(pose.x,pose.y,pose.z),1-Math.exp(-delta*12));else local.root.position.set(pose.x,pose.y,pose.z)
+      local.root.position.set(pose.x,pose.y,pose.z)
       local.root.rotation.y=pose.yaw;local.root.visible=!firstPerson
-      let moving=local.pose(pose.motion,delta,clock,reducedMotion,pose.speed)
+      let moving=local.pose(pose.motion,delta,clock,reducedMotion,pose.speed,pose.sitBlend)
       for(const peer of peers.values()){
         const p=peer.target,root=peer.avatar.root,blend=1-Math.exp(-delta*18),distance=Math.hypot(root.position.x-p.x,root.position.z-p.z)
+        if(peer.transition){
+          peer.elapsed+=delta
+          const step=sampleSeatMotion(peer.transition,reducedMotion?peer.transition.duration:peer.elapsed)
+          root.position.set(step.x,step.y,step.z);root.rotation.y=step.yaw
+          peer.avatar.pose(step.motion,delta,clock,reducedMotion,0,step.sitBlend)
+          peer.label.position.y=peer.avatar.labelHeight()
+          if(step.done)peer.transition=null
+          moving=true;continue
+        }
         if(distance>4)root.position.set(p.x,p.y,p.z);else root.position.lerp(position.set(p.x,p.y,p.z),blend)
         root.rotation.y+=deltaAngle(p.yaw,root.rotation.y)*blend
         peer.remaining=Math.max(0,peer.remaining-delta)

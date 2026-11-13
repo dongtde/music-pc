@@ -43,7 +43,7 @@
       v-for="place in destinations"
       :key="place.id"
       class="world-floor__destination"
-      :class="['is-' + place.kind, { 'is-selected': position.pointId === place.id, 'is-terminal': place.id === 'terminal' }]"
+      :class="['is-' + place.kind, { 'is-selected': position.pointId === place.id, 'is-terminal': place.id === 'terminal', 'is-full': place.kind === 'seat' && seatState(place).occupied >= place.capacity }]"
       :data-destination="place.id"
       :transform="destinationTransform(place)"
       :role="compact ? undefined : 'button'"
@@ -68,6 +68,7 @@
         <rect class="world-floor__seat-cushion" :x="place.id === 'seat-center' ? -24 : -16" y="-11" :width="place.id === 'seat-center' ? 48 : 32" height="19" rx="5" />
         <path class="world-floor__seat-seam" :d="place.id === 'seat-center' ? 'M0-8V5M-23 11h46' : 'M-15 11h30'" />
         <text class="world-floor__seat-label" :y="place.id === 'seat-center' || place.z > 0 ? 33 : -25">{{ place.label }}</text>
+        <text class="world-floor__seat-count" :y="place.id === 'seat-center' || place.z > 0 ? 47 : -39">{{ seatState(place).occupied }}/{{ place.capacity }} 人{{ seatState(place).occupied >= place.capacity ? ' · 已满' : '' }}</text>
       </template>
 
       <template v-else-if="place.id === 'screen'">
@@ -93,6 +94,9 @@
         <component :is="iconFor(place)" :x="wide ? -42 : -35" y="-8" :size="16" class="world-floor__icon" />
         <text class="world-floor__tile-label" :x="wide ? -15 : -11" y="0" dominant-baseline="central">{{ place.label }}</text>
       </template>
+      <g v-if="place.kind === 'seat'" aria-hidden="true">
+        <circle v-for="index in place.capacity" :key="index" class="world-floor__seat-slot" :class="{'is-occupied': seatState(place).slots[index-1]}" :cx="(index - (place.capacity + 1) / 2) * (compact ? 16 : 22)" :cy="compact ? 0 : -2" :r="compact ? 3 : 3.5" />
+      </g>
     </g>
 
     <g class="world-floor__player" :transform="playerTransform" aria-hidden="true">
@@ -150,8 +154,16 @@ function iconFor(place) {
 }
 
 function destinationTitle(place) {
+  if (place.kind === 'seat') {
+    const state = seatState(place)
+    return `${place.label} · 可坐 ${place.capacity} 人 · 已坐 ${state.occupied} 人 · ${state.occupied >= place.capacity ? '已坐满' : '落座听音'}`
+  }
   const track = place.kind === 'record' ? props.archiveTracks[place.target>WORLD_LOBBY_DISPLAY.index?place.target-1:place.target] : null
   return (place.kind === 'seat' ? '落座' : '前往') + place.label + (track?.name ? ' · ' + track.name : '')
+}
+
+function seatState(place) {
+  return props.position.seats?.[place.id] || { occupied: 0, capacity: place.capacity, slots: [] }
 }
 
 function navigate(place) {
@@ -211,6 +223,10 @@ onBeforeUnmount(() => observer?.disconnect())
 .world-floor__seat-base { fill: #172b34; stroke: #a8c8cb; stroke-opacity: .22; }
 .world-floor__seat-cushion { fill: #476068; stroke: #a8c8cb; stroke-opacity: .36; }
 .world-floor__seat-seam { fill: none; stroke: #a8c8cb; stroke-opacity: .38; stroke-width: .8; }
+.world-floor__seat-count { text-anchor: middle; fill: #91b7b3; font-size: 9px; pointer-events: none; }
+.world-floor__seat-slot { fill: #9ee1c8; stroke: #183d39; stroke-width: 1; pointer-events: none; }
+.world-floor__seat-slot.is-occupied { fill: #e2b585; stroke: #624b36; }
+.world-floor__destination.is-full .world-floor__seat-count { fill: #e2b585; }
 .world-floor__screen-back { fill: #28474e; stroke: #a8e7df; stroke-opacity: .3; stroke-width: .8; }
 .world-floor__screen-edge { fill: none; stroke: #a8e7df; stroke-width: 2; stroke-linecap: round; }
 .world-floor__lobby-line { fill: none; stroke: #a8c8cb; stroke-width: 1; stroke-dasharray: 2 6; opacity: .3; }

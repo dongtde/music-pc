@@ -22,6 +22,8 @@ import { createWorldFrameMetrics } from './worldFrameMetrics.js'
 import { createSpeakerMotion } from './createSpeakerMotion.js'
 import { createListeningLobbyScreen } from './createListeningLobbyScreen.js'
 import { createScreenProjection } from './createScreenProjection.js'
+import { getSeatSlot, availableSeatSlots, seatOccupants } from '../../../backend/src/seatLayout.js'
+import { createSeatMotion, sampleSeatMotion } from './worldSeatMotion.js'
 
 const KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'ShiftLeft', 'ShiftRight'])
 export async function createMusicWorld(canvas, { onStatus, onAction, onProgress, onListeningScreen, sampleAudio, onPresence, onSeat, signal, quality: initialQuality = 'balanced' } = {}) {
@@ -79,6 +81,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   let tour=null, pendingTravel=null, seated=false, seatId='', pointId='', seatMove=null, returnPose=null, quality=['smooth','balanced','high'].includes(initialQuality)?initialQuality:'balanced'
   let viewMode='third',bodyYaw=Math.PI,jumpHeight=0,jumpVelocity=0,seatEpoch=0,seatPending=false,membership='',roomConnected=false,lastPresence=0,lastPose=''
   let movementSpeed=0, movementActive=false, cameraBoom=1, cameraSettling=false
+  let seatIndex=null, presencePlayers=[], selfId='', releasingSeat=false
   const avatars=createWorldAvatars(invalidate);scene.add(avatars.group)
   const offset=new THREE.Vector3(),targetPosition=new THREE.Vector3()
   const ambient = new THREE.HemisphereLight('#d4e3ef', '#39352d', 1.9); scene.add(ambient)
@@ -92,7 +95,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     if (!frame && initialized && !disposed && active && !document.hidden) frame = requestAnimationFrame(render)
   }
   function clearMovement() { keys.clear(); drag = null; walking=false;movementSpeed=0;movementActive=false;movement.reset() }
-  function stop() { cancelAnimationFrame(frame); frame = 0; last = 0; clearMovement(); clearScreenHover();jumpHeight=jumpVelocity=0;if(!seated&&!seatMove)camera.position.y=WORLD_EYE_HEIGHT;if(initialized)onPresence?.(avatarPose(),true) }
+  function stop() { cancelAnimationFrame(frame); frame = 0; last = 0; clearMovement(); clearScreenHover();jumpHeight=jumpVelocity=0;if(!seated&&!seatMove)camera.position.y=WORLD_EYE_HEIGHT;if(initialized&&!seatMove)onPresence?.(avatarPose(),true) }
   function updateScreenHover(hit) {
     const next = hit?.object.userData.action === 'terminal' ? terminal : hit?.object.userData.action === 'lobby' ? lobbyScreen : hit?.object.userData.action === 'feed' ? covers.find(entry => entry.surface.mesh === hit.object)?.surface : null
     if (hoveredSurface !== next) { hoveredSurface?.setHover(null); hoveredSurface?.cancelClick() }
@@ -115,19 +118,62 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   }
   function cancelTravel(){tour=null;pendingTravel=null;seatEpoch++;onStatus?.({navigating:false})}
   function selectDestination(id,details={}){pointId=id;onStatus?.({pointId:id,...details})}
+  function seatAvailability() {
+    const players=presencePlayers.filter(player=>player.id!==selfId)
+    if(seated)players.push({id:selfId,seatId,seatIndex,active:true})
+    return Object.fromEntries(WORLD_SEATS.map(seat=>{
+      const occupants=seatOccupants(seat.id,players)
+      return [seat.id,{capacity:seat.capacity,occupied:occupants.length,slots:seat.offsets.map((_,index)=>occupants.find(player=>(player.seatIndex??0)===index)||null)}]
+    }))
+  }
+  function publishSeats(){onStatus?.({seats:seatAvailability()});invalidate()}
+  function seatHint(id,index) {
+    const seat=WORLD_SEATS.find(item=>item.id===id),state=seatAvailability()[id]
+    if(!seat)return ''
+    const occupant=index===undefined?null:state.slots[index]
+    return `${seat.label} · ${state.occupied}/${state.capacity} 人 · ${occupant?occupant.id===selfId?'你已入座':`${occupant.name||'同伴'}已入座`:state.occupied>=state.capacity?'已坐满':'坐下听歌'}`
+  }
+  async function releaseSeat() {
+    const room=membership
+    releasingSeat=true
+    try {
+      const accepted=await (onSeat?.('')??true)
+      if(!accepted&&!disposed&&room&&membership===room&&roomConnected){
+        const self=presencePlayers.find(player=>player.id===selfId)
+        const slot=self&&getSeatSlot(self.seatId,self.seatIndex??0)
+        if(slot){clearMovement();cancelTravel();restoreSeat(slot);publishSeats()}
+      }
+      return accepted
+    }
+    finally { releasingSeat=false;invalidate() }
+  }
+  function restoreSeat(slot){
+    seated=true;seatId=slot.seatId;seatIndex=slot.seatIndex;seatMove=null
+    returnPose={position:new THREE.Vector3(slot.approach.x,WORLD_EYE_HEIGHT,slot.approach.z)}
+    camera.position.set(slot.camera.x,slot.camera.y,slot.camera.z);bodyYaw=slot.pose.yaw
+    selectDestination(seatId,{seated:true,seatId,seatIndex})
+  }
+  function finishSeatMove(){
+    if(!seatMove)return
+    camera.position.copy(seatMove.to);bodyYaw=seatMove.avatar.to.yaw
+    if(seatMove.look)lookToward(seatMove.look)
+    seatMove=null
+  }
   function stand(immediate=false,release=true) {
+    seatEpoch++
     if(!seated){
-      if(immediate&&seatMove){camera.position.copy(seatMove.to);seatMove=null}
+      if(immediate&&seatMove)finishSeatMove()
       return
     }
-    const pose=returnPose;seated=false;seatId='';seatMove=null
-    if(release)void onSeat?.('')
+    const from=avatarPose(),pose=returnPose;seated=false;seatId='';seatIndex=null;seatMove=null
+    if(release)void releaseSeat()
     if(pose){
       const safe=resolveWorldPosition(pose.position);pose.position.x=safe.x;pose.position.z=safe.z
-      if(immediate||reducedMotion)camera.position.copy(pose.position)
-      else seatMove={from:camera.position.clone(),to:pose.position.clone(),elapsed:0,look:null}
+      const to={x:safe.x,y:0,z:safe.z,yaw:from.yaw,motion:'idle',seatId:'',seatIndex:null}
+      seatMove={from:camera.position.clone(),to:pose.position.clone(),elapsed:0,look:null,avatar:createSeatMotion(from,to)}
+      if(immediate||reducedMotion)finishSeatMove()
     }
-    selectDestination('',{seated:false,seatId:''});invalidate()
+    selectDestination('',{seated:false,seatId:'',seatIndex:null});publishSeats()
   }
   function travelTo(station,onArrival,immediate=false) {
     jumpHeight=jumpVelocity=0
@@ -171,24 +217,48 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     terminal?.closeMenus();records?.dismiss();travelTo(display.view,null,immediate)
     selectDestination(display.id,{station:'archive',focusedScreen:'',location:display.label})
   }
-  function sit(id='seat-center',{immediate=false}={}) {
-    if(seatPending)return
+  function sit(id='seat-center',{immediate=false,seatIndex:requestedIndex}={}) {
+    if(seatPending||releasingSeat)return
     if(typeof id==='number')id=id<0?'seat-front-left':id>0?'seat-front-right':'seat-center'
     const seat=WORLD_SEATS.find(item=>item.id===id);if(!seat)return
+    if(seated&&seatId===id&&(requestedIndex===undefined||requestedIndex===seatIndex))return
+    const free=availableSeatSlots(id,presencePlayers,selfId)
+    if(!free.length){onAction?.('notice',`${seat.label}已坐满（${seat.capacity}/${seat.capacity} 人）。`);return}
+    if(requestedIndex!==undefined&&!free.includes(requestedIndex)){onAction?.('notice','这个座位已经有人坐了。');return}
+    const index=requestedIndex??free.reduce((best,next)=>{
+      const a=getSeatSlot(id,best).approach,b=getSeatSlot(id,next).approach
+      return Math.hypot(b.x-camera.position.x,b.z-camera.position.z)<Math.hypot(a.x-camera.position.x,a.z-camera.position.z)?next:best
+    })
+    const slot=getSeatSlot(id,index)
     terminal?.closeMenus();records?.dismiss()
     const look=seat.view.look
-    const visit=seatEpoch+1
-    travelTo(seat.view,async()=>{
+    let visit
+    travelTo({...slot.approach,look:[slot.camera.x,1.22,slot.camera.z]},async()=>{
+      // Immediate/reduced-motion travel also finishes before travelTo returns.
+      await Promise.resolve()
       if(visit!==seatEpoch||disposed)return
+      if(!availableSeatSlots(id,presencePlayers,selfId).includes(index)){onAction?.('notice','这个座位刚刚有人坐下，请选择其他空位。');selectDestination('');return}
       seatPending=true
-      const accepted=await (onSeat?.(seat.id)??true)
-      seatPending=false
-      if(!accepted||disposed||visit!==seatEpoch){if(accepted)void onSeat?.('');return}
+      const room=membership
+      let accepted
+      try { accepted=await (onSeat?.(seat.id,index)??{seatId:id,seatIndex:index}) }
+      catch { onAction?.('notice','暂时无法落座，请重试。') }
+      finally { seatPending=false }
+      if(!accepted||disposed||!active||visit!==seatEpoch){
+        if(room===membership&&(accepted||presencePlayers.some(player=>player.id===selfId&&player.seatId===id)))void releaseSeat()
+        if(visit===seatEpoch)selectDestination('')
+        return
+      }
+      const assigned=getSeatSlot(id,accepted.seatIndex??index)
+      if(!assigned)return
+      const from=avatarPose()
       returnPose={position:camera.position.clone().setY(WORLD_EYE_HEIGHT)}
-      seated=true;seatId=seat.id;seatMove={from:camera.position.clone(),to:new THREE.Vector3(seat.x,WORLD_SEAT_HEIGHT,seat.z),elapsed:0,look}
-      if(immediate||reducedMotion){camera.position.copy(seatMove.to);lookToward(look);seatMove=null}
-      selectDestination(seat.id,{seated:true,seatId,station:seat.z>0?'lounge':'screen',focusedScreen:'',location:seat.label});invalidate()
+      seated=true;seatId=seat.id;seatIndex=assigned.seatIndex
+      seatMove={from:camera.position.clone(),to:new THREE.Vector3(assigned.camera.x,WORLD_SEAT_HEIGHT,assigned.camera.z),elapsed:0,look,avatar:createSeatMotion(from,assigned.pose)}
+      if(immediate||reducedMotion)finishSeatMove()
+      selectDestination(seat.id,{seated:true,seatId,seatIndex,station:seat.z>0?'lounge':'screen',focusedScreen:'',location:seat.label});publishSeats()
     },immediate)
+    visit=seatEpoch
     selectDestination(seat.id,{station:seat.z>0?'lounge':'screen',focusedScreen:'',location:seat.label})
   }
   function navigateToPoint(id,options) {
@@ -260,8 +330,8 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
       setPointer(event); raycaster.setFromCamera(pointer,viewCamera)
       const hit=firstHit(),action=hit?.object.userData.action
       updateScreenHover(hit)
-      canvas.style.cursor = ['feed','terminal','lobby'].includes(action) ? 'pointer' : 'grab'
-      canvas.title=action==='terminal'?terminal.hint(hit.uv):action==='lobby'?lobbyScreen.hint(hit.uv):''
+      canvas.style.cursor = ['feed','terminal','lobby','sit'].includes(action) ? 'pointer' : 'grab'
+      canvas.title=action==='terminal'?terminal.hint(hit.uv):action==='lobby'?lobbyScreen.hint(hit.uv):action==='sit'?seatHint(hit.object.userData.seatId,hit.object.userData.seatIndex):''
       return
     }
     if (drag.id !== event.pointerId) return
@@ -331,7 +401,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
       if (action?.action === 'feed-focus') focusScreen(action.payload.id)
       else if (action) onAction?.(action.action, action.payload)
     } else if (hit.object.userData.item) {records.inspect(hit.object.userData.item,hit.object);onAction?.('inspect',hit.object.userData.item)}
-    else if(hit.object.userData.action==='sit')sit(hit.object.userData.seatId)
+    else if(hit.object.userData.action==='sit')sit(hit.object.userData.seatId,{seatIndex:hit.object.userData.seatIndex})
     else if(hit.object.userData.action)onAction?.(hit.object.userData.action,hit.object.userData.payload)
     else if (hit.object.userData.station) onAction?.('station', hit.object.userData.station)
   }
@@ -367,12 +437,15 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
 
   function setViewMode(value){viewMode=value==='first'?'first':'third';onStatus?.({viewMode});invalidate()}
   function jump(){
-    if(disposed||!active||jumpVelocity||jumpHeight||seatMove||seatPending||records?.getState().inspecting)return
-    if(seated){stand();return}
+    if(disposed||!active||records?.getState().inspecting)return
+    if(seated){cancelTravel();stand();return}
+    if(seatPending){cancelTravel();return}
+    if(jumpVelocity||jumpHeight||seatMove)return
     clearScreenHover();cancelTravel();jumpVelocity=4.5;invalidate()
   }
   function avatarPose(){
-    if(seated){const seat=WORLD_SEATS.find(item=>item.id===seatId),angle=Math.PI+(seat?.x<0?-.22:seat?.x>0?.22:0);return {x:seat.x+Math.sin(angle)*.54,z:seat.z+Math.cos(angle)*.54,y:seatId==='seat-center'?.27:.24,yaw:angle,motion:'sit',seatId,transition:Boolean(seatMove)}}
+    if(seatMove)return sampleSeatMotion(seatMove.avatar,seatMove.elapsed)
+    if(seated)return {...getSeatSlot(seatId,seatIndex).pose,sitBlend:1}
     return {x:camera.position.x,z:camera.position.z,y:jumpHeight,yaw:bodyYaw,motion:jumpHeight>0?'jump':walking?(movementSpeed>4.5?'run':'walk'):'idle',speed:movementSpeed,seatId:'',transition:Boolean(seatMove)}
   }
   function updateView(delta){
@@ -382,7 +455,8 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     viewCamera.fov=camera.fov;viewCamera.aspect=camera.aspect;viewCamera.updateProjectionMatrix()
     if(firstPerson){viewCamera.position.copy(camera.position);viewCamera.rotation.copy(camera.rotation)}
     else {
-      offset.set(Math.sin(yaw)*3.3+(seated?Math.cos(yaw)*1.5:0),seated?2.2:1.10,Math.cos(yaw)*3.3-(seated?Math.sin(yaw)*1.5:0))
+      const sitting=avatarPose().sitBlend??0
+      offset.set(Math.sin(yaw)*3.3+Math.cos(yaw)*1.5*sitting,1.10+1.10*sitting,Math.cos(yaw)*3.3-Math.sin(yaw)*1.5*sitting)
       targetPosition.copy(camera.position).add(offset)
       const limit=worldCameraLimit(camera.position,targetPosition)
       // Retract immediately before clipping; ease back out after clearing it.
@@ -412,14 +486,17 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
       if(next.arrived&&Math.abs(angleDelta(yaw+Math.PI,bodyYaw))<.002){bodyYaw=yaw+Math.PI;const done=tour.onArrival;tour=null;onStatus?.({navigating:false});done?.()}
     }
     if(seatMove){
-      seatMove.elapsed=Math.min(1,seatMove.elapsed+delta/.85);const t=seatMove.elapsed*seatMove.elapsed*(3-2*seatMove.elapsed)
-      camera.position.lerpVectors(seatMove.from,seatMove.to,t)
+      seatMove.elapsed+=delta
+      const pose=sampleSeatMotion(seatMove.avatar,seatMove.elapsed)
+      camera.position.lerpVectors(seatMove.from,seatMove.to,pose.move)
+      camera.position.y=THREE.MathUtils.lerp(seatMove.from.y,seatMove.to.y,pose.posture)
+      bodyYaw=pose.yaw
       let aligned=true
       if(seatMove.look){
         const target=angles(seatMove.look),view=smoothWorldView({yaw,pitch},target,delta)
         yaw=view.yaw;pitch=view.pitch;aligned=Math.abs(angleDelta(target.yaw,yaw))<.002&&Math.abs(target.pitch-pitch)<.002
       }
-      if(t===1&&aligned){
+      if(pose.done&&aligned){
         seatMove=null
         if(pendingTravel){const next=pendingTravel;pendingTravel=null;beginTravel(next.station,next.onArrival)}
       }
@@ -432,7 +509,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     movementSpeed=delta?Math.hypot(dx,dz)/delta:0
     walking=!seated&&!seatMove&&movementSpeed>.03
     // Finish the arrival turn with the camera instead of retaining the last path heading.
-    if(walking||traveling)bodyYaw+=angleDelta(walking&&!arrivalTurn?Math.atan2(dx,dz):yaw+Math.PI,bodyYaw)*(reducedMotion?1:1-Math.exp(-delta*16))
+    if(!seatMove&&(walking||traveling))bodyYaw+=angleDelta(walking&&!arrivalTurn?Math.atan2(dx,dz):yaw+Math.PI,bodyYaw)*(reducedMotion?1:1-Math.exp(-delta*16))
     yaw += (Number(keys.has('ArrowLeft')) - Number(keys.has('ArrowRight'))) * delta
     pitch = THREE.MathUtils.clamp(pitch + (Number(keys.has('ArrowUp')) - Number(keys.has('ArrowDown'))) * delta * .7, -.9, 1.12)
     camera.rotation.set(pitch, yaw, 0)
@@ -452,7 +529,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     const firstPerson=updateView(delta),pose=avatarPose()
     const avatarMotion=avatars.update(pose,delta,{firstPerson,reducedMotion})
     const signature=[pose.x.toFixed(3),pose.y.toFixed(3),pose.z.toFixed(3),pose.yaw.toFixed(3),pose.motion].join(':')
-    if(now-lastPresence>=50&&(signature!==lastPose||now-lastPresence>1000)){lastPresence=now;lastPose=signature;onPresence?.(pose)}
+    if(!seatMove&&!seatPending&&!releasingSeat&&now-lastPresence>=50&&(signature!==lastPose||now-lastPresence>1000)){lastPresence=now;lastPose=signature;onPresence?.(pose)}
     const audioLevels = playback.playing && !reducedMotion ? sampleAudio?.() : null
     lighting = rhythm.update({ playing: playback.playing, reducedMotion, levels: audioLevels }, delta)
     const speakerMotion = speakers.update(lighting, delta, { reducedMotion, lightsEnabled: playback.lightsEnabled !== false })
@@ -483,7 +560,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
       lastStatus = now
       raycaster.setFromCamera(new THREE.Vector2(0,0),viewCamera)
       const target=firstHit()?.object
-      const hint=target?.userData.hint|| (target?.userData.item?`拿起唱片 · ${target.userData.item.name}`:target?.userData.action==='sit'?'坐下听歌':target?.name==='world-music-screen'?'操作音乐大屏':target?.userData.station?'前往'+WORLD_STATIONS[target.userData.station]?.label:'')
+      const hint=target?.userData.action==='sit'?seatHint(target.userData.seatId,target.userData.seatIndex):target?.userData.hint|| (target?.userData.item?`拿起唱片 · ${target.userData.item.name}`:target?.name==='world-music-screen'?'操作音乐大屏':target?.userData.station?'前往'+WORLD_STATIONS[target.userData.station]?.label:'')
       onStatus?.({ x: camera.position.x, z: camera.position.z, yaw, live: lighting.live, walking, jumping:jumpHeight>0,viewMode,frameCount,hint,lightingCue:lightShow.getState().cue,tempo:lighting.tempo,climateHour:environments.getClimate().currentHour })
     }
     if (!frame && (tour || pendingTravel || seatMove || movementActive || cameraSettling || avatarMotion || jumpHeight || jumpVelocity || recordMotion || weatherMotion || speakerMotion || lightSettling || screenMotion || terminalMotion || feedMotion || keys.size || drag || Math.abs(camera.fov-fov)>.03 || (playback.playing && !reducedMotion) || lighting.settling || now < settle)) frame = requestAnimationFrame(render)
@@ -556,8 +633,11 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
       sign.position.fromArray(pos); sign.rotation.y=rotation; sign.userData.station=station; scene.add(sign); hitTargets.push(sign)
     }
     for(const seat of WORLD_SEATS){
-      const hit=new THREE.Mesh(new THREE.BoxGeometry(seat.id==='seat-center'?3.3:1.75,1.65,1.75),new THREE.MeshBasicMaterial({visible:false}))
-      hit.position.set(seat.x,.85,seat.z);hit.userData={action:'sit',seatId:seat.id,hint:`${seat.label} · 坐下听歌`};hit.name=seat.id;scene.add(hit);hitTargets.push(hit)
+      seat.offsets.forEach((offset,index)=>{
+        const hit=new THREE.Mesh(new THREE.BoxGeometry(seat.capacity>1?1.46:1.75,1.65,1.75),new THREE.MeshBasicMaterial({visible:false}))
+        hit.position.set(seat.x+offset,.85,seat.z);hit.rotation.y=seat.yaw-Math.PI
+        hit.userData={action:'sit',seatId:seat.id,seatIndex:index};hit.name=`${seat.id}-${index}`;scene.add(hit);hitTargets.push(hit)
+      })
       const sign=makeSign('落座听音','TAKE A SEAT',1.3);sign.position.set(seat.x,1.1,seat.z+1.04);sign.userData={action:'sit',seatId:seat.id,hint:`${seat.label} · 坐下听歌`};scene.add(sign);hitTargets.push(sign)
     }
     for (const [x,z] of [[-10,-5],[10,-5],[-10,7],[10,7],[0,-17]]) {
@@ -588,6 +668,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     navigate, navigateToPoint, focusScreen, sit, stand, cancelTravel, setKey, clearMovement, dispose, updateLibrary, jump, setViewMode,
     setPresence(value,{memberId,roomId='',connected=false,preservePosition=false}={}){
       avatars.setPeers(value,memberId,connected)
+      selfId=memberId;presencePlayers=connected&&value?.roomId===roomId?(value?.players||[]):[]
       const self=value?.players?.find(item=>item.id===memberId)
       let preserved=false
       if((membership!==roomId||(!roomConnected&&connected))&&self){
@@ -596,16 +677,26 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
           clearMovement();cancelTravel()
           preserved=true
           onPresence?.(avatarPose(),true)
-          if(seated)void onSeat?.(seatId)
+          if(seated){
+            const requested=seatId,index=seatIndex,epoch=seatEpoch
+            seatPending=true
+            Promise.resolve(onSeat?.(requested,index)??true).then(accepted=>{
+              if(disposed||epoch!==seatEpoch){if(accepted&&membership===roomId)void releaseSeat();return}
+              if(!accepted)stand(true,false)
+            }).catch(()=>stand(true,false)).finally(()=>{seatPending=false;publishSeats()})
+          }
         }else{
           clearMovement();cancelTravel();stand(true,false);jumpHeight=jumpVelocity=0
           const safe=resolveWorldPosition(self)
           camera.position.set(safe.x,WORLD_EYE_HEIGHT,safe.z);bodyYaw=self.yaw;selectDestination('')
+          const slot=self.seatId&&getSeatSlot(self.seatId,self.seatIndex??0)
+          if(slot)restoreSeat(slot)
         }
       }
       if((!connected||!roomId)&&seated&&membership)stand(true,false)
+      if(seated&&connected&&roomId===membership&&!seatPending&&!releasingSeat&&(!self||self.seatId!==seatId||(self.seatIndex??0)!==seatIndex))stand(true,false)
       if(self||!roomId)membership=roomId
-      roomConnected=connected&&Boolean(self);invalidate()
+      roomConnected=connected&&Boolean(self);publishSeats()
       return preserved
     },
     setAccount(value){terminal.setAccount(value)},
@@ -617,7 +708,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     dismissRecord(){records.dismiss()},
     openTerminal(){records.dismiss();navigate('terminal')},
     setQuality,
-    setActive(value) { active=Boolean(value); if(active)invalidate();else stop() },
+    setActive(value) { active=Boolean(value); if(active)invalidate();else {cancelTravel();stop()} },
     async setScene(id,onProgress){const applied=await environments.select(id,onProgress);if(applied)invalidate();return applied},
     setClimate(value){environments.setClimate(value)},
     setPlayback(value) {
@@ -626,7 +717,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
       playback=value;reducedMotion=Boolean(value.reducedMotion)
       lightShow.setEnabled(value.lightsEnabled!==false)
       if(stopMotion){
-        if(seatMove){camera.position.copy(seatMove.to);if(seatMove.look)lookToward(seatMove.look);seatMove=null}
+        if(seatMove)finishSeatMove()
         if(pendingTravel){const next=pendingTravel;pendingTravel=null;beginTravel(next.station,next.onArrival,true)}
         if(tour){const target=tour.destination,done=tour.onArrival;tour=null;camera.position.set(target.x,WORLD_EYE_HEIGHT,target.z);lookToward(target.look);bodyYaw=yaw+Math.PI;onStatus?.({navigating:false});done?.()}
         camera.rotation.set(pitch,yaw,0);camera.updateMatrixWorld(true)
@@ -639,7 +730,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
       const signature=[value.track?.id,value.track?.name,value.playing,value.loading,value.loadingTrack?.id,(value.pendingKeys||[]).join(','),value.volume,value.queueVersion,value.playMode,value.queueLength,value.line?.text,value.currentTime,value.commentsTotal,value.danmakuEnabled,value.danmakuOpacity,value.lightsEnabled,reducedMotion].join('|')
       if(signature!==previousScreen||contentChanged||coverChanged){previousScreen=signature;invalidate()}
     },
-    getState() { return { x:camera.position.x,y:camera.position.y,z:camera.position.z,yaw,pitch,pointId,seatId,frameCount,avatar:avatarPose(),avatars:avatars.getState(),viewMode,lighting:{...lighting},lightShow:lightShow?.getState(),environment:environments?.getState(),covers:covers.length,seated,seatTransition:Boolean(seatMove),navigating:Boolean(tour||pendingTravel),quality,record:records?.getState(),screen:screen?.getState(),terminal:terminal?.getState(),feeds:covers.filter(c=>c.side==='discover').map(c=>c.surface.getState()) } },
+    getState() { return { x:camera.position.x,y:camera.position.y,z:camera.position.z,yaw,pitch,pointId,seatId,seatIndex,seats:seatAvailability(),frameCount,avatar:avatarPose(),avatars:avatars.getState(),viewMode,lighting:{...lighting},lightShow:lightShow?.getState(),environment:environments?.getState(),covers:covers.length,seated,seatTransition:Boolean(seatMove),navigating:Boolean(tour||pendingTravel),quality,record:records?.getState(),screen:screen?.getState(),terminal:terminal?.getState(),feeds:covers.filter(c=>c.side==='discover').map(c=>c.surface.getState()) } },
   }
 }
 

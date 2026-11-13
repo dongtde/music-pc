@@ -33,14 +33,15 @@ export function createListeningRoomClient({ player, state, storage = availableSe
     // Volatile packets are never replayed after reconnecting or accumulated offline.
     socket.volatile.emit('presence:move', { x: pose.x, y: pose.y, z: pose.z, yaw: pose.yaw, motion: pose.motion, seq: ++presenceSequence })
   }
-  async function takeSeat(seatId = '') {
-    if (!state.room) return true
+  async function takeSeat(seatId = '', seatIndex) {
+    if (!state.room) return seatId ? { seatId, seatIndex: seatIndex ?? 0 } : true
     if (!state.connected) { state.presenceError = '连接恢复后才能使用房间座位。'; return false }
     const epoch = lifecycle, roomId = state.room.id
     try {
-      const reply = await request('presence:seat', { seatId })
+      const reply = await request('presence:seat', { seatId, seatIndex })
       if (epoch !== lifecycle || roomId !== state.room?.id) return false
-      acceptPresence(reply.presence); state.presenceError = ''; return true
+      acceptPresence(reply.presence); state.presenceError = ''
+      return seatId ? reply.presence.players.find(peer => peer.id === state.memberId) || false : true
     } catch (error) { state.presenceError = error.message; return false }
   }
   const readSession = () => { try { return JSON.parse(storage?.getItem(SESSION_KEY) || 'null') } catch { return null } }

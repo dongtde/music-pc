@@ -7,7 +7,7 @@ import path from 'node:path'
 const root = fileURLToPath(new URL('../', import.meta.url))
 const runtimeFiles = [
   'package-lock.json',
-  'src/start.js', 'src/app.js', 'src/config.js', 'src/rooms.js', 'src/protocol.js', 'src/presence.js',
+  'src/start.js', 'src/app.js', 'src/config.js', 'src/rooms.js', 'src/protocol.js', 'src/presence.js', 'src/seatLayout.js',
 ]
 
 export async function copyRuntime(destination, { envExample = path.join(root, '.env.example') } = {}) {

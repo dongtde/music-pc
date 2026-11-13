@@ -145,7 +145,7 @@ function syncPresence(){
   const preserved=world?.setPresence(state.presence,{memberId:state.memberId,roomId:state.room?.id||'',connected:state.connected,preservePosition:Boolean(state.enteredRoomId)&&state.enteredRoomId===state.room?.id})
   if(preserved)state.enteredRoomId=''
 }
-async function takeSeat(id){const ok=await listeningRoom.takeSeat(id);if(!ok&&id)toast(listeningRoom.state.presenceError||'暂时无法落座。');return ok}
+async function takeSeat(id,index){const ok=await listeningRoom.takeSeat(id,index);if(!ok)toast(listeningRoom.state.presenceError||'暂时无法更新座位。');return ok}
 function goToMapPoint(id){panel.value=false;exploring.value=true;world?.navigateToPoint(id);canvas.value?.focus({preventScroll:true})}
 let lastVolume=player.state.volume||.8
 async function playSelectedTrack(track){

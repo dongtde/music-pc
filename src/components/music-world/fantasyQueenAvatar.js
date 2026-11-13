@@ -5,6 +5,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import basisWrapperUrl from 'three/addons/libs/basis/basis_transcoder.js?url'
 import basisWasmUrl from 'three/addons/libs/basis/basis_transcoder.wasm?url'
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js'
+import { createFantasyQueenSpringBones } from './fantasyQueenSpringBones.js'
 
 const CLIPS = { idle: 'Idle', walk: 'Walk_InPlace', run: 'Walk_InPlace', sit: 'Sit', jump: 'Jump' }
 
@@ -66,18 +67,21 @@ export async function loadFantasyQueen(renderer, onProgress) {
         return [name, action]
       }))
       const head = model.getObjectByName('Head'), headPosition = new THREE.Vector3()
+      const springBones = createFantasyQueenSpringBones(model)
       let motion = 'idle', active = true
       mixer.update(0)
       return {
         root,
-        pose(nextMotion = 'idle', delta = 0, clock = 0, reducedMotion = false, speed) {
+        pose(nextMotion = 'idle', delta = 0, clock = 0, reducedMotion = false, speed, sitBlend) {
           if (!active) return false
           motion = Object.hasOwn(CLIPS, nextMotion) ? nextMotion : 'idle'
           const target = CLIPS[motion], blend = reducedMotion || !delta ? 1 : 1 - Math.exp(-delta * 14)
           let settling = false
           for (const [name, action] of actions) {
-            const desired = name === target ? 1 : 0
-            const weight = THREE.MathUtils.lerp(action.getEffectiveWeight(), desired, blend)
+            const seating=Number.isFinite(sitBlend)
+            const amount=seating?THREE.MathUtils.clamp(sitBlend,0,1):0
+            const desired = seating ? name==='Sit'?amount:name==='Idle'?1-amount:0 : name === target ? 1 : 0
+            const weight = seating?desired:THREE.MathUtils.lerp(action.getEffectiveWeight(), desired, blend)
             const close = Math.abs(weight - desired) < .001
             action.setEffectiveWeight(close ? desired : weight)
             settling ||= !close
@@ -85,13 +89,14 @@ export async function loadFantasyQueen(renderer, onProgress) {
           const moving=motion==='walk'||motion==='run'
           actions.get('Walk_InPlace').setEffectiveTimeScale(moving&&Number.isFinite(speed)?THREE.MathUtils.clamp(speed/3.8,.2,2.2):motion==='run'?1.65:1)
           mixer.update(delta)
-          return settling || motion === 'walk' || motion === 'run'
+          const springing = springBones.update(delta, reducedMotion)
+          return settling || springing || motion === 'walk' || motion === 'run'
         },
         labelHeight() {
           root.updateMatrixWorld(true)
           return head ? root.worldToLocal(head.getWorldPosition(headPosition)).y + .36 : 2
         },
-        getState: () => ({ model: 'Fantasy_Queen_Walk', motion }),
+        getState: () => ({ model: 'Fantasy_Queen_Walk', motion, springBones: springBones.count }),
         dispose() {
           if (!active) return
           active = false

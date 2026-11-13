@@ -2,6 +2,7 @@ import { randomBytes, randomInt } from 'node:crypto'
 import { networkInterfaces } from 'node:os'
 import { Server } from 'socket.io'
 import { AVATAR_IDS, initialPresence, movement, seatPosition, releasePosition } from './presence.js'
+import { availableSeatSlots, getSeat } from './seatLayout.js'
 import { ROOM_SOCKET_PATH, ROOM_CAPACITY, ROOM_QUEUE_LIMIT, ROOM_MODES, roomTrack, roomQueue, trackKey, trackDuration, playbackPosition } from './protocol.js'
 
 export function attachListeningRoomServer(httpServer, options = {}) {
@@ -226,9 +227,15 @@ export function attachListeningRoomServer(httpServer, options = {}) {
       const room = requireRoom(session), member = room.members.get(session.id)
       if (!member.presence.active) fail('请先进入 3D 音乐馆。')
       if (payload.seatId) {
-        const pose = seatPosition(payload.seatId)
-        if (!pose) fail('这个座位不存在。')
-        if ([...room.members.values()].some(peer => peer.id !== member.id && peer.connected && peer.presence?.active && peer.presence.seatId === payload.seatId)) fail('这张椅子已经有人坐了。')
+        const seat = getSeat(payload.seatId)
+        if (!seat) fail('这个座位不存在。')
+        if (payload.seatIndex !== undefined && !seatPosition(seat.id, payload.seatIndex)) fail('这个座位不存在。')
+        const players = [...room.members.values()].map(peer => ({ ...peer.presence, id: peer.id, connected: peer.connected }))
+        const free = availableSeatSlots(seat.id, players, member.id)
+        // Allocation and mutation stay synchronous so simultaneous requests cannot share a cushion.
+        const index = payload.seatIndex ?? (member.presence.seatId === seat.id ? member.presence.seatIndex ?? 0 : free[0])
+        if (!free.includes(index)) fail(seat.capacity === 1 ? '这张椅子已经有人坐了。' : free.length ? '这个座位已经有人坐了，请选择旁边的空位。' : '这张沙发已经坐满了。')
+        const pose = seatPosition(seat.id, index)
         Object.assign(member.presence, pose)
       } else member.presence = releasePosition(member.presence)
       broadcastPresence(room); return { presence: presenceSnapshot(room) }

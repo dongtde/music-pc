@@ -1,3 +1,4 @@
+import { SEAT_LAYOUT } from '../../../backend/src/seatLayout.js'
 export const WORLD_EYE_HEIGHT = 2
 export const WORLD_SEAT_HEIGHT = 1.22
 export const WORLD_PLAYER_RADIUS = .42
@@ -29,7 +30,7 @@ export const WORLD_SEATS = [
   {id:'seat-front-right',label:'前排右沙发',x:5,z:-10.8,model:'listening-chair-1--10.8',view:{x:3.35,z:-10.8},mapLabel:{x:333,y:109}},
   {id:'seat-rear-left',label:'后排左沙发',x:-5,z:12,model:'listening-chair--1-12',view:{x:-3.35,z:12},mapLabel:{x:147,y:432}},
   {id:'seat-rear-right',label:'后排右沙发',x:5,z:12,model:'listening-chair-1-12',view:{x:3.35,z:12},mapLabel:{x:333,y:432}},
-].map(seat=>({...seat,kind:'seat',view:{...seat.view,look:[0,3.55,-19.5]}}))
+].map(seat=>({...seat,...SEAT_LAYOUT.find(item=>item.id===seat.id),kind:'seat',view:{...seat.view,look:[0,3.55,-19.5]}}))
 export const WORLD_MAP_DESTINATIONS = [
   {id:'screen',kind:'station',label:'音乐大屏',x:0,z:-19.5,view:WORLD_STATIONS.screen,mapLabel:{x:240,y:49}},
   ...WORLD_SEATS.slice(0,3),
