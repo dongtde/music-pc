@@ -1,4 +1,4 @@
-// Bound GPU work across all presets. UI and material texture resolution stay intact.
+// Bound GPU work when adaptive rendering is enabled. Manual high quality opts out.
 export function createRenderScaleController({ targetMs = 8, minimumScale = .5 } = {}) {
   const samples = []
   let scale = 1, minimum = minimumScale, fastWindows = 0, warmup = 24, lastCost = null

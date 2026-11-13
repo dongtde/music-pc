@@ -354,6 +354,8 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
 
   function setQuality(value) {
     quality=['smooth','balanced','high'].includes(value)?value:'balanced'
+    // A manual high preset restores its full resolution immediately.
+    if (quality === 'high') renderBudget.setEnabled(false)
     terminal.setQuality(quality)
     environments?.setQuality(quality)
     concert.setQuality(quality)
@@ -441,7 +443,8 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   function render(now) {
     frame = 0; if (disposed || !active || document.hidden) return
     frameMetrics?.begin(now)
-    renderBudget.setEnabled(environments.getConfig().id === 'sky-lounge')
+    // High is a fixed fidelity choice; only performance presets adapt to load.
+    renderBudget.setEnabled(quality !== 'high' && environments.getConfig().id === 'sky-lounge')
     if (renderBudget.begin(now)) lastScreenResolution = -Infinity
     environments.setWeatherBudget(renderBudget.getState().appliedScale)
     const delta = Math.min((now - (last || now - 16)) / 1000, .1); last = now
