@@ -18,10 +18,14 @@
     (() => {
       const hashPath = window.location.hash.replace(/^#/, '');
       const rawPath = hashPath || window.location.pathname || '/';
-      const path = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
+      const path = (rawPath.startsWith('/') ? rawPath : `/${rawPath}`).split(/[?#]/)[0];
       const isHomePath = path === '/' || path === '/home' || path.startsWith('/home?') || path.startsWith('/home/');
+      let savedWorld = false;
+      try { savedWorld = localStorage.getItem('lanyin.environment') === '3d'; } catch {}
+      const isWorld = /^\/space\/?$/i.test(path) || (savedWorld && !path.startsWith('/desktop-lyrics'));
 
-      document.documentElement.dataset.bootRoute = isHomePath ? 'home' : 'other';
+      document.documentElement.dataset.bootRoute = isWorld ? 'world' : isHomePath ? 'home' : 'other';
+      if (isWorld) document.documentElement.dataset.environment = '3d';
     })();
   </script>
   <style>
@@ -386,8 +390,15 @@
       background: #080809;
     }
 
-    html[data-boot-route="other"] .app-shell--boot-static {
+    html[data-boot-route="other"] .app-shell--boot-static,
+    html[data-boot-route="world"] .app-shell--boot-static {
       display: none;
+    }
+
+    html[data-boot-route="world"],
+    html[data-boot-route="world"] body {
+      min-width: 0;
+      background: #101f29;
     }
 
     .window-controls {

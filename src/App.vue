@@ -26,8 +26,8 @@
           floating
           class="app-window-controls"
         />
-        <button v-if="isWorld && route.name !== 'space'" type="button" class="world-route-close" @click="router.push('/space')">返回音乐馆 ↗</button>
-        <section class="main-panel" :class="{ 'main-panel--world-hidden': isWorld && route.name === 'space' }">
+        <button v-if="showWorldRoutePanel" type="button" class="world-route-close" @click="router.push('/space')">返回音乐馆 ↗</button>
+        <section class="main-panel" :class="{ 'main-panel--world-hidden': isWorld && !showWorldRoutePanel }">
           <TopBar :inert="isImmersiveRoute" :aria-hidden="isImmersiveRoute" />
           <div class="route-stage">
             <router-view v-slot="{ Component, route: viewRoute }">
@@ -105,7 +105,13 @@ import { useThemeStore } from './stores/theme';
 import { useEnvironmentStore } from './stores/environment';
 import { useListeningRoomStore } from './stores/listeningRoom';
 import EnvironmentSwitch from './components/EnvironmentSwitch.vue';
-const MusicWorld = defineAsyncComponent(() => import('./components/MusicWorld.vue'));
+import WorldBootstrap from './components/music-world/WorldBootstrap.vue';
+const MusicWorld = defineAsyncComponent({
+  loader: () => import('./components/MusicWorld.vue'),
+  loadingComponent: WorldBootstrap,
+  errorComponent: WorldBootstrap,
+  delay: 0,
+});
 
 const PlayerBar = defineAsyncComponent({
   loader: () => import('./components/PlayerBar.vue'),
@@ -126,6 +132,10 @@ const router = useRouter();
 const environment = useEnvironmentStore();
 const isWorld = computed(() => environment.state.mode === '3d' && !isDesktopLyricsRoute.value);
 const initialRoutePath = getInitialRoutePath();
+const initialRoute = router.resolve(initialRoutePath);
+const isSpaceRoute = computed(() => route.name === 'space' || (!route.name && initialRoute.name === 'space'));
+// Home redirects to /space in 3D mode; neither it nor an unresolved route is a panel.
+const showWorldRoutePanel = computed(() => isWorld.value && Boolean(route.name) && !['space', 'home'].includes(route.name));
 theme.initTheme();
 auth.initAuth();
 
@@ -217,8 +227,8 @@ watch(() => environment.state.mode, (mode) => {
   document.documentElement.dataset.environment = mode;
   if (mode === '3d') appBootVisible.value = false;
 }, { immediate: true });
-watch(() => route.name, (name) => {
-  if (name === 'space') environment.setMode('3d');
+watch(isSpaceRoute, (isSpace) => {
+  if (isSpace) environment.setMode('3d');
 }, { immediate: true });
 
 watch(

@@ -14,6 +14,7 @@ import { registerServiceWorker } from './registerServiceWorker'
 import { syncStoredKugouBrowserCookies } from './utils/kugouAuth'
 import './styles/main.css'
 import './styles/home.css'
+import './styles/world-shell.css'
 
 const app = createApp(App)
 
