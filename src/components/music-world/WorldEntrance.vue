@@ -14,6 +14,17 @@
       <div class="world-entrance__veil" aria-hidden="true" />
 
       <div v-for="side in ['left', 'right']" :key="side" class="world-entrance__door" :class="`world-entrance__door--${side}`" aria-hidden="true">
+        <div class="world-entrance__sheen" />
+        <svg class="world-entrance__echoes" viewBox="-800 -800 1600 1600" fill="none">
+          <circle v-for="radius in echoRadii" :key="radius" :r="radius" />
+          <path class="world-entrance__echo-accent" d="M-370 0a370 370 0 0 1 370-370M0 509a509 509 0 0 0 509-509" />
+        </svg>
+        <svg class="world-entrance__soundfield" viewBox="0 -100 520 200" preserveAspectRatio="none" fill="none">
+          <path class="world-entrance__sound-axis" d="M0 0H520" />
+          <path v-for="(line, index) in soundLines" :key="index" :d="line" :style="{ opacity: 1 - Math.abs(index - 3) * .17 }" />
+          <circle cx="42" cy="0" r="2" />
+          <circle cx="482" cy="0" r="2" />
+        </svg>
         <div class="world-entrance__frame" />
         <div class="world-entrance__record">
           <div class="world-entrance__record-rim" />
@@ -77,6 +88,16 @@ const props = defineProps({
 defineEmits(['opened', 'retry', 'exit'])
 
 const waveHeights = [8, 16, 27, 18, 38, 50, 30, 50, 38, 18, 27, 16, 8]
+const echoRadii = [265, 274, 288, 370, 382, 398, 480, 493, 509, 620, 634, 650, 758]
+// Etched sound ribbons stay fixed to each door, including during the reveal.
+const soundLines = Array.from({ length: 7 }, (_, line) =>
+  Array.from({ length: 131 }, (_, point) => {
+    const x = point * 4, t = x / 520
+    const envelope = Math.sin(Math.PI * t) ** 1.5
+    const y = envelope * (Math.sin(t * Math.PI * 3 + line * .2) * (36 + line * 7) + (line - 3) * 8)
+    return `${point ? 'L' : 'M'}${x} ${y.toFixed(2)}`
+  }).join(' '),
+)
 // Model download completion precedes scene preparation. Reserve 100% for readiness.
 const percentage = computed(() => props.ready && !props.failed ? 100 : Math.round(Math.min(1, Math.max(0, Number(props.progress) || 0)) * 98))
 const statusText = computed(() => {
@@ -120,6 +141,48 @@ const statusText = computed(() => {
 }
 .world-entrance__door--left { --door-light: 100%; left: 0; }
 .world-entrance__door--right { --door-light: 0%; right: 0; }
+.world-entrance__sheen {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(115deg, transparent 12%, #c5ad8407 31%, transparent 49%),
+    repeating-linear-gradient(90deg, transparent 0 47px, #c5ad8405 47px 48px, #101f2912 48px 49px, transparent 49px 96px);
+  mask-image: linear-gradient(transparent, #000 18% 82%, transparent);
+  pointer-events: none;
+}
+.world-entrance__door--right .world-entrance__sheen { transform: scaleX(-1); }
+.world-entrance__echoes {
+  position: absolute;
+  top: var(--record-center);
+  width: max(100vw, 900px);
+  height: max(100vw, 900px);
+  transform: translateY(-50%);
+  stroke: var(--entrance-gold);
+  stroke-width: .65;
+  opacity: .12;
+  mask-image: radial-gradient(circle, transparent 19%, #000 27% 59%, transparent 72%);
+  pointer-events: none;
+}
+.world-entrance__door--left .world-entrance__echoes { right: min(-50vw, -450px); }
+.world-entrance__door--right .world-entrance__echoes { left: min(-50vw, -450px); }
+.world-entrance__echo-accent { stroke-width: 1.4; }
+.world-entrance__soundfield {
+  position: absolute;
+  top: var(--record-center);
+  left: 8%;
+  width: calc(92% - var(--record-size) / 2 - 48px);
+  height: clamp(110px, 19vh, 200px);
+  transform: translateY(-50%);
+  stroke: var(--entrance-gold);
+  stroke-width: .8;
+  opacity: .24;
+  mask-image: linear-gradient(90deg, transparent, #000 14% 80%, transparent);
+  pointer-events: none;
+}
+.world-entrance__soundfield path, .world-entrance__soundfield circle { vector-effect: non-scaling-stroke; }
+.world-entrance__soundfield .world-entrance__sound-axis { stroke-width: .5; opacity: .5; }
+.world-entrance__soundfield circle { fill: var(--entrance-gold); stroke: none; }
+.world-entrance__door--right .world-entrance__soundfield { left: auto; right: 8%; transform: translateY(-50%) scaleX(-1); }
 .world-entrance__frame {
   position: absolute;
   inset: 24px;
@@ -239,6 +302,8 @@ const statusText = computed(() => {
 
 @media (max-width: 600px) {
   .world-entrance { --record-size: clamp(190px, 56vw, 260px); --record-center: 38%; }
+  .world-entrance__echoes { opacity: .09; }
+  .world-entrance__soundfield { display: none; }
   .world-entrance__frame { inset: 14px; }
   .world-entrance__door--left .world-entrance__frame { right: 9px; }
   .world-entrance__door--right .world-entrance__frame { left: 9px; }
