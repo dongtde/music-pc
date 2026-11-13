@@ -28,7 +28,7 @@ function createRain(){
 export function createWorldScenes({scene,pavilion,renderer,camera,ambient,sun,practicals,concert,lightGrid,onChange,onInvalidate,loadAsset}){
   const original=pavilion.getObjectByName('pavilion-shell'),equipment=pavilion.getObjectByName('pavilion-equipment')
   if(!original||!equipment)throw new Error('Music pavilion scene groups are missing')
-  const loader=loadAsset||((file)=>new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/${file}`))
+  const loader=loadAsset||((file,onProgress)=>new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/${file}`,onProgress))
   const assets=new Map(),requests=new Map(),originalColors=new Map()
   const originalEnvironment=scene.environment,originalSunPosition=sun.position.clone()
   let skyLounge,quality='balanced'
@@ -61,15 +61,18 @@ export function createWorldScenes({scene,pavilion,renderer,camera,ambient,sun,pr
     onChange?.({scene:config.id,sceneLoading:false,scenePending:'',sceneError:''})
   }
   apply(active)
-  async function select(id){
+  async function select(id,onProgress){
     const config=getWorldScene(id),request=++revision
+    const report=value=>{if(!disposed&&request===revision)onProgress?.(value)}
     if(disposed)return false
-    if(config.id===active.id){onChange?.({sceneLoading:false,scenePending:''});return true}
+    if(config.id===active.id){onChange?.({sceneLoading:false,scenePending:''});report(1);return true}
+    report(0)
     onChange?.({sceneLoading:true,scenePending:config.id,sceneError:''})
     try{
       let asset
       if(config.asset){
-        if(!requests.has(config.id))requests.set(config.id,loader(config.asset).then(async result=>{
+        if(!requests.has(config.id))requests.set(config.id,loader(config.asset,event=>{if(event.total)report(Math.min(1,event.loaded/event.total)*.8)}).then(async result=>{
+          report(.8)
           const group=result.scene||result
           if(disposed){disposeTree(group);throw new DOMException('World closed','AbortError')}
           group.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true}})
@@ -80,6 +83,7 @@ export function createWorldScenes({scene,pavilion,renderer,camera,ambient,sun,pr
             skyLounge=prepared;skyLounge.setQuality(quality)
           }
           optimizeWorldMaterials(group,lightGrid)
+          report(.9)
           if(config.id==='sky-lounge'&&camera){
             // Compile both dry and rainy effects before revealing the lounge.
             // The group is still detached, so this never flashes rain on screen.
@@ -91,7 +95,7 @@ export function createWorldScenes({scene,pavilion,renderer,camera,ambient,sun,pr
         asset=await requests.get(config.id)
       }
       if(disposed||request!==revision)return false
-      apply(config,asset);return true
+      apply(config,asset);report(1);return true
     }catch(error){
       if(!disposed&&request===revision)onChange?.({sceneLoading:false,scenePending:'',sceneError:'场景暂时无法加载，当前音乐和空间仍可继续使用。'})
       return false

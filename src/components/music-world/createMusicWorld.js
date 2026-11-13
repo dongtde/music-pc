@@ -618,7 +618,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     openTerminal(){records.dismiss();navigate('terminal')},
     setQuality,
     setActive(value) { active=Boolean(value); if(active)invalidate();else stop() },
-    async setScene(id){const applied=await environments.select(id);if(applied)invalidate();return applied},
+    async setScene(id,onProgress){const applied=await environments.select(id,onProgress);if(applied)invalidate();return applied},
     setClimate(value){environments.setClimate(value)},
     setPlayback(value) {
       if(previousTrack!==value.track?.id || Math.abs((value.currentTime||0)-(playback.currentTime||0))>2) { rhythm.reset();lightShow?.reset(); previousTrack=value.track?.id }

@@ -25,7 +25,7 @@
     <WorldCommentReader v-if="commentOpen&&!routeOpen" :state="commentsState" :track="listening.track" @close="closeComments" @step="comments.step" @retry="comments.retry" @more="comments.more" />
 
 
-    <WorldEntrance :ready="sceneReady" :failed="failed" :progress="progress" :reduced-motion="reducedMotion" :paused="suspended || routeOpen" @opened="finishEntrance" @retry="initialize" @exit="returnTo2D" />
+    <WorldEntrance :scene="entranceScene" :ready="sceneReady" :failed="failed" :progress="progress" :reduced-motion="reducedMotion" :paused="suspended || routeOpen" @opened="finishEntrance" @retry="initialize" @exit="returnTo2D" />
 
     <span v-if="ready && exploring && !panel && !routeOpen && !listeningPanel" class="world-reticle" aria-hidden="true" />
 
@@ -108,6 +108,8 @@ const roomSummary=computed(()=>({id:listeningRoom.state.room?.id||'',isHost:list
 const props=defineProps({suspended:{type:Boolean,default:false}})
 const canvas=ref(null),canvasKey=ref(0),ready=ref(false),sceneReady=ref(false),failed=ref(false),progress=ref(0),exploring=ref(true),panel=ref(false),panelEl=ref(null),notice=ref('')
 const sceneId=ref(getWorldScene(readStorage('lanyin.world.scene','rain')).id)
+// Keep the destination on the doors while the world prepares its initial rain shell.
+const entranceScene=ref(sceneId.value)
 const climate=ref(normalizeLoungeClimate(readJsonStorage(LOUNGE_CLIMATE_KEY))),climatePanel=ref(null)
 let climateClock=0
 function changeClimate(value){climate.value=normalizeLoungeClimate(value);world?.setClimate(climate.value);writeJsonStorage(LOUNGE_CLIMATE_KEY,climate.value)}
@@ -174,8 +176,31 @@ function openComments(index){
 function closeComments(){commentOpen.value=false;canvas.value?.focus({preventScroll:true})}
 function openListeningInput(mode){if(!['code','settings','search','copy'].includes(mode))return;panel.value=false;commentOpen.value=false;world?.setListeningInputOpen(true);listeningPanel.value=mode}
 async function closeListeningRoom(){listeningPanel.value='';world?.setListeningInputOpen(false);await nextTick();canvas.value?.focus({preventScroll:true})}
-function receiveStatus(value){Object.assign(status,value);status.audioMode=sampler?.getStatus()||'waiting';if(value.scene){sceneId.value=value.scene;writeStorage('lanyin.world.scene',value.scene)}if(value.sceneError)toast(value.sceneError);if(value.station)stationId.value=value.station;if(value.inspecting===false)selectedRecord.value=null}
-function changeScene(id){world?.setScene(id)}
+function receiveStatus(value){Object.assign(status,value);status.audioMode=sampler?.getStatus()||'waiting';if(value.scene)sceneId.value=value.scene;if(value.sceneError)toast(value.sceneError);if(value.station)stationId.value=value.station;if(value.inspecting===false)selectedRecord.value=null}
+async function changeScene(id){
+  const destination=getWorldScene(id).id
+  if(!world||!ready.value||failed.value||destination===sceneId.value)return
+  const currentWorld=world,previousScene=sceneId.value
+  entranceScene.value=destination;ready.value=false;sceneReady.value=false;progress.value=0
+  panel.value=false;commentOpen.value=false;listeningPanel.value='';listeningPlacement.value=null
+  world.clearMovement();world.cancelTravel();world.dismissRecord();world.setListeningInputOpen(false)
+  selectedRecord.value=null
+  await nextTick()
+  // Paint closed doors before even a cached scene can replace the visible world.
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))
+  if(disposed||world!==currentWorld||failed.value)return
+  try{
+    const applied=await currentWorld.setScene(destination,value=>{if(!disposed&&world===currentWorld)progress.value=value})
+    if(disposed||world!==currentWorld||failed.value)return
+    if(applied)writeStorage('lanyin.world.scene',destination)
+    else entranceScene.value=previousScene
+    sceneReady.value=true
+  }catch(error){
+    if(disposed||world!==currentWorld||failed.value)return
+    entranceScene.value=previousScene;sceneReady.value=true
+    toast('场景暂时无法加载，已保留当前空间。')
+  }
+}
 function changeQuality(value){quality.value=['smooth','balanced','high'].includes(value)?value:'balanced';world?.setQuality(quality.value);writeStorage('lanyin.world.quality',quality.value)}
 function handleWorldKey(event){if(event.code!=='Escape')return;if(selectedRecord.value&&!placingRecord.value){event.preventDefault();dismissRecord()}else if(status.seated){event.preventDefault();world?.stand()}}
 function dismissRecord(){if(placingRecord.value)return;world?.dismissRecord();selectedRecord.value=null;canvas.value?.focus({preventScroll:true})}
@@ -207,7 +232,7 @@ async function finishEntrance(){
   if(!disposed && ready.value && !failed.value && !props.suspended && !routeOpen.value && !listeningPanel.value)canvas.value?.focus({preventScroll:true})
 }
 async function initialize(){
-  const requestedScene=sceneId.value
+  const requestedScene=entranceScene.value,baseProgress=requestedScene==='rain'?1:.55
   abort?.abort();world?.dispose();sampler?.dispose();world=null;sampler=null
   abort=new AbortController();const signal=abort.signal
   ready.value=false;sceneReady.value=false;failed.value=false;progress.value=0;canvasKey.value++;await nextTick()
@@ -215,11 +240,15 @@ async function initialize(){
   if(disposed||signal.aborted)return
   try{
     sampler=createWorldAudioSampler(player.getAudioElement())
-    world=await createMusicWorld(canvas.value,{signal,quality:quality.value,sampleAudio:()=>sampler?.sample(),onProgress:value=>progress.value=value,onStatus:receiveStatus,onAction:handleAction,onListeningScreen:value=>listeningPlacement.value=value,onPresence:listeningRoom.movePresence,onSeat:takeSeat})
+    world=await createMusicWorld(canvas.value,{signal,quality:quality.value,sampleAudio:()=>sampler?.sample(),onProgress:value=>{if(!signal.aborted)progress.value=value*baseProgress},onStatus:receiveStatus,onAction:handleAction,onListeningScreen:value=>listeningPlacement.value=value,onPresence:listeningRoom.movePresence,onSeat:takeSeat})
     if(signal.aborted)return
     world.setClimate(climate.value)
     syncPresence();await listeningRoom.setPresenceActive(!props.suspended&&!routeOpen.value)
-    world.updateLibrary(data.exhibits.value);world.setFeeds(feeds.getState());world.setQuality(quality.value);world.setAccount(account.value);world.setListeningRoom(roomSummary.value);world.setListeningLobby(lobby.snapshot);world.setActive(!props.suspended&&!routeOpen.value);syncPlayback();await world.setScene(requestedScene);if(!signal.aborted)sceneReady.value=true
+    world.updateLibrary(data.exhibits.value);world.setFeeds(feeds.getState());world.setQuality(quality.value);world.setAccount(account.value);world.setListeningRoom(roomSummary.value);world.setListeningLobby(lobby.snapshot);world.setActive(!props.suspended&&!routeOpen.value);syncPlayback()
+    const applied=await world.setScene(requestedScene,value=>{if(!signal.aborted)progress.value=baseProgress+value*(1-baseProgress)})
+    if(disposed||signal.aborted||failed.value)return
+    if(!applied){failed.value=true;sampler?.stop();return}
+    writeStorage('lanyin.world.scene',requestedScene);sceneReady.value=true
   }catch(error){if(error.name!=='AbortError'&&!signal.aborted){failed.value=true;sampler?.stop();console.warn('Music pavilion failed:',error)}}
 }
 async function goTo(id){

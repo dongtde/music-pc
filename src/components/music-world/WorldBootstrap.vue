@@ -1,6 +1,7 @@
 <template>
   <WorldEntrance
     class="world-bootstrap"
+    :scene="scene"
     :failed="Boolean(error)"
     :paused="suspended"
     :inert="suspended"
@@ -13,9 +14,12 @@
 import { useRoute, useRouter } from 'vue-router'
 import { useEnvironmentStore } from '../../stores/environment.js'
 import WorldEntrance from './WorldEntrance.vue'
+import { readStorage } from '../../utils/storage.js'
+import { getWorldScene } from './worldScenes.js'
 
 defineProps({ error: Error, suspended: Boolean })
 const route = useRoute(), router = useRouter(), environment = useEnvironmentStore()
+const scene = getWorldScene(readStorage('lanyin.world.scene', 'rain')).id
 
 function reload() { window.location.reload() }
 function returnTo2D() {
