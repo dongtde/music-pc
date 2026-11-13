@@ -1,6 +1,6 @@
 <template>
   <section class="music-world" :class="{'music-world--inspecting':selectedRecord,'music-world--seated':status.seated}" :inert="suspended" aria-label="声境 3D 音乐馆" @keydown="handleWorldKey">
-    <canvas ref="canvas" :key="canvasKey" class="music-world__canvas" tabindex="0" aria-label="3D 音乐馆。WASD 行走，空格跳跃，V 切换视角，拖动环顾，E 互动，Home 返回中庭。" @pointerdown="exploring=true" />
+    <canvas ref="canvas" :key="canvasKey" class="music-world__canvas" :inert="!ready || failed" :aria-hidden="!ready || failed" tabindex="0" aria-label="3D 音乐馆。WASD 行走，空格跳跃，V 切换视角，拖动环顾，E 互动，Home 返回中庭。" @pointerdown="exploring=true" />
     <output v-if="status.performance" style="position:absolute;bottom:24px;right:24px;z-index:4;padding:8px 12px;border-radius:8px;background:#10232ddd;color:#bad4d1;font:11px monospace;pointer-events:none" aria-label="渲染性能" :data-metrics="JSON.stringify(status.performance)">{{ status.performance.fps }} FPS · P95 {{ status.performance.frameP95 }} ms · CPU {{ status.performance.cpuP95 }} ms · {{ status.performance.quality }} · {{ status.performance.width }} × {{ status.performance.height }}</output>
     <div v-if="ready&&!suspended&&!routeOpen&&!panel&&!commentOpen&&!selectedRecord&&!listeningPanel" class="world-avatar-controls" @keydown.stop>
       <span class="world-avatar-controls__model"><UserRound :size="18" /><span>Fantasy Queen</span></span>
@@ -25,15 +25,9 @@
     <WorldCommentReader v-if="commentOpen&&!routeOpen" :state="commentsState" :track="listening.track" @close="closeComments" @step="comments.step" @retry="comments.retry" @more="comments.more" />
 
 
-    <div v-if="!ready || failed" class="world-loading" role="status">
-      <AudioLines :size="42" :stroke-width="1" /><span>{{ failed ? '音乐馆暂时无法打开' : '正在打开声境' }}</span>
-      <p>{{ failed ? '你可以重试，或返回 2D 继续听歌。' : '准备建筑、唱片和灯光' }}</p>
-      <div v-if="!failed" class="world-loading__bar"><i :style="{width:`${Math.max(8,progress*100)}%`}" /></div>
-      <button v-else type="button" @click="initialize">重新进入</button>
-      <button v-if="failed" type="button" @click="returnTo2D">返回 2D</button>
-    </div>
+    <WorldEntrance :ready="sceneReady" :failed="failed" :progress="progress" :reduced-motion="reducedMotion" :paused="suspended || routeOpen" @opened="finishEntrance" @retry="initialize" @exit="returnTo2D" />
 
-    <span v-if="exploring && !panel && !routeOpen && !listeningPanel" class="world-reticle" aria-hidden="true" />
+    <span v-if="ready && exploring && !panel && !routeOpen && !listeningPanel" class="world-reticle" aria-hidden="true" />
 
     <section v-if="selectedRecord && !routeOpen" ref="recordPanel" class="world-record-inspector" aria-label="查看选中的唱片">
       <div class="world-record-inspector__copy"><span class="world-eyebrow">FROM YOUR RECORD SHELF</span><h2>{{ selectedRecord.name }}</h2><p>{{ selectedRecord.artist || '未知歌手' }}</p><small>{{ selectedRecord.album || '在控制终端，开始这一次聆听。' }}</small></div>
@@ -75,7 +69,7 @@
 <script setup>
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, ArrowUpRight, ArrowUp, AudioLines, Disc3, Heart, Loader2, Play, Search, X, UserRound, ScanEye } from 'lucide-vue-next'
+import { ArrowLeft, ArrowUpRight, ArrowUp, Disc3, Heart, Loader2, Play, Search, X, UserRound, ScanEye } from 'lucide-vue-next'
 import { usePlayerStore } from '../stores/player'
 import { useListeningRoomStore } from '../stores/listeningRoom'
 import { useAuthStore } from '../stores/auth'
@@ -89,6 +83,7 @@ import WorldMap from './music-world/WorldMap.vue'
 import WorldClimate from './music-world/WorldClimate.vue'
 import { LOUNGE_CLIMATE_KEY, normalizeLoungeClimate } from './music-world/loungeClimate.js'
 import WorldMusicLoading from './music-world/WorldMusicLoading.vue'
+import WorldEntrance from './music-world/WorldEntrance.vue'
 import { useWorldLibrary } from './music-world/useWorldLibrary'
 import '../styles/music-world.css'
 import WorldCommentReader from './music-world/WorldCommentReader.vue'
@@ -111,7 +106,7 @@ const WorldListeningRoom=defineAsyncComponent(()=>import('./music-world/WorldLis
 const listeningRoom=useListeningRoomStore(),listeningPanel=ref(''),listeningPlacement=shallowRef(null)
 const roomSummary=computed(()=>({id:listeningRoom.state.room?.id||'',isHost:listeningRoom.state.room?.hostId===listeningRoom.state.memberId,connected:listeningRoom.state.connected,count:listeningRoom.state.room?.members.length||0,capacity:listeningRoom.state.room?.capacity||10,status:listeningRoom.state.syncStatus}))
 const props=defineProps({suspended:{type:Boolean,default:false}})
-const canvas=ref(null),canvasKey=ref(0),ready=ref(false),failed=ref(false),progress=ref(0),exploring=ref(true),panel=ref(false),panelEl=ref(null),notice=ref('')
+const canvas=ref(null),canvasKey=ref(0),ready=ref(false),sceneReady=ref(false),failed=ref(false),progress=ref(0),exploring=ref(true),panel=ref(false),panelEl=ref(null),notice=ref('')
 const sceneId=ref(getWorldScene(readStorage('lanyin.world.scene','rain')).id)
 const climate=ref(normalizeLoungeClimate(readJsonStorage(LOUNGE_CLIMATE_KEY))),climatePanel=ref(null)
 let climateClock=0
@@ -205,11 +200,17 @@ function syncPlayback(){
   const current=listening.value,index=worldLyricIndex(lyrics.value,current.currentTime)
   world?.setPlayback({...current,line:lyrics.value[index],previousLine:lyrics.value[index-1],nextLine:lyrics.value[index+1],lyrics:lyrics.value,commentsTotal:commentsState.value.total,danmakuEnabled:danmakuEnabled.value,danmakuOpacity:danmakuOpacity.value,lightsEnabled:lightsEnabled.value,reducedMotion:reducedMotion.value})
 }
+async function finishEntrance(){
+  if(disposed || failed.value || !sceneReady.value)return
+  ready.value=true
+  await nextTick()
+  if(!disposed && ready.value && !failed.value && !props.suspended && !routeOpen.value && !listeningPanel.value)canvas.value?.focus({preventScroll:true})
+}
 async function initialize(){
   const requestedScene=sceneId.value
   abort?.abort();world?.dispose();sampler?.dispose();world=null;sampler=null
   abort=new AbortController();const signal=abort.signal
-  ready.value=false;failed.value=false;progress.value=0;canvasKey.value++;await nextTick()
+  ready.value=false;sceneReady.value=false;failed.value=false;progress.value=0;canvasKey.value++;await nextTick()
   listeningPanel.value='';listeningPlacement.value=null
   if(disposed||signal.aborted)return
   try{
@@ -218,7 +219,7 @@ async function initialize(){
     if(signal.aborted)return
     world.setClimate(climate.value)
     syncPresence();await listeningRoom.setPresenceActive(!props.suspended&&!routeOpen.value)
-    world.updateLibrary(data.exhibits.value);world.setFeeds(feeds.getState());world.setQuality(quality.value);world.setAccount(account.value);world.setListeningRoom(roomSummary.value);world.setListeningLobby(lobby.snapshot);world.setActive(!props.suspended&&!routeOpen.value);syncPlayback();await world.setScene(requestedScene);if(!signal.aborted){ready.value=true;if(!props.suspended&&!routeOpen.value&&!listeningPanel.value)canvas.value?.focus({preventScroll:true})}
+    world.updateLibrary(data.exhibits.value);world.setFeeds(feeds.getState());world.setQuality(quality.value);world.setAccount(account.value);world.setListeningRoom(roomSummary.value);world.setListeningLobby(lobby.snapshot);world.setActive(!props.suspended&&!routeOpen.value);syncPlayback();await world.setScene(requestedScene);if(!signal.aborted)sceneReady.value=true
   }catch(error){if(error.name!=='AbortError'&&!signal.aborted){failed.value=true;sampler?.stop();console.warn('Music pavilion failed:',error)}}
 }
 async function goTo(id){
@@ -282,7 +283,7 @@ async function handleAction(action,payload){
   else if(action==='scene')changeScene(payload)
   else if(action==='progress')seekListening(payload*listening.value.duration)
   else if(action==='lyric')seekListening(payload)
-  else if(action==='error'){failed.value=true;sampler?.stop()}
+  else if(action==='error'){ready.value=false;failed.value=true;world?.clearMovement();sampler?.stop()}
 }
 function visibility(){syncPlayback();if(!document.hidden&&sceneId.value==='sky-lounge')world?.setClimate(climate.value)}
 function syncMotion(){reducedMotion.value=mediaQuery.matches;syncPlayback()}

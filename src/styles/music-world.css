@@ -27,12 +27,7 @@
 .world-record-inspector__hint { position:absolute; left:8.75%; bottom:92px; font-size:10px; color:#91a8af; }
 .world-record-inspector__hint span { padding:0 8px; }
 .music-world--inspecting::after { background:linear-gradient(90deg,#091720ed,transparent 56%),linear-gradient(0deg,#091720ee,transparent 40%); }
-.world-loading { position:absolute; z-index:8; inset:0; background:#11212cea; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:20px; color:#dfd2b7; }
-.world-loading>span { font-size:23px; font-family:'STSong','SimSun',serif; letter-spacing:.15em; }
-.world-loading p { margin:0; font-size:12px; color:#9fb1b9; }
-.world-loading__bar { width:190px; height:2px; margin-top:12px; background:#a5b5ba20; }
-.world-loading__bar i { display:block; height:100%; background:#dbc8a5; transition:width .2s; }
-.world-loading button,.world-empty button { color:#e6d6b7; background:#8c9d961c; border:1px solid #c2c4b74d; border-radius:4px; padding:10px 20px; }
+.world-empty button { color:#e6d6b7; background:#8c9d961c; border:1px solid #c2c4b74d; border-radius:4px; padding:10px 20px; }
 .world-panel { position:absolute; z-index:6; top:100px; right:33px; bottom:95px; width:min(560px,calc(100% - 125px)); display:flex; flex-direction:column; border:1px solid #bfcbc13b; border-radius:12px; background:#10222cee; box-shadow:0 25px 75px #0005; backdrop-filter:blur(24px); overflow:hidden; }
 .world-panel__head { display:flex; justify-content:space-between; align-items:center; padding:25px 25px 16px; }
 .world-panel__head span { color:#b3b49f; font-size:8px; letter-spacing:.2em; }
