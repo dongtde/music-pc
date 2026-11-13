@@ -1,5 +1,5 @@
 /* App-shell layout must be available before the asynchronous 3D module loads. */
-.app-shell.app-shell--world { grid-template-columns:1fr; grid-template-rows:minmax(0,1fr); background:#11202b; }
+.app-shell.app-shell--world { grid-template-columns:1fr; grid-template-rows:minmax(0,1fr); background:#0b151f; }
 .app-shell--world>.main-panel { position:absolute; z-index:7; top:96px; left:110px; right:32px; bottom:92px; border:1px solid #abc0b844; border-radius:12px; background:var(--app-bg); box-shadow:0 30px 80px #0007; overflow:hidden; }
 .app-shell--world>.main-panel--world-hidden { display:none; }
 .app-shell--world>.main-panel .topbar { flex-basis:60px; min-height:60px; height:60px; padding-right:160px; }
