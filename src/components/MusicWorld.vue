@@ -2,17 +2,18 @@
   <section class="music-world" :class="{'music-world--inspecting':selectedRecord,'music-world--seated':status.seated}" :inert="suspended" aria-label="声境 3D 音乐馆" @keydown="handleWorldKey">
     <canvas ref="canvas" :key="canvasKey" class="music-world__canvas" :inert="!ready || failed" :aria-hidden="!ready || failed" tabindex="0" aria-label="3D 音乐馆。WASD 行走，空格跳跃，V 切换视角，拖动环顾，E 互动，Home 返回中庭。" @pointerdown="exploring=true" />
     <output v-if="status.performance" style="position:absolute;bottom:24px;right:24px;z-index:4;padding:8px 12px;border-radius:8px;background:#10232ddd;color:#bad4d1;font:11px monospace;pointer-events:none" aria-label="渲染性能" :data-metrics="JSON.stringify(status.performance)">{{ status.performance.fps }} FPS · P95 {{ status.performance.frameP95 }} ms · CPU {{ status.performance.cpuP95 }} ms · {{ status.performance.quality }} · {{ status.performance.width }} × {{ status.performance.height }}</output>
-    <div v-if="ready&&!suspended&&!routeOpen&&!panel&&!commentOpen&&!selectedRecord&&!listeningPanel" class="world-avatar-controls" @keydown.stop>
+    <div v-if="ready&&!suspended&&!routeOpen&&!panel&&!commentOpen&&!selectedRecord&&!listeningPanel&&!songSearchOpen" class="world-avatar-controls" @keydown.stop>
       <span class="world-avatar-controls__model"><UserRound :size="18" /><span>Fantasy Queen</span></span>
       <button type="button" :title="status.viewMode==='first'?'第三人称 · V':'第一人称 · V'" aria-label="切换人物视角" @click="toggleView"><ScanEye :size="18" /><span>{{ status.viewMode==='first'?'第三人称':'第一人称' }}</span></button>
       <button type="button" :title="status.seated?'起身':'跳跃 · 空格'" :aria-label="status.seated?'起身':'跳跃'" @click="jumpAvatar"><ArrowUp :size="18" /></button>
       <span v-if="listeningRoom.state.room" class="world-avatar-controls__online">{{ listeningRoom.state.connected ? (listeningRoom.state.presence?.players.length||0)+' 人在场' : '重连中' }}</span>
     </div>
     <WorldListeningRoom v-if="listeningPanel && ready && !suspended && !routeOpen" :mode="listeningPanel" :lobby="lobby" :placement="listeningPlacement" @close="closeListeningRoom" />
+    <WorldSongSearch v-if="ready && !suspended && !routeOpen" :open="songSearchOpen" :placement="panel || commentOpen || selectedRecord || listeningPanel ? null : songSearchPlacement" :playback="{ ...listening, reducedMotion }" :add-tracks="enqueueTracks" @activate="openSongSearch" @close="closeSongSearch" />
     <WorldDanmaku
       v-if="ready && commentsState.items.length"
       class="world-danmaku"
-      :enabled="danmakuEnabled && !suspended && !routeOpen && !panel && !commentOpen && !selectedRecord && stationId!=='discover'"
+      :enabled="danmakuEnabled && !suspended && !routeOpen && !panel && !commentOpen && !selectedRecord && !songSearchOpen && stationId!=='discover'"
       :paused="!listening.playing || listening.loading"
       :opacity="danmakuOpacity"
       :song-key="listening.track?.id || ''"
@@ -27,7 +28,7 @@
 
     <WorldEntrance :scene="entranceScene" :ready="sceneReady" :failed="failed" :progress="progress" :reduced-motion="reducedMotion" :paused="suspended || routeOpen" @opened="finishEntrance" @retry="initialize" @exit="returnTo2D" />
 
-    <span v-if="ready && exploring && !panel && !routeOpen && !listeningPanel" class="world-reticle" aria-hidden="true" />
+    <span v-if="ready && exploring && !panel && !routeOpen && !listeningPanel && !songSearchOpen" class="world-reticle" aria-hidden="true" />
 
     <section v-if="selectedRecord && !routeOpen" ref="recordPanel" class="world-record-inspector" aria-label="查看选中的唱片">
       <div class="world-record-inspector__copy"><span class="world-eyebrow">FROM YOUR RECORD SHELF</span><h2>{{ selectedRecord.name }}</h2><p>{{ selectedRecord.artist || '未知歌手' }}</p><small>{{ selectedRecord.album || '在控制终端，开始这一次聆听。' }}</small></div>
@@ -36,7 +37,7 @@
     </section>
 
     <WorldMap v-if="ready&&!suspended&&!panel&&!routeOpen&&!selectedRecord&&!commentOpen&&!listeningPanel" :position="status" :archive-tracks="data.exhibits.value.archive" @open="openMap" @navigate="goToMapPoint" />
-    <WorldClimate v-if="sceneId==='sky-lounge'&&ready&&!suspended&&!panel&&!routeOpen&&!selectedRecord&&!commentOpen&&!listeningPanel" ref="climatePanel" :model-value="climate" :current-hour="status.climateHour" @update:model-value="changeClimate" @open="openMap" />
+    <WorldClimate v-if="sceneId==='sky-lounge'&&ready&&!suspended&&!panel&&!routeOpen&&!selectedRecord&&!commentOpen&&!listeningPanel&&!songSearchOpen" ref="climatePanel" :model-value="climate" :current-hour="status.climateHour" @update:model-value="changeClimate" @open="openMap" />
 
     <Transition name="world-panel">
       <section v-if="panel && !routeOpen" ref="panelEl" class="world-panel" aria-label="音乐馆曲库" @keydown.esc.stop="closePanel">
@@ -103,7 +104,9 @@ const auth=useAuthStore()
 const account=computed(()=>({isLoggedIn:auth.state.isLoggedIn,displayName:auth.displayName.value,avatarUrl:auth.avatarUrl.value}))
 const WorldDanmaku=defineAsyncComponent(()=>import('./music-world/WorldDanmaku.vue'))
 const WorldListeningRoom=defineAsyncComponent(()=>import('./music-world/WorldListeningRoom.vue'))
+const WorldSongSearch=defineAsyncComponent(()=>import('./music-world/WorldSongSearch.vue'))
 const listeningRoom=useListeningRoomStore(),listeningPanel=ref(''),listeningPlacement=shallowRef(null)
+const songSearchOpen=ref(false),songSearchPlacement=shallowRef(null)
 const roomSummary=computed(()=>({id:listeningRoom.state.room?.id||'',isHost:listeningRoom.state.room?.hostId===listeningRoom.state.memberId,connected:listeningRoom.state.connected,count:listeningRoom.state.room?.members.length||0,capacity:listeningRoom.state.room?.capacity||10,status:listeningRoom.state.syncStatus}))
 const props=defineProps({suspended:{type:Boolean,default:false}})
 const canvas=ref(null),canvasKey=ref(0),ready=ref(false),sceneReady=ref(false),failed=ref(false),progress=ref(0),exploring=ref(true),panel=ref(false),panelEl=ref(null),notice=ref('')
@@ -137,7 +140,7 @@ function toggleLights(){lightsEnabled.value=!lightsEnabled.value;writeStorage('l
 function saveDanmakuOpacity(){clearTimeout(opacitySaveTimer);opacitySaveTimer=0;writeStorage(DANMAKU_OPACITY_KEY,danmakuOpacity.value)}
 function changeDanmakuOpacity(value){danmakuOpacity.value=normalizeDanmakuOpacity(value);clearTimeout(opacitySaveTimer);opacitySaveTimer=setTimeout(saveDanmakuOpacity,180)}
 function returnTo2D(){environment.setMode('2d');if(route.name==='space')router.push(environment.state.returnPath||'/home')}
-function openMap(){world?.clearMovement();world?.cancelTravel()}
+function openMap(){releaseSongSearch();world?.clearMovement();world?.cancelTravel()}
 function toggleView(){world?.setViewMode(status.viewMode==='first'?'third':'first');canvas.value?.focus({preventScroll:true})}
 function jumpAvatar(){world?.jump();canvas.value?.focus({preventScroll:true})}
 function syncPresence(){
@@ -146,7 +149,7 @@ function syncPresence(){
   if(preserved)state.enteredRoomId=''
 }
 async function takeSeat(id,index){const ok=await listeningRoom.takeSeat(id,index);if(!ok)toast(listeningRoom.state.presenceError||'暂时无法更新座位。');return ok}
-function goToMapPoint(id){panel.value=false;exploring.value=true;world?.navigateToPoint(id);canvas.value?.focus({preventScroll:true})}
+function goToMapPoint(id){releaseSongSearch();panel.value=false;exploring.value=true;world?.navigateToPoint(id);canvas.value?.focus({preventScroll:true})}
 let lastVolume=player.state.volume||.8
 async function playSelectedTrack(track){
   if(String(player.state.currentTrack.id)!==String(track.id))return player.playTrack(track)
@@ -160,13 +163,13 @@ async function playQueuedTrack(payload){
   try{const ok=await playSelectedTrack(track);if(!ok)toast('这首音乐暂时无法播放，请选择其他歌曲。')}catch{toast('音乐暂时无法播放，请稍后重试。')}finally{done()}
 }
 function seekListening(seconds){player.seekTo(seconds)}
-async function enqueueTracks(tracks,title='声境音乐馆'){
+async function enqueueTracks(tracks,title='声境音乐馆',quiet=false){
   const done=listFeedback.begin(tracks)
   try{
     const result=await player.appendToQueue(tracks,{type:'music-world',id:'pavilion',label:title})
-    if(result===false){toast(player.state.error?.userMessage||'未能加入播放列表，请稍后重试。');return false}
-    toast('已加入播放列表');return true
-  }catch{toast('未能加入播放列表，请稍后重试。');return false}finally{done()}
+    if(result===false){if(!quiet)toast(player.state.error?.userMessage||'未能加入播放列表，请稍后重试。');return false}
+    if(!quiet)toast('已加入播放列表');return true
+  }catch{if(!quiet)toast('未能加入播放列表，请稍后重试。');return false}finally{done()}
 }
 function openComments(index){
   if(Number.isInteger(index)&&index>=0)comments.select(index)
@@ -174,8 +177,11 @@ function openComments(index){
   panel.value=false;commentOpen.value=true;exploring.value=true;world?.clearMovement();world?.cancelTravel()
 }
 function closeComments(){commentOpen.value=false;canvas.value?.focus({preventScroll:true})}
-function openListeningInput(mode){if(!['code','settings','search','copy'].includes(mode))return;panel.value=false;commentOpen.value=false;world?.setListeningInputOpen(true);listeningPanel.value=mode}
+function openListeningInput(mode){if(!['code','settings','search','copy'].includes(mode))return;releaseSongSearch();panel.value=false;commentOpen.value=false;world?.setListeningInputOpen(true);listeningPanel.value=mode}
 async function closeListeningRoom(){listeningPanel.value='';world?.setListeningInputOpen(false);await nextTick();canvas.value?.focus({preventScroll:true})}
+function openSongSearch(){panel.value=false;commentOpen.value=false;listeningPanel.value='';world?.setListeningInputOpen(false);world?.dismissRecord();selectedRecord.value=null;songSearchOpen.value=true;world?.setSongSearchOpen(true)}
+function releaseSongSearch(){songSearchOpen.value=false;world?.setSongSearchOpen(false)}
+async function closeSongSearch(){releaseSongSearch();await nextTick();canvas.value?.focus({preventScroll:true})}
 function receiveStatus(value){Object.assign(status,value);status.audioMode=sampler?.getStatus()||'waiting';if(value.scene)sceneId.value=value.scene;if(value.sceneError)toast(value.sceneError);if(value.station)stationId.value=value.station;if(value.inspecting===false)selectedRecord.value=null}
 async function changeScene(id){
   const destination=getWorldScene(id).id
@@ -183,6 +189,7 @@ async function changeScene(id){
   const currentWorld=world,previousScene=sceneId.value
   entranceScene.value=destination;ready.value=false;sceneReady.value=false;progress.value=0
   panel.value=false;commentOpen.value=false;listeningPanel.value='';listeningPlacement.value=null
+  songSearchOpen.value=false;songSearchPlacement.value=null;world.setSongSearchOpen(false)
   world.clearMovement();world.cancelTravel();world.dismissRecord();world.setListeningInputOpen(false)
   selectedRecord.value=null
   await nextTick()
@@ -236,11 +243,11 @@ async function initialize(){
   abort?.abort();world?.dispose();sampler?.dispose();world=null;sampler=null
   abort=new AbortController();const signal=abort.signal
   ready.value=false;sceneReady.value=false;failed.value=false;progress.value=0;canvasKey.value++;await nextTick()
-  listeningPanel.value='';listeningPlacement.value=null
+  listeningPanel.value='';listeningPlacement.value=null;songSearchOpen.value=false;songSearchPlacement.value=null
   if(disposed||signal.aborted)return
   try{
     sampler=createWorldAudioSampler(player.getAudioElement())
-    world=await createMusicWorld(canvas.value,{signal,quality:quality.value,sampleAudio:()=>sampler?.sample(),onProgress:value=>{if(!signal.aborted)progress.value=value*baseProgress},onStatus:receiveStatus,onAction:handleAction,onListeningScreen:value=>listeningPlacement.value=value,onPresence:listeningRoom.movePresence,onSeat:takeSeat})
+    world=await createMusicWorld(canvas.value,{signal,quality:quality.value,sampleAudio:()=>sampler?.sample(),onProgress:value=>{if(!signal.aborted)progress.value=value*baseProgress},onStatus:receiveStatus,onAction:handleAction,onListeningScreen:value=>listeningPlacement.value=value,onSongSearchScreen:value=>songSearchPlacement.value=value,onPresence:listeningRoom.movePresence,onSeat:takeSeat})
     if(signal.aborted)return
     world.setClimate(climate.value)
     syncPresence();await listeningRoom.setPresenceActive(!props.suspended&&!routeOpen.value)
@@ -253,11 +260,13 @@ async function initialize(){
 }
 async function goTo(id){
   if(routeOpen.value)await router.push('/space')
-  panel.value=false;exploring.value=true;stationId.value=id;world?.navigate(id);canvas.value?.focus({preventScroll:true})
+  releaseSongSearch();panel.value=false;exploring.value=true;stationId.value=id;world?.navigate(id);canvas.value?.focus({preventScroll:true})
 }
 async function openSection(id){
+  if(id==='search'){await goTo('search');return}
   if(id==='recommend'){await goTo('discover');return}
   if(routeOpen.value)await router.push('/space')
+  releaseSongSearch()
   const destination=['liked','recent'].includes(id)?'archive':id==='radio'?'lounge':id==='video'?'screen':'discover'
   stationId.value=destination;world?.navigate(destination,{immediate:true});world?.clearMovement();panel.value=true;exploring.value=true
   data.loadSection(id);await nextTick();panelEl.value?.querySelector(id==='search'?'input':'button')?.focus()
@@ -272,6 +281,8 @@ async function selectItem(item){
 function retryContent(){data.retry()}
 async function handleAction(action,payload){
   if(action==='section')openSection(payload)
+  else if(action==='song-search-open')openSongSearch()
+  else if(action==='song-search-close')closeSongSearch()
   else if(action==='feed-scroll')feeds.scroll(payload.id,payload.delta)
   else if(action==='feed-select')feeds.select(payload.id,payload.item)
   else if(action==='feed-back')feeds.back(payload.id)
@@ -323,7 +334,7 @@ watch(roomSummary,value=>world?.setListeningRoom(value))
 watch(()=>JSON.stringify(lobby.snapshot),()=>world?.setListeningLobby(lobby.snapshot))
 watch(()=>[listeningRoom.state.presence,listeningRoom.state.connected,listeningRoom.state.room?.id],syncPresence)
 watch(()=>[routeOpen.value,props.suspended],([covered,suspended])=>{void listeningRoom.setPresenceActive(!covered&&!suspended)})
-watch(()=>[routeOpen.value,props.suspended,listeningPanel.value],([covered,suspended,roomOpen])=>{world?.setActive(!covered&&!suspended);world?.setListeningInputOpen(!covered&&!suspended&&Boolean(roomOpen));if(covered||suspended){listeningPanel.value='';listeningPlacement.value=null}if(covered||suspended||roomOpen){world?.clearMovement();world?.dismissRecord();panel.value=false;commentOpen.value=false}syncPlayback()})
+watch(()=>[routeOpen.value,props.suspended,listeningPanel.value,songSearchOpen.value],([covered,suspended,roomOpen,searchOpen])=>{world?.setActive(!covered&&!suspended);world?.setListeningInputOpen(!covered&&!suspended&&Boolean(roomOpen));world?.setSongSearchOpen(!covered&&!suspended&&searchOpen);if(covered||suspended){listeningPanel.value='';listeningPlacement.value=null;songSearchOpen.value=false;songSearchPlacement.value=null}if(covered||suspended||roomOpen||searchOpen){world?.clearMovement();world?.dismissRecord();panel.value=false;commentOpen.value=false}syncPlayback()})
 watch(()=>listening.value.track?.id,async()=>{
   const token=++lyricsToken;lyrics.value=[];comments.setTrack(listening.value.track)
   if(!listening.value.track?.id)return

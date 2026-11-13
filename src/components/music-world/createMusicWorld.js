@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { createListeningScreen } from './createListeningScreen.js'
 import { createConcertLights } from '../music-room/createConcertLights'
 import { createStageRhythm } from './createStageRhythm.js'
-import { WORLD_STATIONS, WORLD_DISCOVERY_SCREENS, WORLD_RECORD_DISPLAYS, WORLD_LOBBY_DISPLAY, WORLD_SEATS, WORLD_MAP_DESTINATIONS, WORLD_EYE_HEIGHT, WORLD_SEAT_HEIGHT, resolveWorldPosition, worldCameraLimit } from './worldNavigation'
+import { WORLD_STATIONS, WORLD_DISCOVERY_SCREENS, WORLD_RECORD_DISPLAYS, WORLD_LOBBY_DISPLAY, WORLD_SEARCH_DISPLAY, WORLD_SEATS, WORLD_MAP_DESTINATIONS, WORLD_EYE_HEIGHT, WORLD_SEAT_HEIGHT, resolveWorldPosition, worldCameraLimit } from './worldNavigation'
 import { createWorldMovement } from './worldMovement.js'
 import { createWorldTravel, stepWorldTravel, worldViewToward, smoothWorldView, angleDelta } from './worldTravel.js'
 import { createCoverSurface, makeSign, materialTexture } from './worldTextures'
@@ -21,12 +21,13 @@ import { createWorldRenderBudget } from './worldRenderBudget.js'
 import { createWorldFrameMetrics } from './worldFrameMetrics.js'
 import { createSpeakerMotion } from './createSpeakerMotion.js'
 import { createListeningLobbyScreen } from './createListeningLobbyScreen.js'
+import { createSongSearchScreen } from './createSongSearchScreen.js'
 import { createScreenProjection } from './createScreenProjection.js'
 import { getSeatSlot, availableSeatSlots, seatOccupants } from '../../../backend/src/seatLayout.js'
 import { createSeatMotion, sampleSeatMotion } from './worldSeatMotion.js'
 
 const KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'ShiftLeft', 'ShiftRight'])
-export async function createMusicWorld(canvas, { onStatus, onAction, onProgress, onListeningScreen, sampleAudio, onPresence, onSeat, signal, quality: initialQuality = 'balanced' } = {}) {
+export async function createMusicWorld(canvas, { onStatus, onAction, onProgress, onListeningScreen, onSongSearchScreen, sampleAudio, onPresence, onSeat, signal, quality: initialQuality = 'balanced' } = {}) {
   const scene = new THREE.Scene(); scene.background = new THREE.Color('#142330'); scene.fog = new THREE.FogExp2('#152737', .012)
   const lightGrid = createWorldLightGrid(scene)
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
@@ -62,6 +63,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   let yaw = 0, pitch = .09, drag = null, previousTrack = '', previousScreen = '', lastStatus = 0, frameCount = 0
   let hoveredSurface = null
   let listeningInputOpen = false, listeningTransform = ''
+  let songSearchOpen = false, songSearchTransform = ''
   const projectListeningScreen = createScreenProjection()
   function syncListeningScreen() {
     if (!listeningInputOpen || !lobbyScreen) return
@@ -75,9 +77,20 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     else { listeningTransform = ''; onListeningScreen?.(null) }
     invalidate()
   }
+  function syncSongSearchScreen() {
+    if (!songSearchScreen) return
+    const rect = canvas.getBoundingClientRect(), parent = canvas.parentElement.getBoundingClientRect()
+    const placement = projectListeningScreen(songSearchScreen.mesh, viewCamera, { width: rect.width, height: rect.height, left: rect.left - parent.left, top: rect.top - parent.top })
+    if ((placement?.transform || '') !== songSearchTransform) { songSearchTransform = placement?.transform || ''; onSongSearchScreen?.(placement) }
+  }
+  function setSongSearchOpen(value) {
+    songSearchOpen = Boolean(value)
+    if (songSearchOpen) { clearMovement(); cancelTravel(); clearScreenHover(); syncSongSearchScreen() }
+    invalidate()
+  }
   let previousLyrics=null,previousCover=''
   let playback = { track: {}, currentTime: 0, duration: 0, playing: false }, library = {}, lighting = { power: 0, live: false }
-  let observer, screen, screenMesh, environment, concert, pavilion, records, lightShow, environments, terminal, speakers, lobbyScreen
+  let observer, screen, screenMesh, environment, concert, pavilion, records, lightShow, environments, terminal, speakers, lobbyScreen, songSearchScreen
   let tour=null, pendingTravel=null, seated=false, seatId='', pointId='', seatMove=null, returnPose=null, quality=['smooth','balanced','high'].includes(initialQuality)?initialQuality:'balanced'
   let viewMode='third',bodyYaw=Math.PI,jumpHeight=0,jumpVelocity=0,seatEpoch=0,seatPending=false,membership='',roomConnected=false,lastPresence=0,lastPose=''
   let movementSpeed=0, movementActive=false, cameraBoom=1, cameraSettling=false
@@ -270,7 +283,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   }
   function setKey(code, pressed) {
     if(!pressed){keys.delete(code);return}
-    if (listeningInputOpen || disposed || !active) return
+    if (listeningInputOpen || songSearchOpen || disposed || !active) return
     if(!KEYS.has(code)||records?.getState().inspecting)return
     if(!keys.has(code)){
       clearScreenHover()
@@ -283,7 +296,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     }
   }
   function keydown(event) {
-    if (listeningInputOpen) { event.stopPropagation(); if (event.code === 'Escape') { event.preventDefault(); onAction?.('lobby-input-close') } return }
+    if (listeningInputOpen || songSearchOpen) { event.stopPropagation(); if (event.code === 'Escape') { event.preventDefault(); onAction?.(songSearchOpen?'song-search-close':'lobby-input-close') } return }
     if (event.ctrlKey || event.metaKey || event.altKey) return
     if (KEYS.has(event.code)) { event.preventDefault(); setKey(event.code, true) }
     if (event.code === 'Home') { event.preventDefault(); navigate('atrium') }
@@ -300,7 +313,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   }
   function keyup(event) { keys.delete(event.code) }
   function pointerdown(event) {
-    if (listeningInputOpen) { event.preventDefault(); onAction?.('lobby-input-close'); return }
+    if (listeningInputOpen || songSearchOpen) { event.preventDefault(); onAction?.(songSearchOpen?'song-search-close':'lobby-input-close'); return }
     if (event.button !== 0 || records?.getState().inspecting) return
     cancelTravel()
     canvas.focus({ preventScroll: true }); canvas.setPointerCapture(event.pointerId)
@@ -325,13 +338,13 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     drag = { id: event.pointerId, x: event.clientX, y: event.clientY, distance: 0, action:queueDrag?'terminal-queue':action, feed: hit?.object.userData.payload, units, accumulated: 0 }; invalidate()
   }
   function pointermove(event) {
-    if (listeningInputOpen) return
+    if (listeningInputOpen || songSearchOpen) return
     if (!drag) {
       setPointer(event); raycaster.setFromCamera(pointer,viewCamera)
       const hit=firstHit(),action=hit?.object.userData.action
       updateScreenHover(hit)
-      canvas.style.cursor = ['feed','terminal','lobby','sit'].includes(action) ? 'pointer' : 'grab'
-      canvas.title=action==='terminal'?terminal.hint(hit.uv):action==='lobby'?lobbyScreen.hint(hit.uv):action==='sit'?seatHint(hit.object.userData.seatId,hit.object.userData.seatIndex):''
+      canvas.style.cursor = ['feed','terminal','lobby','sit','song-search-open'].includes(action) ? 'pointer' : 'grab'
+      canvas.title=action==='terminal'?terminal.hint(hit.uv):action==='lobby'?lobbyScreen.hint(hit.uv):action==='sit'?seatHint(hit.object.userData.seatId,hit.object.userData.seatIndex):hit?.object.userData.hint||''
       return
     }
     if (drag.id !== event.pointerId) return
@@ -356,7 +369,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     drag.x = event.clientX; drag.y = event.clientY; invalidate()
   }
   function wheel(event) {
-    if (listeningInputOpen) { event.preventDefault(); return }
+    if (listeningInputOpen || songSearchOpen) { event.preventDefault(); return }
     hoveredSurface?.cancelClick()
     setPointer(event); raycaster.setFromCamera(pointer,viewCamera)
     const hit=firstHit(),target=hit?.object
@@ -555,6 +568,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     frameMetrics?.end()
     if(frameMetrics&&now-lastMetrics>1000){lastMetrics=now;onStatus?.({performance:{...frameMetrics.getState(),...renderBudget.getState(),quality,width:renderer.domElement.width,height:renderer.domElement.height,calls:renderer.info.render.calls,triangles:renderer.info.render.triangles}})}
     syncListeningScreen()
+    syncSongSearchScreen()
     frameCount++
     if (now - lastStatus > 200) {
       lastStatus = now
@@ -577,7 +591,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     if (disposed) return
     renderBudget.dispose()
     lightGrid.dispose()
-    disposed = true; stop(); observer?.disconnect(); onListeningScreen?.(null)
+    disposed = true; stop(); observer?.disconnect(); onListeningScreen?.(null); onSongSearchScreen?.(null)
     canvas.removeEventListener('keydown', keydown); window.removeEventListener('keyup', keyup); window.removeEventListener('blur', clearMovement)
     canvas.removeEventListener('blur', clearMovement); document.removeEventListener('visibilitychange', visibility)
     canvas.removeEventListener('pointerdown', pointerdown); canvas.removeEventListener('pointermove', pointermove)
@@ -618,9 +632,10 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     terminal=createControlTerminal(pavilion,hitTargets,invalidate)
     for (const side of ['archive','discover']) for (let index = 0; index < 4; index++) {
       const isLobby=side==='archive'&&index===WORLD_LOBBY_DISPLAY.index
-      const surface = isLobby?(lobbyScreen=createListeningLobbyScreen(invalidate)):side==='discover'?createDiscoveryScreen(index,invalidate):createCoverSurface(invalidate)
+      const isSearch=side==='archive'&&index===WORLD_SEARCH_DISPLAY.index
+      const surface = isLobby?(lobbyScreen=createListeningLobbyScreen(invalidate)):isSearch?(songSearchScreen=createSongSearchScreen()):side==='discover'?createDiscoveryScreen(index,invalidate):createCoverSurface(invalidate)
       pavilion.getObjectByName(`cover-${side}-${index}`).add(surface.mesh)
-      covers.push({surface,side:isLobby?'lobby':side,index}); hitTargets.push(surface.mesh)
+      covers.push({surface,side:isLobby?'lobby':isSearch?'search':side,index}); hitTargets.push(surface.mesh)
     }
     for (const [text,sub,pos,rotation,station] of [
       ['唱片档案','YOUR MUSIC, COLLECTED.',[-11.9,4.5,1],Math.PI/2,'archive'],
@@ -703,6 +718,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     setListeningRoom(value){terminal.setRoom(value)},
     setListeningLobby(value){lobbyScreen.setState(value)},
     setListeningInputOpen,
+    setSongSearchOpen,
     setFeeds(value) { covers.filter(c => c.side === 'discover').forEach(c => c.surface.setState(value[FEED_IDS[c.index]])); invalidate() },
     inspectRecord(item){clearMovement();cancelTravel();stand(true);records.inspect(item)},
     dismissRecord(){records.dismiss()},

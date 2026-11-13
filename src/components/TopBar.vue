@@ -416,6 +416,7 @@ const trimmedKeyword = computed(() => searchKeyword.value.trim())
 const { defaultKeyword, hotKeywords, loadSearchBoot } = useSearchBoot({ hotLimit: 10 })
 const {
   clearSearchHistory,
+  loadSearchHistory,
   rememberSearchHistory,
   searchHistory
 } = useSearchHistory()
@@ -463,6 +464,8 @@ function openSearchPanel() {
   if (searchPanelVisible.value) {
     return
   }
+
+  loadSearchHistory()
 
   if (searchPanelLeaving) {
     window.clearTimeout(searchPanelCloseTimer)

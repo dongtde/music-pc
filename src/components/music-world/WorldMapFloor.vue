@@ -110,7 +110,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, useId } from 'vue'
-import { AudioLines, Disc3, ListMusic, MicVocal, SlidersHorizontal, Sparkles, Trophy, UsersRound } from 'lucide-vue-next'
+import { AudioLines, Disc3, ListMusic, MicVocal, Search, SlidersHorizontal, Sparkles, Trophy, UsersRound } from 'lucide-vue-next'
 import { WORLD_MAP_DESTINATIONS, WORLD_LOBBY_DISPLAY } from './worldNavigation.js'
 
 const props = defineProps({
@@ -149,6 +149,7 @@ const playerTransform = computed(() => {
 
 function iconFor(place) {
   if (place.id === 'lobby') return UsersRound
+  if (place.kind === 'search') return Search
   if (place.kind === 'record') return Disc3
   return { recommend: Sparkles, playlists: ListMusic, artists: MicVocal, charts: Trophy }[place.target] || SlidersHorizontal
 }
@@ -204,6 +205,7 @@ onBeforeUnmount(() => observer?.disconnect())
 .world-floor__destination { color: #a8c8cb; cursor: pointer; outline: none; }
 .world-floor__destination.is-record { color: #d7bb8e; }
 .world-floor__destination.is-discovery { color: #a8e7df; }
+.world-floor__destination.is-search { color: #a8e7df; }
 .world-floor__destination.is-terminal { color: #d7bb8e; }
 .world-floor__tile-shadow { fill: #06141c; opacity: .25; }
 .world-floor__tile {

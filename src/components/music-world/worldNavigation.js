@@ -4,12 +4,14 @@ export const WORLD_SEAT_HEIGHT = 1.22
 export const WORLD_PLAYER_RADIUS = .42
 export const WORLD_BOUNDS = { minX: -14.7, maxX: 14.7, minZ: -19.1, maxZ: 19.9 }
 export const WORLD_LOBBY_DISPLAY = { index: 3, x: -8.2, z: 7.1 }
+export const WORLD_SEARCH_DISPLAY = { index: 2, x: -8.2, z: 2.4 }
 export const WORLD_STATIONS = {
   atrium: { x: 0, z: 12.8, look: [0, 4, -12], label: '音乐中庭', sub: 'THE ATRIUM' },
   archive: { x: -5, z: 5.9, look: [-8.2, 2, 2.4], label: '唱片档案', sub: 'YOUR COLLECTION' },
   discover: { x: 2, z: 10.3, look: [8.2, 2, 3.2], label: '发现展厅', sub: 'DISCOVERY GALLERY' },
   terminal: { x: 0, z: 4.0, look: [0, 1.38, 1.5], label: '控制终端', sub: 'MUSIC CONTROL' },
   lobby: { x: -5.4, z: WORLD_LOBBY_DISPLAY.z, look: [WORLD_LOBBY_DISPLAY.x, 2, WORLD_LOBBY_DISPLAY.z], label: '一起听', sub: 'LISTEN TOGETHER' },
+  search: { x: -5.4, z: WORLD_SEARCH_DISPLAY.z, look: [WORLD_SEARCH_DISPLAY.x, 2, WORLD_SEARCH_DISPLAY.z], label: '歌曲搜索', sub: 'SONG SEARCH' },
   screen: { x: 0, z: -10.5, look: [0, 3.6, -19.5], label: '主听音厅', sub: 'THE LISTENING ROOM' },
   lounge: { x: -8.2, z: 13.8, look: [-5, 1.3, 12], label: '声音沙龙', sub: 'RADIO LOUNGE' },
 }
@@ -23,7 +25,7 @@ export const WORLD_DISCOVERY_SCREENS = ['推荐','歌单','歌手','排行榜'].
 export const WORLD_RECORD_DISPLAYS = Array.from({length:4},(_,index)=>{
   const z=-7+index*4.7
   return {id:`archive-${index}`,kind:'record',target:index,label:`唱片 ${String(index>WORLD_LOBBY_DISPLAY.index?index:index+1).padStart(2,'0')}`,x:-8.2,z,view:{x:-4.5,z,look:[-8.2,2,z]},mapLabel:{x:42,y:260+z*11.5}}
-}).filter(display=>display.target!==WORLD_LOBBY_DISPLAY.index)
+}).filter(display=>display.target!==WORLD_LOBBY_DISPLAY.index&&display.target!==WORLD_SEARCH_DISPLAY.index)
 export const WORLD_SEATS = [
   {id:'seat-front-left',label:'前排左沙发',x:-5,z:-10.8,model:'listening-chair--1--10.8',view:{x:-3.35,z:-10.8},mapLabel:{x:147,y:109}},
   {id:'seat-center',label:'中央沙发',x:0,z:-9,model:'listening-sofa',view:{x:0,z:-10.8},mapLabel:{x:240,y:190}},
@@ -36,6 +38,7 @@ export const WORLD_MAP_DESTINATIONS = [
   ...WORLD_SEATS.slice(0,3),
   ...WORLD_DISCOVERY_SCREENS,
   ...WORLD_RECORD_DISPLAYS,
+  {id:'search',kind:'search',label:'歌曲搜索',x:WORLD_SEARCH_DISPLAY.x,z:WORLD_SEARCH_DISPLAY.z,view:WORLD_STATIONS.search},
   {id:'lobby',kind:'station',label:'一起听',x:WORLD_LOBBY_DISPLAY.x,z:WORLD_LOBBY_DISPLAY.z,view:WORLD_STATIONS.lobby},
   {id:'terminal',kind:'station',label:'控制终端',x:0,z:1.5,view:WORLD_STATIONS.terminal,mapLabel:{x:240,y:311}},
   ...WORLD_SEATS.slice(3),
