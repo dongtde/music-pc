@@ -1,6 +1,7 @@
 import { cropImage, formatTime, ink, rounded, text } from './screenDrawing.js'
 import { drawPlayerIcon, drawPlayingBars } from '../playerTransportDrawing.js'
 import { trackKey } from '../../services/listeningRoomProtocol.js'
+import { worldControls as controls } from './worldControlTheme.js'
 
 const DOUBLE_CLICK_MS = 400
 const contains = (rect, point) => Boolean(point && rect && point.x >= rect.x && point.x < rect.x + rect.w && point.y >= rect.y && point.y < rect.y + rect.h)
@@ -52,11 +53,11 @@ export function createScreenList(ctx, { images, invalidate = () => {} }) {
     if (hoveredKey) { hoveredKey = ''; invalidate() }
   }
 
-  function draw({ items, area, scroll = 0, playback = {}, accent = ink.ice, songsOnly = false, action = 'play', now = 0, revealAge = Infinity, audioLevels = null }) {
+  function draw({ items, area, scroll = 0, playback = {}, accent = controls.accent, songsOnly = false, action = 'play', now = 0, revealAge = Infinity, audioLevels = null, fontSizes = {} }) {
     const { rowHeight } = area, first = Math.floor(scroll), count = Math.ceil(area.height / rowHeight) + 1
     const scale = rowHeight / 94, coverSize = Math.round(64 * scale)
-    const inset = Math.max(10, 12 * scale), titleSize = Math.max(20, Math.round(24 * scale))
-    const metadataSize = Math.max(15, Math.round(17 * scale)), timeSize = Math.max(16, Math.round(19 * scale))
+    const inset = Math.max(10, 12 * scale), titleSize = fontSizes.title ?? Math.max(20, Math.round(24 * scale))
+    const metadataSize = fontSizes.metadata ?? Math.max(15, Math.round(17 * scale)), timeSize = fontSizes.time ?? Math.max(16, Math.round(19 * scale))
     rows = []; animating = false
     const pending = new Set(playback.pendingKeys || []), loadingKey = playback.loading ? trackKey(playback.loadingTrack || playback.track) : ''
     ctx.save(); ctx.beginPath(); ctx.rect(area.x, area.y, area.width, area.height); ctx.clip()
@@ -75,9 +76,9 @@ export function createScreenList(ctx, { images, invalidate = () => {} }) {
       if (bounds.h && progress > .5) rows.push(row)
       if (bounds.h && (loading || playing) && !playback.reducedMotion) animating = true
       ctx.save(); ctx.globalAlpha = progress
-      rounded(ctx, area.x, y + 3, area.width, rowHeight - 6, 9 * scale, hovered ? '#87deda29' : current ? '#87deda18' : '#102d3c52')
+      rounded(ctx, area.x, y + 3, area.width, rowHeight - 6, 9 * scale, hovered ? controls.hoverTint : current ? controls.selectedTint : '#102d3c52')
       if (hovered) {
-        ctx.strokeStyle = '#a9e9df38'; ctx.lineWidth = 1
+        ctx.strokeStyle = controls.border; ctx.lineWidth = 1
         ctx.beginPath(); ctx.roundRect(area.x + .5, y + 3.5, area.width - 1, rowHeight - 7, 9 * scale); ctx.stroke()
       }
       const radius = item.kind === 'artist' ? coverSize / 2 : 6 * scale
@@ -94,7 +95,7 @@ export function createScreenList(ctx, { images, invalidate = () => {} }) {
         ctx.save()
         if (row.disabled && !current && !loading) ctx.globalAlpha *= .4
         if (playing) drawPlayingBars(ctx, cover.x + coverSize / 2, cover.y + coverSize / 2, coverSize * .44, accent, now, audioLevels, playback.reducedMotion)
-        else drawPlayerIcon(ctx, loading ? 'loading' : 'play', cover.x + coverSize / 2, cover.y + coverSize / 2, coverSize * .4, '#edf9f3', loading && !playback.reducedMotion ? now / 180 : 0)
+        else drawPlayerIcon(ctx, loading ? 'loading' : 'play', cover.x + coverSize / 2, cover.y + coverSize / 2, coverSize * .4, controls.accent, loading && !playback.reducedMotion ? now / 180 : 0)
         ctx.restore()
       }
       const titleX = cover.x + coverSize + Math.max(12, 20 * scale)
@@ -106,7 +107,7 @@ export function createScreenList(ctx, { images, invalidate = () => {} }) {
       if (metadata) text(ctx, metadata, titleX, y + rowHeight * .72, metadataSize, ink.muted, textWidth)
       if (song) {
         ctx.save(); ctx.textAlign = 'right'
-        text(ctx, screenTrackTime(item), right, y + rowHeight / 2 + timeSize * .35, timeSize, current ? '#b2d5d2' : ink.muted)
+        text(ctx, screenTrackTime(item), right, y + rowHeight / 2 + timeSize * .35, timeSize, current ? controls.accent : ink.muted)
         ctx.restore()
       } else if (hovered) {
         ctx.save(); ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.lineCap = ctx.lineJoin = 'round'

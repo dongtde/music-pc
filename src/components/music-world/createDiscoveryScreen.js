@@ -4,6 +4,7 @@ import { ink, text, rounded, createScreenImages } from './screenDrawing.js'
 import { ARTIST_INITIALS, FEED_LAYOUT, FEED_VIEW_ROWS } from './screenFeeds.js'
 import { createScreenList } from './createScreenList.js'
 import { drawMusicLoading } from './drawMusicLoading.js'
+import { worldControls as controls } from './worldControlTheme.js'
 
 const FRAME_INTERVAL = 1000 / 30, REVEAL_DURATION = 520
 
@@ -31,7 +32,7 @@ export function createDiscoveryScreen(index, invalidate) {
   const changed = () => { dirty = true; invalidate() }
   const images = createScreenImages(changed)
   const list = createScreenList(ctx, { images, invalidate: changed })
-  const accent = [ink.ice, ink.copper, '#b4c5f0', '#d6dbaa'][index]
+  const accent = controls.accent
   const point = uv => uv ? { x: uv.x * FEED_LAYOUT.size, y: (1 - uv.y) * FEED_LAYOUT.size } : null
 
   function draw(now = performance.now(), audioLevels = null) {
@@ -47,16 +48,16 @@ export function createDiscoveryScreen(index, invalidate) {
     ctx.fillStyle = ink.bg; ctx.fillRect(0, 0, 768, 768)
     rounded(ctx, 0, 0, 768, 4, 0, accent)
     if (state.detail) {
-      rounded(ctx, 24, 47, 50, 50, 25, '#a9c5d014'); drawNavigationIcon(ctx, 'back', 49, 72, accent)
+      rounded(ctx, 24, 47, 50, 50, 25, controls.surface); drawNavigationIcon(ctx, 'back', 49, 72, accent)
       zones.push({ x: 16, y: 34, w: 70, h: 76, action: 'feed-back' })
     }
     const titleX = state.detail ? 98 : 30
     text(ctx, state.detail ? state.title : portal.name, titleX, 86, state.detail ? 29 : 36, ink.light, (state.busy || state.error ? 590 : 650) - titleX, 500)
-    rounded(ctx, 684, 47, 54, 50, 25, '#a9c5d014'); drawNavigationIcon(ctx, 'focus', 711, 72, accent)
+    rounded(ctx, 684, 47, 54, 50, 25, controls.surface); drawNavigationIcon(ctx, 'focus', 711, 72, accent)
     zones.push({ x: 674, y: 34, w: 80, h: 76, action: 'feed-focus' })
     if (state.busy && items.length) drawMusicLoading(ctx, 630, 72, 17, accent, now, playback.reducedMotion)
     else if (state.error && items.length) {
-      rounded(ctx, 604, 47, 50, 50, 25, '#a9c5d014'); drawNavigationIcon(ctx, 'retry', 629, 72, accent)
+      rounded(ctx, 604, 47, 50, 50, 25, controls.surface); drawNavigationIcon(ctx, 'retry', 629, 72, accent)
       zones.push({ x: 600, y: 34, w: 60, h: 76, action: 'feed-retry' })
     }
     ctx.fillStyle = '#aacad221'; ctx.fillRect(30, 117, 708, 1)
@@ -78,7 +79,7 @@ export function createDiscoveryScreen(index, invalidate) {
         ctx.save(); ctx.textAlign = 'center'
         text(ctx, state.error ? '加载失败' : hasInitials ? '暂无歌手' : '暂无内容', center, 479, 22, ink.muted)
         if (state.error) {
-          rounded(ctx, center - 60, 507, 120, 45, 22, '#a9c5d014')
+          rounded(ctx, center - 60, 507, 120, 45, 22, controls.surface)
           text(ctx, '重试', center, 538, 21, accent)
           zones.push({ x: center - 60, y: 507, w: 120, h: 45, action: 'feed-retry' })
         }
@@ -96,7 +97,7 @@ export function createDiscoveryScreen(index, invalidate) {
       const hot = index === 0, col = hot ? 0 : (index - 1) % 2, row = hot ? 0 : Math.floor((index - 1) / 2) + 1
       const w = hot ? width : width / 2, left = x + col * width / 2, y = top + row * step, selected = initial === (state.initial ?? -1)
       if (selected) rounded(ctx, left + 2, y + 3, w - 4, step - 6, 7, accent)
-      ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = selected ? ink.bg : ink.muted
+      ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = selected ? controls.onAccent : controls.accent
       ctx.font = hot ? '500 17px "Microsoft YaHei", sans-serif' : '500 21px Bahnschrift, sans-serif'
       ctx.fillText(hot ? '热门' : initial, left + w / 2, y + step / 2 + 1); ctx.restore()
       zones.push({ x: left, y, w, h: step, action: 'feed-initial', initial })

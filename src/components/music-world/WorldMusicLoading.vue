@@ -1,5 +1,5 @@
 <template>
-  <div class="world-music-loading" role="status" aria-label="正在加载音乐">
+  <div class="world-music-loading" role="status" :aria-label="label">
     <canvas ref="canvas" width="256" height="256" aria-hidden="true" />
   </div>
 </template>
@@ -7,15 +7,16 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { drawMusicLoading } from './drawMusicLoading.js'
+import { worldControls } from './worldControlTheme.js'
 
-const props = defineProps({ paused: Boolean })
+const props = defineProps({ paused: Boolean, accent: { type: String, default: worldControls.accent }, label: { type: String, default: '正在加载音乐' } })
 const canvas = ref(null)
 let frame = 0, lastDraw = -Infinity, motionQuery
 function paint(now, reduced = false) {
   const ctx = canvas.value?.getContext('2d')
   if (!ctx) return
   ctx.clearRect(0, 0, 256, 256)
-  drawMusicLoading(ctx, 128, 128, 96, '#87deda', now, reduced)
+  drawMusicLoading(ctx, 128, 128, 96, props.accent, now, reduced)
 }
 function tick(now) {
   if (now - lastDraw >= 1000 / 30) { paint(now); lastDraw = now }
@@ -33,7 +34,7 @@ onMounted(() => {
   document.addEventListener('visibilitychange', sync)
   sync()
 })
-watch(() => props.paused, sync)
+watch(() => [props.paused, props.accent], sync)
 onBeforeUnmount(() => {
   cancelAnimationFrame(frame)
   motionQuery?.removeEventListener('change', sync)

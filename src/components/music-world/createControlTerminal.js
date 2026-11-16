@@ -5,6 +5,7 @@ import { drawPlayerIcon, drawTransportButton } from '../playerTransportDrawing.j
 import { WORLD_SCENES } from './worldScenes.js'
 import { normalizeDanmakuOpacity } from './danmakuSettings.js'
 import { createScreenList } from './createScreenList.js'
+import { worldControls as controls } from './worldControlTheme.js'
 
 export const TERMINAL_SLIDERS = ['progress','volume','danmaku-opacity']
 export const TERMINAL_QUEUE = {x:28,y:143,width:392,height:480,rowHeight:72}
@@ -35,22 +36,22 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
     changed()
   }
   function button(x,y,w,h,label,action,payload,{selected=false,size=20}={}){
-    rounded(ctx,x,y,w,h,7,selected?'#25464e':'#132f3c')
-    centered(label,x+w/2,y+h/2+size*.35,size,selected?ink.ice:ink.light,w-20)
+    rounded(ctx,x,y,w,h,7,selected?controls.selected:controls.surface)
+    centered(label,x+w/2,y+h/2+size*.35,size,controls.accent,w-20)
     zone(x,y,w,h,action,payload,label)
   }
   function icon(icon,x,y,action,payload,label,size=28){
-    drawPlayerIcon(ctx,icon,x,y,size,ink.light)
+    drawPlayerIcon(ctx,icon,x,y,size,controls.accent)
     zone(x-24,y-24,48,48,action,payload,label)
   }
-  function slider(x,y,w,value,action,color=ink.ice){
+  function slider(x,y,w,value,action,color=controls.accent){
     rounded(ctx,x,y,w,5,3,'#7296a345');rounded(ctx,x,y,Math.max(2,w*value),5,3,color)
-    rounded(ctx,x+w*value-6,y-4,13,13,7,ink.light);zone(x,y-20,w,45,action,undefined,action==='volume'?'调节音量':action==='progress'?'调节进度':'调节弹幕不透明度')
+    rounded(ctx,x+w*value-6,y-4,13,13,7,controls.accent);zone(x,y-20,w,45,action,undefined,action==='volume'?'调节音量':action==='progress'?'调节进度':'调节弹幕不透明度')
   }
   function settingToggle(y,label,enabled,action){
     text(ctx,label,1154,y+26,21,ink.light)
-    rounded(ctx,1490,y,72,32,16,enabled?'#38786f':'#354b56')
-    rounded(ctx,enabled?1533:1496,y+5,22,22,11,enabled?ink.ice:ink.muted)
+    rounded(ctx,1490,y,72,32,16,enabled?controls.accent:controls.disabled)
+    rounded(ctx,enabled?1533:1496,y+5,22,22,11,enabled?controls.onAccent:controls.muted)
     zone(1154,y-6,410,44,action,null,(enabled?'关闭':'开启')+label)
   }
   function drawQueue(state,now,audioLevels){
@@ -90,7 +91,7 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
     icon(mode.value,535,565,'terminal-menu','mode',mode.label)
     for(const control of [{x:665,action:'previous',size:58},{x:790,action:'toggle',size:82},{x:915,action:'next',size:58}]){
       ctx.save();if(state.loading&&control.action!=='toggle')ctx.globalAlpha=.35
-      drawTransportButton(ctx,control.action,control.x,565,control.size,state,{now});ctx.restore()
+      drawTransportButton(ctx,control.action,control.x,565,control.size,state,{now,accent:controls.accent,color:controls.accent,onAccent:controls.onAccent});ctx.restore()
       if(!state.loading)zone(control.x-43,522,86,86,control.action,null,control.action==='toggle'?(state.playing?'暂停':'播放'):control.action==='next'?'下一首':'上一首')
     }
     icon(state.volume?'volume':'muted',1045,565,'terminal-menu','volume','音量')
@@ -120,10 +121,10 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
       text(ctx,'播放顺序',503,325,17,ink.muted)
       TERMINAL_MODES.forEach((mode,index)=>{
         const y=339+index*43,selected=state.playMode===mode.value
-        if(selected)rounded(ctx,494,y,256,39,5,'#31545a')
-        drawPlayerIcon(ctx,mode.value,518,y+20,23,selected?ink.ice:ink.light)
-        text(ctx,mode.label,545,y+27,20,selected?ink.ice:ink.light)
-        if(selected)text(ctx,'✓',719,y+27,20,ink.ice)
+        rounded(ctx,494,y,256,39,5,selected?controls.selected:controls.surface)
+        drawPlayerIcon(ctx,mode.value,518,y+20,23,controls.accent)
+        text(ctx,mode.label,545,y+27,20,controls.accent)
+        if(selected)text(ctx,'✓',719,y+27,20,controls.accent)
         zone(494,y,256,39,'play-mode',mode.value,mode.label)
       })
     }else if(menu==='volume'){
@@ -131,16 +132,16 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
       rounded(ctx,848,391,248,124,10,'#213e4b');zone(848,391,248,124,'noop')
       text(ctx,'音量',869,426,20,ink.light);text(ctx,Math.round(volume*100)+'%',1022,426,18,ink.muted)
       icon(volume?'volume':'muted',879,473,'mute',null,volume?'静音':'恢复音量',23)
-      slider(921,470,148,volume,'volume',ink.copper)
+      slider(921,470,148,volume,'volume')
     }
   }
   function drawAccount(){
     const avatar=account.isLoggedIn?images.get(account.avatarUrl):null
-    rounded(ctx,1514,15,48,48,24,'#29444f')
+    rounded(ctx,1514,15,48,48,24,controls.surface)
     if(avatar)cropImage(ctx,avatar,1516,17,44,22)
-    else if(account.isLoggedIn)centered(Array.from(account.displayName)[0]||'听',1538,47,22,ink.ice,38)
-    else drawPlayerIcon(ctx,'user',1538,39,27,ink.muted)
-    ctx.save();ctx.textAlign='right';text(ctx,account.displayName,1498,46,18,account.isLoggedIn?ink.light:ink.muted,185);ctx.restore()
+    else if(account.isLoggedIn)centered(Array.from(account.displayName)[0]||'听',1538,47,22,controls.accent,38)
+    else drawPlayerIcon(ctx,'user',1538,39,27,controls.accent)
+    ctx.save();ctx.textAlign='right';text(ctx,account.displayName,1498,46,18,controls.accent,185);ctx.restore()
     const area=TERMINAL_ACCOUNT
     zone(area.x,area.y,area.width,area.height,'account',null,account.isLoggedIn?'查看账号信息':'登录账号')
   }

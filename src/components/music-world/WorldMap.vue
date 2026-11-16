@@ -95,20 +95,18 @@ function navigate(id) {
   padding: 8px;
   border: 1px solid #a8c8cb38;
   border-radius: 18px;
-  background: linear-gradient(145deg, #1b333ce8, #0e2029f2);
-  color: #a8e7df;
+  background:var(--world-control-surface);
+  color:var(--world-control-accent);
   box-shadow: 0 8px 30px #0003, inset 0 1px #e5f0ec0d;
   cursor: pointer;
-  transition: border-color 180ms, transform 180ms;
-}
+  transition: border-color 180ms, transform 180ms; border-color:var(--world-control-border); }
 
 .world-map:hover {
-  border-color: #a8e7df80;
-  transform: translateY(-2px);
-}
+  border-color:var(--world-control-border-hover);
+  transform: translateY(-2px); background:var(--world-control-hover); }
 
 .world-map:focus-visible {
-  outline: 2px solid #a8e7df;
+  outline:2px solid var(--world-control-accent);
   outline-offset: 4px;
 }
 
@@ -127,8 +125,7 @@ function navigate(id) {
   height: 25px;
   border: 1px solid #a8e7df25;
   border-radius: 8px;
-  background: #142d36;
-}
+  background:var(--world-control-surface); border-color:var(--world-control-border); }
 
 .world-map-dialog {
   box-sizing: border-box;
@@ -202,20 +199,19 @@ function navigate(id) {
   padding: 0;
   border: 1px solid #afc9cb25;
   border-radius: 50%;
-  background: #e5f0ec05;
-  color: #a3babc;
+  background:var(--world-control-surface);
+  color:var(--world-control-accent);
   cursor: pointer;
-  transition: color 160ms, background 160ms, border-color 160ms;
-}
+  transition: color 160ms, background 160ms, border-color 160ms; border-color:var(--world-control-border); }
 
 .world-map-dialog__close:hover {
-  border-color: #a8e7df55;
-  background: #a8e7df12;
-  color: #e5f0ec;
+  border-color:var(--world-control-border-hover);
+  background:var(--world-control-hover);
+  color:var(--world-control-accent);
 }
 
 .world-map-dialog__close:focus-visible {
-  outline: 2px solid #a8e7df;
+  outline:2px solid var(--world-control-accent);
   outline-offset: 4px;
 }
 
@@ -234,7 +230,7 @@ function navigate(id) {
 }
 
 @media (max-width: 800px) {
-  .world-map { top: 14px; right: 14px; width: 108px; padding: 7px; border-radius: 14px; }
+  .world-map { top: 14px; right: 14px; width: 108px; padding: 7px; border-radius: 14px; color:var(--world-control-accent); background:var(--world-control-surface); border-color:var(--world-control-border); }
   .world-map-dialog { width: calc(100vw - 28px); height: min(760px, calc(100dvh - 28px)); border-radius: 22px; }
   .world-map-dialog__header { padding: 18px 23px; }
   .world-map-dialog__floor { padding: 15px 20px 20px; }
@@ -247,7 +243,7 @@ function navigate(id) {
   .world-map-dialog__header h2 { font-size: 16px; }
   .world-map-dialog__identity { gap: 10px; }
   .world-map-dialog__identity > svg { width: 22px; }
-  .world-map-dialog__close { width: 44px; height: 44px; }
+  .world-map-dialog__close { width: 44px; height: 44px; color:var(--world-control-accent); background:var(--world-control-surface); border-color:var(--world-control-border); }
   .world-map-dialog__floor { box-sizing: border-box; aspect-ratio: 456 / 558; padding: 10px 12px 18px; }
 }
 
@@ -260,7 +256,7 @@ function navigate(id) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .world-map, .world-map-dialog__close { transition: none; }
+  .world-map, .world-map-dialog__close { transition: none; color:var(--world-control-accent); background:var(--world-control-surface); border-color:var(--world-control-border); }
   .world-map-dialog[open] { animation: none; }
 }
 </style>

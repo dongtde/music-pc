@@ -2,6 +2,7 @@ import { canvasSurface } from './worldSurfaces.js'
 import { font, text, createScreenImages, formatTime } from './screenDrawing.js'
 import { hasWordTiming, layoutLyric, wordFill } from './lyricTypography.js'
 import { drawPlayerIcon } from '../playerTransportDrawing.js'
+import { worldControls as controls } from './worldControlTheme.js'
 import { drawListeningBackdrop, screenInk } from './listeningScreenArt.js'
 
 const WIDTH = 2048, HEIGHT = 840
@@ -88,7 +89,7 @@ export function createListeningScreen(invalidate) {
       for (const control of TRANSPORT) {
         const icon = control.action === 'toggle' ? state.loading ? 'loading' : state.playing ? 'pause' : 'play' : control.action
         ctx.save(); if (state.loading && control.action !== 'toggle') ctx.globalAlpha = .35
-        drawPlayerIcon(ctx, icon, control.x, 795, control.action === 'toggle' ? 29 : 25, screenInk.white, icon === 'loading' && !state.reducedMotion ? now / 150 : 0)
+        drawPlayerIcon(ctx, icon, control.x, 795, control.action === 'toggle' ? 29 : 25, controls.accent, icon === 'loading' && !state.reducedMotion ? now / 150 : 0)
         ctx.restore()
       }
       ctx.textAlign = 'right'; ctx.font = '400 25px Bahnschrift, "Segoe UI", sans-serif'; ctx.fillStyle = screenInk.white

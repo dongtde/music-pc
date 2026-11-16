@@ -79,9 +79,9 @@ export function drawPlayingBars(ctx, x, y, size, color, now, levels, reducedMoti
   ctx.restore()
 }
 
-export function drawTransportButton(ctx, action, x, y, diameter, state = {}, { accent = '#d9c39e', color = '#d6e3e6', now = 0 } = {}) {
+export function drawTransportButton(ctx, action, x, y, diameter, state = {}, { accent = '#d9c39e', color = '#d6e3e6', onAccent = '#ffffff', now = 0 } = {}) {
   const toggle = action === 'toggle'
   if (toggle) { ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(x, y, diameter / 2, 0, Math.PI * 2); ctx.fill() }
   const icon = toggle ? state.loading ? 'loading' : state.playing ? 'pause' : 'play' : action
-  drawPlayerIcon(ctx, icon, x, y, diameter * (toggle ? .5 : .63), toggle ? '#ffffff' : color, icon === 'loading' && !state.reducedMotion ? now / 150 : 0)
+  drawPlayerIcon(ctx, icon, x, y, diameter * (toggle ? .5 : .63), toggle ? onAccent : color, icon === 'loading' && !state.reducedMotion ? now / 150 : 0)
 }

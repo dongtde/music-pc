@@ -2,8 +2,9 @@ import * as THREE from 'three'
 import { canvasSurface } from './worldSurfaces.js'
 import { text, rounded } from './screenDrawing.js'
 import { drawPlayerIcon } from '../playerTransportDrawing.js'
+import { worldControls as controls } from './worldControlTheme.js'
 
-const SIZE = 1024, GOLD = '#efd4a1', WHITE = '#eef4ff', MUTED = '#8ca5bf'
+const SIZE = 1024, GOLD = controls.accent, WHITE = '#eef4ff', MUTED = '#8ca5bf'
 const REFRESH_TURN = 600, FRAME_INTERVAL = 1000 / 30
 export function createListeningLobbyScreen(invalidate) {
   const surface = canvasSurface(SIZE, SIZE, { dynamic: true, onReady: invalidate }), ctx = surface.context
@@ -14,16 +15,16 @@ export function createListeningLobbyScreen(invalidate) {
   const changed = () => { dirty = true; invalidate() }
   function button(x, y, w, h, label, action, payload, primary = false, disabled = false) {
     const id = `${action}:${payload || ''}`, hot = hovered === id && !disabled
-    rounded(ctx, x, y, w, h, 8, disabled ? '#1c2c40' : primary ? hot ? '#ffe6b7' : GOLD : hot ? '#2d4764' : '#1a3048')
+    rounded(ctx, x, y, w, h, 8, disabled ? controls.disabled : primary ? hot ? controls.accentHover : controls.accent : hot ? controls.hover : controls.surface)
     ctx.save(); ctx.textAlign = 'center'
-    text(ctx, label, x + w / 2, y + h / 2 + 10, 28, disabled ? '#617991' : primary ? '#172133' : WHITE, w - 16, 500); ctx.restore()
+    text(ctx, label, x + w / 2, y + h / 2 + 10, 28, disabled ? controls.muted : primary ? controls.onAccent : controls.accent, w - 16, 500); ctx.restore()
     zones.push({ x, y, w, h, action, payload, id, label, disabled })
   }
   function icon(x, y, glyph, label, action, payload, disabled = false, feedback = {}) {
     const id = `${action}:${payload || ''}`, size = feedback.size || 64
     ctx.save(); ctx.translate(x + size / 2, y + size / 2); ctx.scale(feedback.scale || 1, feedback.scale || 1)
-    rounded(ctx, -size / 2, -size / 2, size, size, 8, feedback.active ? '#34506d' : hovered === id && !disabled ? '#2d4764' : feedback.quiet ? 'transparent' : '#1a3048')
-    drawPlayerIcon(ctx, glyph, 0, 0, feedback.iconSize || 29, feedback.active ? GOLD : disabled ? '#617991' : WHITE, feedback.rotation || 0)
+    rounded(ctx, -size / 2, -size / 2, size, size, 8, feedback.active ? controls.selected : hovered === id && !disabled ? controls.hover : feedback.quiet ? 'transparent' : controls.surface)
+    drawPlayerIcon(ctx, glyph, 0, 0, feedback.iconSize || 29, disabled && !feedback.active ? controls.muted : controls.accent, feedback.rotation || 0)
     ctx.restore()
     zones.push({ x, y, w: size, h: size, action, payload, id, label, disabled })
   }
@@ -36,10 +37,10 @@ export function createListeningLobbyScreen(invalidate) {
     ctx.save(); ctx.textBaseline = 'middle'
     text(ctx, '一起听', 44, 82, 42, WHITE, 150, 600)
     const id = 'lobby-copy:', label = state.copied ? '邀请已复制' : '复制邀请'
-    rounded(ctx, 212, 56, 198, 52, 10, hovered === id ? '#2d4764' : '#9fbfee0c')
-    ctx.font = '26px Consolas, monospace'; ctx.fillStyle = state.copied ? GOLD : '#b8cada'
+    rounded(ctx, 212, 56, 198, 52, 10, hovered === id ? controls.hover : controls.surface)
+    ctx.font = '26px Consolas, monospace'; ctx.fillStyle = controls.accent
     ctx.fillText(state.room.id, 228, 82)
-    drawPlayerIcon(ctx, state.copied ? 'check' : 'copy', 382, 82, 23, state.copied ? GOLD : MUTED)
+    drawPlayerIcon(ctx, state.copied ? 'check' : 'copy', 382, 82, 23, controls.accent)
     zones.push({ x: 212, y: 56, w: 198, h: 52, action: 'lobby-copy', id, label })
     ctx.textAlign = 'right'
     text(ctx, `${state.room.members?.length || 0} / ${state.room.capacity} 人`, 900, 82, 25, MUTED, 210)

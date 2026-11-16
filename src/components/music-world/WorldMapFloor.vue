@@ -202,21 +202,21 @@ onBeforeUnmount(() => observer?.disconnect())
 .world-floor__lounge { fill: #a8c8cb; fill-opacity: .025; stroke: #a8c8cb; stroke-opacity: .07; }
 .world-floor__entry { fill: none; stroke: #7c9b9e; stroke-width: 1.2; stroke-linecap: round; opacity: .6; }
 
-.world-floor__destination { color: #a8c8cb; cursor: pointer; outline: none; }
-.world-floor__destination.is-record { color: #d7bb8e; }
-.world-floor__destination.is-discovery { color: #a8e7df; }
-.world-floor__destination.is-search { color: #a8e7df; }
-.world-floor__destination.is-terminal { color: #d7bb8e; }
+.world-floor__destination { color:var(--world-control-accent); cursor: pointer; outline: none; }
+.world-floor__destination.is-record { color:var(--world-control-accent); }
+.world-floor__destination.is-discovery { color:var(--world-control-accent); }
+.world-floor__destination.is-search { color:var(--world-control-accent); }
+.world-floor__destination.is-terminal { color:var(--world-control-accent); }
 .world-floor__tile-shadow { fill: #06141c; opacity: .25; }
 .world-floor__tile {
-  fill: #223d46;
+  fill:var(--world-control-surface);
   stroke: currentColor;
   stroke-opacity: .24;
   stroke-width: .8;
   transition: fill 160ms, stroke-opacity 160ms;
 }
-.world-floor__destination.is-record .world-floor__tile { fill: #303b3c; }
-.world-floor__destination.is-terminal .world-floor__tile { fill: #344342; stroke-opacity: .5; }
+.world-floor__destination.is-record .world-floor__tile { fill:var(--world-control-surface); }
+.world-floor__destination.is-terminal .world-floor__tile { fill:var(--world-control-surface); stroke-opacity: .5; }
 .world-floor__hit-area { fill: transparent; stroke: transparent; stroke-width: 1; transition: fill-opacity 160ms; }
 .world-floor__icon { color: inherit; stroke-width: 1.6; pointer-events: none; }
 .world-floor__tile-label { fill: #dbe8e5; font-size: 12px; font-weight: 400; letter-spacing: .025em; pointer-events: none; }
@@ -233,25 +233,25 @@ onBeforeUnmount(() => observer?.disconnect())
 .world-floor__screen-edge { fill: none; stroke: #a8e7df; stroke-width: 2; stroke-linecap: round; }
 .world-floor__lobby-line { fill: none; stroke: #a8c8cb; stroke-width: 1; stroke-dasharray: 2 6; opacity: .3; }
 
-.world-floor__destination.is-selected { color: #efd0a0; }
-.world-floor__destination.is-selected .world-floor__tile { fill: #434b43; stroke-opacity: .95; stroke-width: 1.5; }
-.world-floor__destination.is-selected .world-floor__hit-area { fill: #d7bb8e; fill-opacity: .07; stroke: #d7bb8e; stroke-opacity: .6; }
-.world-floor__destination.is-selected text { fill: #efd0a0; }
-.world-floor:not(.world-floor--compact) .world-floor__destination:is(:hover, :focus-visible) .world-floor__tile { fill: #3b5455; stroke-opacity: .9; }
-.world-floor:not(.world-floor--compact) .world-floor__destination:is(:hover, :focus-visible) .world-floor__hit-area { fill: #a8e7df; fill-opacity: .06; stroke: #a8e7df; stroke-opacity: .5; }
+.world-floor__destination.is-selected { color:var(--world-control-accent); }
+.world-floor__destination.is-selected .world-floor__tile { fill:var(--world-control-selected); stroke-opacity: .95; stroke-width: 1.5; }
+.world-floor__destination.is-selected .world-floor__hit-area { fill:var(--world-control-accent); fill-opacity: .07; stroke:var(--world-control-accent); stroke-opacity: .6; }
+.world-floor__destination.is-selected text { fill:var(--world-control-accent); }
+.world-floor:not(.world-floor--compact) .world-floor__destination:is(:hover, :focus-visible) .world-floor__tile { fill:var(--world-control-hover); stroke-opacity: .9; }
+.world-floor:not(.world-floor--compact) .world-floor__destination:is(:hover, :focus-visible) .world-floor__hit-area { fill:var(--world-control-accent); fill-opacity: .06; stroke:var(--world-control-accent); stroke-opacity: .5; }
 .world-floor__destination:focus-visible .world-floor__tile,
-.world-floor__destination:focus-visible .world-floor__hit-area { stroke: #e5f0ec; stroke-width: 2; }
+.world-floor__destination:focus-visible .world-floor__hit-area { stroke:var(--world-control-accent); stroke-width: 2; }
 
 .world-floor__player { pointer-events: none; }
 .world-floor__view { fill: #a8e7df; opacity: .08; }
 .world-floor__player-halo { fill: #a8e7df; fill-opacity: .07; }
 .world-floor__player-ring { fill: #143640; stroke: #a8e7df; stroke-width: 1; stroke-opacity: .65; }
 .world-floor__player-arrow { fill: #baffee; stroke: #102a33; stroke-width: .8; stroke-linejoin: round; }
-.world-floor__mini-object { fill: #779ba0; stroke: #a8c8cb; stroke-opacity: .35; stroke-width: 1.5; }
-.world-floor__destination.is-record .world-floor__mini-object { fill: #b5a181; }
-.world-floor__destination.is-seat .world-floor__mini-object { fill: #6c8791; }
-.world-floor__destination.is-selected .world-floor__mini-object { fill: #efd0a0; stroke: #efd0a0; stroke-opacity: 1; }
-.world-floor--compact .world-floor__destination { pointer-events: none; }
+.world-floor__mini-object { fill:var(--world-control-accent); stroke:var(--world-control-accent); stroke-opacity: .35; stroke-width: 1.5; }
+.world-floor__destination.is-record .world-floor__mini-object { fill:var(--world-control-accent); stroke:var(--world-control-accent); }
+.world-floor__destination.is-seat .world-floor__mini-object { fill:var(--world-control-accent); stroke:var(--world-control-accent); }
+.world-floor__destination.is-selected .world-floor__mini-object { fill:var(--world-control-accent); stroke:var(--world-control-accent); stroke-opacity: 1; }
+.world-floor--compact .world-floor__destination { pointer-events: none; color:var(--world-control-accent); }
 .world-floor--compact .world-floor__wall { stroke-width: 4; }
 .world-floor--compact .world-floor__gallery, .world-floor--compact .world-floor__hub { display: none; }
 @media (max-width: 600px) {
@@ -261,4 +261,5 @@ onBeforeUnmount(() => observer?.disconnect())
 @media (prefers-reduced-motion: reduce) {
   .world-floor__tile, .world-floor__hit-area { transition: none; }
 }
+.world-floor__destination :is(.world-floor__tile-label, .world-floor__label, .world-floor__seat-label) { fill:var(--world-control-accent); }
 </style>

@@ -1,5 +1,5 @@
 <template>
-  <section class="music-world" :class="{'music-world--inspecting':selectedRecord,'music-world--seated':status.seated}" :inert="suspended" aria-label="声境 3D 音乐馆" @keydown="handleWorldKey">
+  <section class="music-world" :class="{'music-world--inspecting':selectedRecord,'music-world--seated':status.seated}" :style="worldControlStyle" :inert="suspended" aria-label="声境 3D 音乐馆" @keydown="handleWorldKey">
     <canvas ref="canvas" :key="canvasKey" class="music-world__canvas" :inert="!ready || failed" :aria-hidden="!ready || failed" tabindex="0" aria-label="3D 音乐馆。WASD 行走，空格跳跃，V 切换视角，拖动环顾，E 互动，Home 返回中庭。" @pointerdown="exploring=true" />
     <output v-if="status.performance" style="position:absolute;bottom:24px;right:24px;z-index:4;padding:8px 12px;border-radius:8px;background:#10232ddd;color:#bad4d1;font:11px monospace;pointer-events:none" aria-label="渲染性能" :data-metrics="JSON.stringify(status.performance)">{{ status.performance.fps }} FPS · P95 {{ status.performance.frameP95 }} ms · CPU {{ status.performance.cpuP95 }} ms · {{ status.performance.quality }} · {{ status.performance.width }} × {{ status.performance.height }}</output>
     <div v-if="ready&&!suspended&&!routeOpen&&!panel&&!commentOpen&&!selectedRecord&&!listeningPanel&&!songSearchOpen" class="world-avatar-controls" @keydown.stop>
@@ -97,6 +97,7 @@ import { readStorage, writeStorage, readJsonStorage, writeJsonStorage } from '..
 import { DANMAKU_OPACITY_KEY, normalizeDanmakuOpacity } from './music-world/danmakuSettings.js'
 import { useListeningLobby } from './music-world/useListeningLobby.js'
 import { WORLD_LOBBY_DISPLAY } from './music-world/worldNavigation.js'
+import { worldControlStyle } from './music-world/worldControlTheme.js'
 
 const player=usePlayerStore(),data=useWorldLibrary(),router=useRouter(),route=useRoute()
 const environment=useEnvironmentStore()

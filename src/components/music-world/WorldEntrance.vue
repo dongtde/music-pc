@@ -8,7 +8,7 @@
       v-show="!ready || failed"
       class="world-entrance"
       :class="[`world-entrance--${theme.id}`, { 'is-ready': ready && !failed, 'is-failed': failed, 'is-paused': paused }]"
-      :style="{ '--entrance-progress': percentage / 100 }"
+      :style="{ ...worldControlStyle, '--entrance-progress': percentage / 100 }"
       @keydown.stop
     >
       <div class="world-entrance__veil" aria-hidden="true" />
@@ -83,6 +83,7 @@
 <script setup>
 import { computed } from 'vue'
 import { getWorldScene } from './worldScenes.js'
+import { worldControlStyle } from './worldControlTheme.js'
 
 const props = defineProps({
   ready: Boolean,
@@ -314,10 +315,10 @@ const statusText = computed(() => {
 .world-entrance__recovery { position: absolute; bottom: 60px; left: 50%; width: min(340px, calc(100% - 40px)); transform: translateX(-50%); }
 .world-entrance__recovery p { margin: 0 0 16px; color: var(--entrance-muted); text-align: center; font-size: 11px; line-height: 1.8; }
 .world-entrance__recovery > div { display: flex; justify-content: center; gap: 12px; }
-.world-entrance__recovery button { padding: 10px 16px; border: 1px solid rgb(var(--entrance-trim) / .4); border-radius: 3px; background: rgb(var(--entrance-accent) / .06); color: var(--entrance-paper); font-size: 12px; }
-.world-entrance__recovery button:hover { background: rgb(var(--entrance-accent) / .16); }
-.world-entrance__recovery button:focus-visible { outline: 2px solid var(--entrance-paper); outline-offset: 4px; }
-.world-entrance__recovery button span { margin-left: 10px; color: var(--entrance-light); }
+.world-entrance__recovery button { padding: 10px 16px; border:1px solid var(--world-control-border); border-radius: 3px; background:var(--world-control-surface); color:var(--world-control-accent); font-size: 12px; }
+.world-entrance__recovery button:hover { background:var(--world-control-hover); border-color:var(--world-control-border-hover); }
+.world-entrance__recovery button:focus-visible { outline:2px solid var(--world-control-accent); outline-offset: 4px; }
+.world-entrance__recovery button span { margin-left: 10px; color:inherit; }
 .is-failed .world-entrance__status { color: var(--entrance-paper); }
 .is-failed .world-entrance__wave-bar,
 .is-ready .world-entrance__wave-bar,

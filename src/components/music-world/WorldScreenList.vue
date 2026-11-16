@@ -67,7 +67,8 @@ function draw(now = performance.now()) {
   list.draw({
     items: props.items,
     area: { x: 0, y: 0, width: width * SCALE, height: height * SCALE, rowHeight: FEED_LAYOUT.rowHeight },
-    scroll: el.scrollTop / ROW_HEIGHT, playback: props.playback, accent: '#d6dbaa', songsOnly: true, action: 'enqueue', now,
+    scroll: el.scrollTop / ROW_HEIGHT, playback: props.playback, songsOnly: true, action: 'enqueue', now,
+    fontSizes: { title: 30, metadata: 24, time: 24 },
   })
   if (list.getState().animating && !document.hidden) schedule()
 }
@@ -115,7 +116,7 @@ onBeforeUnmount(() => { disposed = true; cancelAnimationFrame(frame); observer?.
 .world-screen-list li { position: relative; }
 .world-screen-list button { position: absolute; display: block; padding: 0; border: 0; border-radius: 6px; background: transparent; cursor: pointer; }
 .world-screen-list button:hover { background: transparent; }
-.world-screen-list button:focus-visible { outline: 2px solid #d6dbaa; outline-offset: -2px; }
+.world-screen-list button:focus-visible { outline: 2px solid var(--world-control-accent); outline-offset: -2px; }
 .world-screen-list button:disabled { cursor: default; }
 .world-screen-list__row { inset: 2px 0; width: 100%; }
 .world-screen-list__cover { z-index: 1; top: 10px; left: 8px; width: 42.667px; height: 42.667px; }
