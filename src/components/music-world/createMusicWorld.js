@@ -83,7 +83,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   function syncSongSearchScreen() {
     if (!songSearchScreen) return
     const rect = canvas.getBoundingClientRect(), parent = canvas.parentElement.getBoundingClientRect()
-    const placement = projectListeningScreen(songSearchScreen.mesh, viewCamera, { width: rect.width, height: rect.height, left: rect.left - parent.left, top: rect.top - parent.top })
+    const placement = projectListeningScreen(songSearchScreen.mesh, viewCamera, { width: rect.width, height: rect.height, left: rect.left - parent.left, top: rect.top - parent.top, occluders: [terminal?.mesh] })
     if ((placement?.transform || '') !== songSearchTransform) { songSearchTransform = placement?.transform || ''; onSongSearchScreen?.(placement) }
   }
   function setSongSearchOpen(value) {
@@ -94,7 +94,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   function syncMvScreen() {
     if (!mvScreen) return
     const rect = canvas.getBoundingClientRect(), parent = canvas.parentElement.getBoundingClientRect()
-    const placement = projectListeningScreen(mvScreen.mesh, viewCamera, { width: rect.width, height: rect.height, left: rect.left - parent.left, top: rect.top - parent.top })
+    const placement = projectListeningScreen(mvScreen.mesh, viewCamera, { width: rect.width, height: rect.height, left: rect.left - parent.left, top: rect.top - parent.top, occluders: [terminal?.mesh] })
     if ((placement?.transform || '') !== mvTransform) { mvTransform = placement?.transform || ''; onMvScreen?.(placement) }
   }
   function setMvOpen(value) {

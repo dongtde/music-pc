@@ -1,4 +1,4 @@
-import { Matrix4, Vector3, Vector4 } from 'three'
+import { Matrix4, Raycaster, Vector3, Vector4 } from 'three'
 
 export const SCREEN_INPUT_SIZE = 512
 
@@ -7,7 +7,9 @@ export const SCREEN_INPUT_SIZE = 512
 export function createScreenProjection() {
   const local = new Matrix4(), clip = new Matrix4(), point = new Vector4()
   const position = new Vector3(), normal = new Vector3(), eye = new Vector3()
-  return (mesh, camera, { width, height, left = 0, top = 0 }) => {
+  const occlusionRay = new Raycaster(), origin = new Vector3(), target = new Vector3(), direction = new Vector3()
+  const intersections = []
+  return (mesh, camera, { width, height, left = 0, top = 0, occluders = [] }) => {
     if (!mesh || width <= 0 || height <= 0) return null
     for (let parent = mesh; parent; parent = parent.parent) if (!parent.visible) return null
     mesh.updateWorldMatrix(true, false)
@@ -31,6 +33,25 @@ export function createScreenProjection() {
       corners.push({ x: point.x / point.w, y: point.y / point.w })
     }
     if (corners.every(p => p.x < -1) || corners.every(p => p.x > 1) || corners.every(p => p.y < -1) || corners.every(p => p.y > 1)) return null
+    // DOM overlays cannot participate in WebGL depth testing. Hide a surface
+    // when a foreground display covers its center or any of its sampled edges.
+    origin.setFromMatrixPosition(camera.matrixWorld)
+    for (const occluder of occluders) {
+      if (!occluder || occluder === mesh) continue
+      let visible = true
+      for (let parent = occluder; parent; parent = parent.parent) if (!parent.visible) visible = false
+      if (!visible) continue
+      occluder.updateWorldMatrix(true, false)
+      for (const x of [-.49, 0, .49]) for (const y of [-.49, 0, .49]) {
+        target.set(x * planeWidth, y * planeHeight, 0).applyMatrix4(mesh.matrixWorld)
+        direction.subVectors(target, origin)
+        occlusionRay.far = direction.length() - .01
+        occlusionRay.set(origin, direction.normalize())
+        intersections.length = 0
+        occlusionRay.intersectObject(occluder, false, intersections)
+        if (intersections.length) return null
+      }
+    }
     const e = clip.elements, sx = width / 2, sy = height / 2, divisor = e[15]
     const x = i => (sx * e[i] + (sx + left) * e[i + 3]) / divisor
     const y = i => (-sy * e[i + 1] + (sy + top) * e[i + 3]) / divisor
