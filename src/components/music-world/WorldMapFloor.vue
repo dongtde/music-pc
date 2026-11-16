@@ -110,7 +110,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, useId } from 'vue'
-import { AudioLines, Disc3, ListMusic, MicVocal, Search, SlidersHorizontal, Sparkles, Trophy, UsersRound } from 'lucide-vue-next'
+import { AudioLines, Clapperboard, Disc3, ListMusic, MicVocal, Search, SlidersHorizontal, Sparkles, Trophy, UsersRound } from 'lucide-vue-next'
 import { WORLD_MAP_DESTINATIONS, WORLD_LOBBY_DISPLAY } from './worldNavigation.js'
 
 const props = defineProps({
@@ -148,6 +148,7 @@ const playerTransform = computed(() => {
 })
 
 function iconFor(place) {
+  if (place.kind === 'video') return Clapperboard
   if (place.id === 'lobby') return UsersRound
   if (place.kind === 'search') return Search
   if (place.kind === 'record') return Disc3

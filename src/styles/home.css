@@ -1028,6 +1028,22 @@
   transform: translate(-50%, -50%) scale(1.05);
 }
 
+.soda-mv-stage__error {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 16px;
+  padding: 24px;
+  background: #08121ce8;
+  font-size: 18px;
+  text-align: center;
+}
+.soda-mv-stage__error p { margin: 0; }
+.soda-mv-stage__error button { padding: 10px 24px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font: inherit; cursor: pointer; }
+
 .soda-mv-caption {
   position: absolute;
   bottom: 106px;

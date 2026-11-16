@@ -1,22 +1,30 @@
 <template>
   <section
-    v-show="active"
+    v-show="active || preview"
     class="soda-video-feed"
+    :class="{ 'soda-video-feed--embedded': embedded, 'soda-video-feed--preview': preview && !active }"
     aria-label="沉浸式视频 MV"
-    :aria-hidden="!active"
+    :aria-hidden="!active && !(embedded && preview)"
+    :inert="(!active && !(embedded && preview)) || (!embedded && homeMvCommentsModalVisible)"
+    @pointerdown.capture="activatePreview"
+    @wheel.capture="activatePreview"
+    @keydown.capture="activatePreview"
   >
     <div
       ref="mvScroller"
       class="soda-video-feed__scroller"
+      :inert="embedded && homeMvCommentsModalVisible"
       :class="{ 'soda-video-feed__scroller--dragging': mvDragging }"
       tabindex="0"
       @scroll="handleMvScroll"
+      @wheel.passive="enableMvAutoPlay"
       @keydown="handleMvKeydown"
       @pointerdown="startMvDrag"
       @pointermove="handleMvPointerMove"
       @pointerup="stopMvDrag"
       @pointerleave="stopMvDrag"
       @pointercancel="stopMvDrag"
+      @click.capture="suppressMvDragClick"
     >
       <article
         v-for="(mv, index) in mvQueue"
@@ -29,7 +37,7 @@
         :aria-label="`${mv.title} - ${mv.artist}`"
       >
         <template v-if="isMvSlideHydrated(index)">
-          <div class="soda-mv-slide__backdrop" aria-hidden="true">
+          <div v-if="!embedded" class="soda-mv-slide__backdrop" aria-hidden="true">
             <img
               v-if="mv.coverUrl"
               :src="mv.coverUrl"
@@ -42,21 +50,24 @@
           </div>
 
           <div class="soda-mv-stage">
+            <MvMediaFrame :enabled="embedded" :backdrop="embedded ? undefined : mv.coverUrl">
             <video
-              v-if="index === activeMvIndex && getHomeMvVideoUrl(mv)"
+              v-if="(index === activeMvIndex || (embedded && Math.abs(index - activeMvIndex) <= 1)) && getHomeMvVideoUrl(mv)"
               :key="`${mv.id}-${getHomeMvVideoUrl(mv)}`"
               :ref="(element) => setHomeVideoElement(element, index)"
               class="soda-mv-stage__video"
               :src="getHomeMvVideoUrl(mv)"
-              :poster="mv.coverUrl"
+              :poster="embedded ? undefined : mv.coverUrl"
               playsinline
-              preload="metadata"
-              @loadedmetadata="handleHomeMvMetadata"
-              @timeupdate="handleHomeMvTimeUpdate"
-              @play="handleHomeMvPlay"
-              @pause="handleHomeMvPause"
-              @ended="goNextMvFromGesture"
-              @error="handleHomeMvError"
+              :crossorigin="embedded ? 'anonymous' : undefined"
+              :muted="index !== activeMvIndex || homeMvMuted"
+              :preload="embedded && index >= activeMvIndex ? 'auto' : 'metadata'"
+              @loadedmetadata="index === activeMvIndex && handleHomeMvMetadata($event)"
+              @timeupdate="index === activeMvIndex && handleHomeMvTimeUpdate($event)"
+              @play="index === activeMvIndex && handleHomeMvPlay($event)"
+              @pause="index === activeMvIndex && handleHomeMvPause()"
+              @ended="index === activeMvIndex && goNextMvFromGesture()"
+              @error="index === activeMvIndex && handleHomeMvError()"
               @click="toggleHomeMvPlayback(index)"
             />
             <button
@@ -66,7 +77,7 @@
               :disabled="mvQueueLoading || isActiveMvLoading(mv)"
               @click.stop="playMvFromGesture(index)"
             >
-              <img v-if="mv.coverUrl" :src="mv.coverUrl" :alt="mv.title" />
+              <img v-if="!embedded && mv.coverUrl" :src="mv.coverUrl" :alt="mv.title" />
               <span>
                 <Loader2 v-if="isActiveMvLoading(mv)" class="soda-spin" :size="34" />
                 <Play v-else :size="38" fill="currentColor" />
@@ -74,8 +85,9 @@
               <small v-if="index === activeMvIndex && homeMvState.error">{{ homeMvState.error }}</small>
               <small v-else>{{ isActiveMvLoading(mv) ? '正在获取播放地址' : '点击播放 MV' }}</small>
             </button>
+            </MvMediaFrame>
             <button
-              v-if="index === activeMvIndex && getHomeMvVideoUrl(mv) && !homeMvState.isPlaying"
+              v-if="index === activeMvIndex && getHomeMvVideoUrl(mv) && !homeMvState.isPlaying && !homeMvState.error"
               class="soda-mv-stage__play"
               type="button"
               :disabled="isActiveMvLoading(mv)"
@@ -84,16 +96,25 @@
             >
               <Play :size="42" fill="currentColor" />
             </button>
+            <div v-if="index === activeMvIndex && getHomeMvVideoUrl(mv) && homeMvState.error" class="soda-mv-stage__error" role="status">
+              <p>{{ homeMvState.error }}</p>
+              <button type="button" @click.stop="retryHomeMvPlayback">重新播放</button>
+            </div>
           </div>
 
-          <section class="soda-mv-caption">
+          <section v-if="embedded" class="soda-mv-caption">
+            <p class="soda-mv-creator">@{{ mv.artist }}</p>
+            <h1>{{ mv.title }}</h1>
+            <p class="soda-mv-soundtrack"><span>{{ mv.artist }} · {{ mv.title }}</span></p>
+          </section>
+          <section v-else class="soda-mv-caption">
             <h1>{{ mv.title }}</h1>
             <p>{{ mv.artist }}<span v-if="mv.playCount"> · {{ mv.playCount }} 播放</span></p>
             <small v-if="mv.desc">{{ mv.desc }}</small>
           </section>
 
           <DanmakuLayer
-            v-if="index === activeMvIndex"
+            v-if="index === activeMvIndex && !embedded"
             :key="`home-mv-danmaku-${mv.id}`"
             class="soda-mv-slide__danmaku"
             :enabled="homeMvDanmakuEnabled"
@@ -107,7 +128,13 @@
             @need-more="loadMoreHomeMvDanmaku"
           />
 
-          <aside class="soda-action-rail soda-mv-action-rail" aria-label="MV 操作">
+          <aside v-if="embedded" class="soda-action-rail soda-mv-action-rail" aria-label="MV 操作">
+            <button type="button" :aria-label="`${isHomeMvLiked(mv) ? '取消喜欢' : '喜欢'} ${mv.title}`" :aria-pressed="isHomeMvLiked(mv)" @click.stop="toggleHomeMvLike(mv)"><Heart :size="32" :fill="isHomeMvLiked(mv) ? 'currentColor' : 'none'" /><span>{{ isHomeMvLiked(mv) ? '已喜欢' : '喜欢' }}</span></button>
+            <button type="button" :aria-label="`评论 ${mv.title} ${getHomeMvCommentLabel(mv)}`" @click.stop="openHomeMvComments(mv)"><MessageCircleMore :size="32" /><span>{{ getHomeMvCommentLabel(mv) }}</span></button>
+            <button type="button" :aria-label="`投屏 ${mv.title}`" :disabled="index !== activeMvIndex || !homeMvState.isReady || Boolean(homeMvState.error)" @click.stop="castMv(mv)"><Cast :size="32" /><span>投屏</span></button>
+            <button class="soda-mv-disc" :class="{ 'is-playing': index === activeMvIndex && homeMvState.isPlaying }" type="button" :aria-label="index === activeMvIndex && homeMvState.isPlaying ? '暂停 MV' : '播放 MV'" @click.stop="toggleHomeMvPlayback(index)"><span :style="mv.coverUrl ? { backgroundImage: `url(${JSON.stringify(mv.coverUrl)})` } : undefined"><Music2 :size="20" /></span></button>
+          </aside>
+          <aside v-else class="soda-action-rail soda-mv-action-rail" aria-label="MV 操作">
             <button
               type="button"
               :aria-label="`${isHomeMvLiked(mv) ? '取消喜欢' : '喜欢'} ${getHomeMvLikeLabel(mv)}`"
@@ -147,6 +174,7 @@
           </aside>
 
           <footer class="soda-mv-slide__footer">
+            <button v-if="embedded && mvFeedError" class="soda-mv-retry" type="button" @click.stop="loadHomeMvs({ append: true })">重试加载</button>
             <div
               class="soda-slide__progress soda-mv-progress"
               role="slider"
@@ -171,11 +199,22 @@
         <Loader2 class="soda-spin" :size="34" />
         <span>正在加载 MV</span>
       </div>
+      <div v-else-if="!mvQueue.length" class="soda-video-empty" role="status">
+        <span>{{ mvFeedError || '暂时没有可播放的 MV' }}</span>
+        <button type="button" @click="loadHomeMvs({ force: true })">重新加载</button>
+      </div>
     </div>
+    <WorldMvComments
+      v-if="embedded && homeMvCommentsModalVisible"
+      :state="homeMvCommentState"
+      @close="homeMvCommentsModalVisible = false"
+      @load-more="loadMoreHomeMvComments"
+      @retry="retryHomeMvComments"
+    />
   </section>
 
   <CommentModal
-    v-if="homeMvCommentsModalMounted"
+    v-if="!embedded && homeMvCommentsModalMounted"
     v-model:show="homeMvCommentsModalVisible"
     title="MV 评论"
     :subtitle="homeMvCommentSubtitle"
@@ -186,32 +225,59 @@
     :error="homeMvCommentState.error"
     :has-more="homeMvCommentState.more"
     @load-more="loadMoreHomeMvComments"
+    @retry="retryHomeMvComments"
   />
 </template>
 
 <script setup>
-import { defineAsyncComponent, toRef } from 'vue'
-import { Heart, Loader2, MessageCircleMore, Play, Radio } from 'lucide-vue-next'
+import { defineAsyncComponent, nextTick, toRef, watch } from 'vue'
+import { Cast, Heart, Loader2, MessageCircleMore, Music2, Play, Radio } from 'lucide-vue-next'
 import DanmakuLayer from '../../components/DanmakuLayer.vue'
 import { useHomeVideoFeed } from './useHomeVideoFeed'
+import MvMediaFrame from '../../components/music-world/MvMediaFrame.vue'
+import WorldMvComments from '../../components/music-world/WorldMvComments.vue'
 
 const CommentModal = defineAsyncComponent(() => import('../../components/CommentModal.vue'))
 const props = defineProps({
+  embedded: Boolean,
+  preview: Boolean,
+  loadMvs: Function,
   active: {
     type: Boolean,
     default: false
   }
 })
+const emit = defineEmits(['cast', 'activate'])
+async function activatePreview(event) {
+  if (!props.embedded || !props.preview || props.active) return
+  if (event.type === 'keydown' && !['ArrowDown', 'ArrowUp', ' ', 'Enter'].includes(event.key)) return
+  if (event.type === 'wheel' && !event.deltaY) return
+  if (event.type === 'keydown' || event.type === 'wheel') { event.preventDefault(); event.stopPropagation() }
+  emit('activate')
+  if (event.type === 'wheel') {
+    await nextTick()
+    playMvFromGesture(activeMvIndex.value + Math.sign(event.deltaY))
+  } else if (event.type === 'keydown') {
+    await nextTick()
+    if (event.key === 'Enter') playMvFromGesture(activeMvIndex.value)
+    else handleMvKeydown(event)
+  }
+}
 const active = toRef(props, 'active')
 
 const {
+  homeVideoElement,
+  pauseHomeMv,
   mvScroller,
   mvDragging,
   mvQueue,
   mvQueueLoading,
+  mvFeedError,
+  loadHomeMvs,
   activeMvIndex,
   activeMvLoading,
   homeMvState,
+  homeMvMuted,
   homeMvDanmakuEnabled,
   homeMvDanmakuState,
   homeMvCommentState,
@@ -221,10 +287,12 @@ const {
   homeDanmakuMaxItems,
   homeDanmakuPrefetchThreshold,
   handleMvScroll,
+  enableMvAutoPlay,
   handleMvKeydown,
   startMvDrag,
   handleMvPointerMove,
   stopMvDrag,
+  suppressMvDragClick,
   isMvSlideHydrated,
   getHomeMvVideoUrl,
   setHomeVideoElement,
@@ -233,6 +301,7 @@ const {
   handleHomeMvPlay,
   handleHomeMvPause,
   handleHomeMvError,
+  retryHomeMvPlayback,
   goNextMvFromGesture,
   toggleHomeMvPlayback,
   playMvFromGesture,
@@ -250,6 +319,15 @@ const {
   getHomeMvCurrentTimeLabel,
   getHomeMvProgress,
   getHomeMvDurationLabel,
-  loadMoreHomeMvComments
-} = useHomeVideoFeed({ active })
+  loadMoreHomeMvComments,
+  retryHomeMvComments
+} = useHomeVideoFeed({ active, loadMvs: props.loadMvs, autoplay: props.embedded, ...(props.embedded ? { fallback: [] } : {}) })
+function castMv(mv) {
+  const video = homeVideoElement.value
+  if (!video || !homeMvState.isReady) return
+  const payload = { url: video.currentSrc || video.src, title: mv.title, artist: mv.artist, currentTime: video.currentTime, volume: video.volume }
+  pauseHomeMv()
+  emit('cast', payload)
+}
+watch(() => props.preview, preview => { if (preview) loadHomeMvs() }, { immediate: true })
 </script>

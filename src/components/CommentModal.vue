@@ -50,6 +50,7 @@
       </div>
       <div v-else-if="error" class="comment-modal__state comment-modal__state--error">
         {{ error }}
+        <button v-if="retryable" class="comment-modal__retry" type="button" @click="$emit('retry')">重新加载</button>
       </div>
 
       <template v-else>
@@ -187,6 +188,7 @@ const props = defineProps({
     type: String,
     default: ''
   },
+  retryable: Boolean,
   hasMore: {
     type: Boolean,
     default: false
@@ -217,7 +219,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:show', 'load-more'])
+const emit = defineEmits(['update:show', 'load-more', 'retry'])
 
 const modalVisible = computed({
   get: () => props.show,

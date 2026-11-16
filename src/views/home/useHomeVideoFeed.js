@@ -36,13 +36,17 @@ import {
 } from './homeUtils'
 import { useHomeMvEngagement } from './useHomeMvEngagement'
 
-export function useHomeVideoFeed({ active }) {
+export function useHomeVideoFeed({ active, loadMvs = getVideoCenterData, fallback = fallbackMvs, autoplay = false }) {
   const player = usePlayerStore()
   const mvScroller = ref(null)
   const homeVideoElement = ref(null)
   const activeMvIndex = ref(0)
-  const mvAutoPlayAfterGesture = ref(false)
-  const mvQueue = shallowRef(prepareMvQueue(fallbackMvs))
+  const mvAutoPlayAfterGesture = ref(autoplay)
+  const mvQueue = shallowRef(prepareMvQueue(fallback))
+  const mvFeedError = ref('')
+  const homeMvMuted = ref(false)
+  let mvFeedMore = false, mvFeedPage = 0
+  let mvEmptyPageCount = 0
   const mvQueueLoading = ref(false)
   const activeMvLoading = ref(false)
   const mvDragging = ref(false)
@@ -58,6 +62,7 @@ export function useHomeVideoFeed({ active }) {
     startIndex: 0,
     startY: 0,
     startScrollTop: 0,
+    scale: 1,
     moved: false
   }
   const mvPlaybackCache = createLruCache(24)
@@ -68,6 +73,7 @@ export function useHomeVideoFeed({ active }) {
   let mvQueueLoaded = false
   let mvSnapRequestId = 0
   let videoFeedEffectsBound = false
+  let disposed = false
 
   const activeMv = computed(() => mvQueue.value[activeMvIndex.value])
   const activeMvId = computed(() => String(activeMv.value?.id ?? ''))
@@ -86,12 +92,23 @@ export function useHomeVideoFeed({ active }) {
     if (enabled) {
       bindVideoFeedEffects()
       await loadHomeMvs()
-      await snapMvToActiveIndex('auto')
-      loadActiveMvPlayback(activeMv.value?.id)
+      if (!active.value || disposed) return
+      loadMoreMvsIfNeeded()
+      // Embedded preview already has its scroll position; keep the activating swipe intact.
+      if (!autoplay) await snapMvToActiveIndex('auto')
+      loadActiveMvPlayback(activeMv.value?.id, { autoplay: mvAutoPlayAfterGesture.value })
       return
     }
 
     unbindVideoFeedEffects()
+  })
+
+  watch(() => player.state.isPlaying, playing => { if (playing) pauseHomeMv() })
+  watch(engagement.homeMvCommentsModalVisible, visible => {
+    if (!visible) return
+    mvPlaybackRequestId += 1
+    window.clearTimeout(mvAutoPlayTimer)
+    pauseHomeMv()
   })
 
   watch(
@@ -106,6 +123,7 @@ export function useHomeVideoFeed({ active }) {
       engagement.restoreHomeMvComments(id)
       engagement.resetHomeMvDanmakuStream(id)
       loadActiveMvPlayback(id, { autoplay: mvAutoPlayAfterGesture.value })
+      loadMoreMvsIfNeeded()
     }
   )
 
@@ -115,6 +133,17 @@ export function useHomeVideoFeed({ active }) {
       activateVideoFeed()
     }
   })
+
+  watch([active, activeMvId, () => mvQueue.value.length], async ([enabled], _, onCleanup) => {
+    if ((!enabled && activeMv.value?.source !== 'world-mv-feed') || disposed) return
+    let cancelled = false
+    onCleanup(() => { cancelled = true })
+    await engagement.prefetchHomeMvComments()
+    if (cancelled || disposed) return
+    const index = activeMvIndex.value
+    // Warm the next two songs while the current video is playing or previewing.
+    await Promise.all(mvQueue.value.slice(index + 1, index + 3).map(mv => engagement.prefetchHomeMvComments(mv)))
+  }, { immediate: true })
 
   onActivated(() => {
     if (active.value) {
@@ -128,6 +157,7 @@ export function useHomeVideoFeed({ active }) {
   })
 
   onUnmounted(() => {
+    disposed = true
     mvSnapRequestId += 1
     window.cancelAnimationFrame(mvScrollFrame)
     window.clearTimeout(mvAutoPlayTimer)
@@ -141,9 +171,21 @@ export function useHomeVideoFeed({ active }) {
 
     videoFeedEffectsBound = true
     window.addEventListener('keydown', handleGlobalVideoKeydown)
+    document.addEventListener('visibilitychange', handleVideoVisibility)
   }
 
   function unbindVideoFeedEffects() {
+    mvPlaybackRequestId += 1
+    mvSnapRequestId += 1
+    window.clearTimeout(mvAutoPlayTimer)
+    activeMvLoading.value = false
+    engagement.homeMvCommentsModalVisible.value = false
+    if (mvDragState.pointerId !== null) {
+      if (mvScroller.value?.hasPointerCapture?.(mvDragState.pointerId)) mvScroller.value.releasePointerCapture(mvDragState.pointerId)
+      if (mvScroller.value) mvScroller.value.style.scrollSnapType = ''
+      mvDragState.pointerId = null
+      mvDragging.value = false
+    }
     if (!videoFeedEffectsBound) {
       pauseHomeMv()
       return
@@ -151,17 +193,29 @@ export function useHomeVideoFeed({ active }) {
 
     videoFeedEffectsBound = false
     window.removeEventListener('keydown', handleGlobalVideoKeydown)
+    document.removeEventListener('visibilitychange', handleVideoVisibility)
     pauseHomeMv()
+  }
+
+  function handleVideoVisibility() {
+    if (document.hidden) {
+      mvPlaybackRequestId += 1
+      window.clearTimeout(mvAutoPlayTimer)
+      activeMvLoading.value = false
+      pauseHomeMv()
+    }
   }
 
   async function activateVideoFeed() {
     await loadHomeMvs()
-    await snapMvToActiveIndex('auto')
-    loadActiveMvPlayback(activeMv.value?.id)
+    if (!active.value || disposed) return
+    loadMoreMvsIfNeeded()
+    if (!autoplay) await snapMvToActiveIndex('auto')
+    loadActiveMvPlayback(activeMv.value?.id, { autoplay: mvAutoPlayAfterGesture.value })
   }
 
   function handleGlobalVideoKeydown(event) {
-    if (!active.value || !isPlaybackSpaceKey(event) || shouldIgnorePlaybackShortcut(event)) {
+    if (!active.value || engagement.homeMvCommentsModalVisible.value || !isPlaybackSpaceKey(event) || shouldIgnorePlaybackShortcut(event)) {
       return
     }
 
@@ -169,26 +223,38 @@ export function useHomeVideoFeed({ active }) {
     toggleHomeMvPlayback(activeMvIndex.value)
   }
 
-  async function loadHomeMvs({ force = false } = {}) {
-    if ((mvQueueLoaded && !force) || mvQueueLoading.value) {
+  async function loadHomeMvs({ force = false, append = false } = {}) {
+    if ((mvQueueLoaded && !force && !append) || mvQueueLoading.value || disposed) {
       return
     }
 
     mvQueueLoading.value = true
+    mvFeedError.value = ''
     homeMvState.error = ''
 
     try {
-      const data = await getVideoCenterData({ limit: mvRecommendationLimit })
+      const data = await loadMvs({ limit: mvRecommendationLimit, page: append ? mvFeedPage : 0 })
+      if (disposed) return
       const mvs = uniqueMvs([
         data.active?.mv,
-        ...data.recommended,
-        ...data.first,
-        ...data.top,
-        ...data.exclusive,
-        ...data.all
+        ...(data.items || []),
+        ...(data.recommended || []),
+        ...(data.first || []),
+        ...(data.top || []),
+        ...(data.exclusive || []),
+        ...(data.all || [])
       ])
 
-      mvQueue.value = prepareMvQueue(mvs.length ? mvs : fallbackMvs)
+      if (!mvs.length && !append && !fallback.length) throw new Error('暂时没有可播放的 MV')
+      const previousLength = append ? mvQueue.value.length : 0
+      mvQueue.value = prepareMvQueue(uniqueMvs([...(append ? mvQueue.value : []), ...(mvs.length ? mvs : append ? [] : fallback)]))
+      mvFeedMore = Array.isArray(data.items) && Boolean(data.more)
+      mvEmptyPageCount = append && mvQueue.value.length === previousLength ? mvEmptyPageCount + 1 : 0
+      if (mvFeedMore && mvEmptyPageCount >= 3) {
+        mvFeedError.value = '暂时未获取到新 MV，点击重试'
+        mvEmptyPageCount = 0
+      }
+      mvFeedPage = data.nextPage ?? mvFeedPage + 1
       activeMvIndex.value = Math.min(activeMvIndex.value, Math.max(0, mvQueue.value.length - 1))
       mvQueueLoaded = true
 
@@ -197,17 +263,25 @@ export function useHomeVideoFeed({ active }) {
       }
     } catch (error) {
       console.warn('Failed to load home MV feed:', error)
-      homeMvState.error = error?.message || 'MV 加载失败'
-      mvQueue.value = prepareMvQueue(fallbackMvs)
+      mvFeedError.value = 'MV 加载失败，请稍后重试'
+      if (!append && !mvQueue.value.length) mvQueue.value = prepareMvQueue(fallback)
     } finally {
       mvQueueLoading.value = false
+      loadMoreMvsIfNeeded()
+    }
+  }
+
+  function loadMoreMvsIfNeeded() {
+    const canPrefetch = active.value || activeMv.value?.source === 'world-mv-feed'
+    if (canPrefetch && !disposed && mvFeedMore && !mvFeedError.value && !mvQueueLoading.value && activeMvIndex.value >= mvQueue.value.length - 2) {
+      void loadHomeMvs({ append: true })
     }
   }
 
   async function loadActiveMvPlayback(id, { autoplay = false } = {}) {
     const mvId = String(id ?? '')
 
-    if (!mvId) {
+    if (!mvId || !active.value || !videoFeedEffectsBound || disposed || document.hidden) {
       return
     }
 
@@ -230,14 +304,14 @@ export function useHomeVideoFeed({ active }) {
     try {
       const payload = await getHomeMvPlayback(mvId)
 
-      if (requestId !== mvPlaybackRequestId || mvId !== activeMvId.value) {
+      if (requestId !== mvPlaybackRequestId || mvId !== activeMvId.value || !active.value || disposed) {
         return
       }
 
       rememberHomeMvPayload(payload)
       await nextTick()
 
-      if (autoplay) {
+      if (autoplay && requestId === mvPlaybackRequestId) {
         await playCurrentHomeMv({ skipLoad: true })
       }
     } catch (error) {
@@ -254,6 +328,8 @@ export function useHomeVideoFeed({ active }) {
 
   function getHomeMvPlayback(id) {
     const mvId = String(id)
+    const queued = mvQueue.value.find(mv => String(mv.id) === mvId)
+    if (queued?.source === 'world-mv-feed' && queued.url) return Promise.resolve({ mv: queued })
 
     if (mvPlaybackCache.has(mvId)) {
       return Promise.resolve(mvPlaybackCache.get(mvId))
@@ -263,7 +339,7 @@ export function useHomeVideoFeed({ active }) {
       return mvPlaybackRequests.get(mvId)
     }
 
-    const request = getMvPlaybackData(mvId)
+    const request = getMvPlaybackData(mvId, 1080, {}, null, queued)
       .then((payload) => {
         mvPlaybackCache.set(mvId, payload)
         return payload
@@ -353,27 +429,25 @@ export function useHomeVideoFeed({ active }) {
 
   function startMvDrag(event) {
     const scroller = mvScroller.value
+    if (event.pointerType === 'touch') enableMvAutoPlay()
 
-    if (!scroller || event.button > 0 || shouldIgnoreMvDrag(event)) {
+    if (!scroller || event.pointerType === 'touch' || event.button > 0 || shouldIgnoreMvDrag(event)) {
       return
     }
 
     mvSnapRequestId += 1
-    mvDragging.value = true
     mvDragState.pointerId = event.pointerId
     mvDragState.startIndex = activeMvIndex.value
     mvDragState.startY = event.clientY
     mvDragState.startScrollTop = scroller.scrollTop
+    mvDragState.scale = scroller.clientHeight / Math.max(1, scroller.getBoundingClientRect().height)
     mvDragState.moved = false
-    scroller.style.scrollSnapType = 'none'
-    scroller.setPointerCapture?.(event.pointerId)
-    event.preventDefault()
   }
 
   function handleMvPointerMove(event) {
     const scroller = mvScroller.value
 
-    if (!scroller || !mvDragging.value || event.pointerId !== mvDragState.pointerId) {
+    if (!scroller || event.pointerId !== mvDragState.pointerId) {
       return
     }
 
@@ -384,19 +458,22 @@ export function useHomeVideoFeed({ active }) {
     }
 
     mvDragState.moved = true
+    mvDragging.value = true
+    scroller.style.scrollSnapType = 'none'
+    scroller.setPointerCapture?.(event.pointerId)
     event.preventDefault()
-    scroller.scrollTop = mvDragState.startScrollTop - deltaY
+    scroller.scrollTop = mvDragState.startScrollTop - deltaY * mvDragState.scale
   }
 
   function stopMvDrag(event) {
-    if (!mvDragging.value || event.pointerId !== mvDragState.pointerId) {
+    if (event.pointerId !== mvDragState.pointerId) {
       return
     }
 
     const scroller = mvScroller.value
     const shouldSnap = mvDragState.moved
 
-    scroller?.releasePointerCapture?.(event.pointerId)
+    if (scroller?.hasPointerCapture?.(event.pointerId)) scroller.releasePointerCapture(event.pointerId)
     if (scroller) {
       scroller.style.scrollSnapType = ''
     }
@@ -407,7 +484,10 @@ export function useHomeVideoFeed({ active }) {
       return
     }
 
-    const nextIndex = getMvIndexFromScroll()
+    const distance = (mvDragState.startY - event.clientY) * mvDragState.scale
+    const nextIndex = event.type !== 'pointercancel' && Math.abs(distance) >= Math.min(80, scroller.clientHeight * .18)
+      ? clampMvIndex(mvDragState.startIndex + Math.sign(distance))
+      : getMvIndexFromScroll()
     activeMvIndex.value = nextIndex
     scrollToMvIndex(nextIndex, 'smooth')
 
@@ -419,17 +499,34 @@ export function useHomeVideoFeed({ active }) {
 
   function shouldIgnoreMvDrag(event) {
     return Boolean(event.target?.closest?.(
-      '.soda-mv-stage, .soda-mv-action-rail, .soda-mv-progress, button, a, input, textarea, select'
+      '.soda-mv-action-rail, .soda-mv-progress, button:not(.soda-mv-poster):not(.soda-mv-stage__play), a, input, textarea, select'
     ))
   }
 
+  function suppressMvDragClick(event) {
+    if (!mvDragState.moved) return
+    event.preventDefault()
+    event.stopPropagation()
+    mvDragState.moved = false
+  }
+
+  function enableMvAutoPlay() {
+    if (active.value) mvAutoPlayAfterGesture.value = true
+  }
+
   function handleMvKeydown(event) {
+    if (isPlaybackSpaceKey(event) && !shouldIgnorePlaybackShortcut(event)) {
+      event.preventDefault()
+      event.stopPropagation()
+      toggleHomeMvPlayback(activeMvIndex.value)
+      return
+    }
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
       return
     }
 
     event.preventDefault()
-    scrollToMvIndex(activeMvIndex.value + (event.key === 'ArrowDown' ? 1 : -1), 'smooth')
+    playMvFromGesture(clampMvIndex(activeMvIndex.value + (event.key === 'ArrowDown' ? 1 : -1)))
   }
 
   function getMvIndexFromScroll() {
@@ -488,6 +585,8 @@ export function useHomeVideoFeed({ active }) {
   }
 
   async function playMvFromGesture(index) {
+    if (!active.value || disposed) return
+    index = clampMvIndex(index)
     mvAutoPlayAfterGesture.value = true
     const shouldScroll = index !== activeMvIndex.value
     activeMvIndex.value = index
@@ -535,7 +634,7 @@ export function useHomeVideoFeed({ active }) {
   async function playCurrentHomeMv({ skipLoad = false } = {}) {
     const mv = activeMv.value
 
-    if (!mv?.id) {
+    if (!mv?.id || !active.value || engagement.homeMvCommentsModalVisible.value || !videoFeedEffectsBound || disposed || document.hidden) {
       return false
     }
 
@@ -547,7 +646,7 @@ export function useHomeVideoFeed({ active }) {
     await nextTick()
     const video = homeVideoElement.value
 
-    if (!video || !getHomeMvVideoUrl(mv)) {
+    if (!video || !getHomeMvVideoUrl(mv) || !active.value || engagement.homeMvCommentsModalVisible.value || !videoFeedEffectsBound || disposed || document.hidden || mv !== activeMv.value) {
       return false
     }
 
@@ -555,11 +654,13 @@ export function useHomeVideoFeed({ active }) {
       if (player.state.isPlaying) {
         await player.togglePlay()
       }
-
+      if (!active.value || !videoFeedEffectsBound || disposed || document.hidden || video !== homeVideoElement.value) return false
       await video.play()
+      if (!active.value || !videoFeedEffectsBound || disposed || document.hidden || video !== homeVideoElement.value) { video.pause(); return false }
       homeMvState.error = ''
       return true
     } catch (error) {
+      if (!active.value || disposed || video !== homeVideoElement.value || error?.name === 'AbortError') return false
       console.warn('Failed to play home MV:', error)
       homeMvState.error = '浏览器阻止自动播放，请点击播放'
       return false
@@ -586,8 +687,11 @@ export function useHomeVideoFeed({ active }) {
   }
 
   function setHomeVideoElement(element, index) {
-    if (element && index === activeMvIndex.value) {
+    if (element && index === activeMvIndex.value && element !== homeVideoElement.value) {
       homeVideoElement.value = element
+      // A neighboring video may already have metadata before becoming active.
+      if (element.readyState >= 1) handleHomeMvMetadata({ target: element })
+      handleHomeMvTimeUpdate({ target: element })
     }
   }
 
@@ -605,7 +709,8 @@ export function useHomeVideoFeed({ active }) {
       : 0
   }
 
-  function handleHomeMvPlay() {
+  function handleHomeMvPlay(event) {
+    if (!active.value || !videoFeedEffectsBound || disposed || document.hidden) { event?.target?.pause(); return }
     homeMvState.isPlaying = true
     homeMvState.error = ''
 
@@ -621,6 +726,25 @@ export function useHomeVideoFeed({ active }) {
   function handleHomeMvError() {
     homeMvState.isPlaying = false
     homeMvState.error = '视频播放失败'
+  }
+
+  async function retryHomeMvPlayback() {
+    const id = activeMvId.value
+    if (!id || !active.value) return
+    pauseHomeMv()
+    if (activeMv.value?.source === 'world-mv-feed') {
+      mvAutoPlayAfterGesture.value = true
+      mvPlaybackCache.clear()
+      activeMvIndex.value = 0
+      await loadHomeMvs({ force: true })
+      await playMvFromGesture(activeMvIndex.value)
+      return
+    }
+    mvPlaybackCache.delete(id)
+    mvQueue.value = mvQueue.value.map(mv => String(mv.id) === id ? { ...mv, url: '' } : mv)
+    resetHomeMvState()
+    mvAutoPlayAfterGesture.value = true
+    await loadActiveMvPlayback(id, { autoplay: true })
   }
 
   function seekHomeMvFromProgress(event, mv) {
@@ -716,21 +840,29 @@ export function useHomeVideoFeed({ active }) {
   }
 
   return {
+    homeVideoElement,
+    pauseHomeMv,
     mvScroller,
+    snapMvToActiveIndex,
     mvDragging,
     mvQueue,
     mvQueueLoading,
+    mvFeedError,
+    loadHomeMvs,
     activeMvIndex,
     activeMvLoading,
     homeMvState,
+    homeMvMuted,
     homeMvCommentSubtitle,
     homeDanmakuMaxItems,
     homeDanmakuPrefetchThreshold,
     handleMvScroll,
+    enableMvAutoPlay,
     handleMvKeydown,
     startMvDrag,
     handleMvPointerMove,
     stopMvDrag,
+    suppressMvDragClick,
     isMvSlideHydrated,
     getHomeMvVideoUrl,
     setHomeVideoElement,
@@ -739,6 +871,7 @@ export function useHomeVideoFeed({ active }) {
     handleHomeMvPlay,
     handleHomeMvPause,
     handleHomeMvError,
+    retryHomeMvPlayback,
     goNextMvFromGesture,
     toggleHomeMvPlayback,
     playMvFromGesture,

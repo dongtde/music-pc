@@ -95,3 +95,9 @@
 .music-world :is(.world-avatar-controls button, .world-record-inspector__actions button, .world-panel__head>button, .world-search button, .world-tabs button, .world-record__like, .world-panel>footer button, .world-list-actions button, .world-empty button, .world-more, .world-comment-reader button):hover:not(:disabled) { background:var(--world-control-hover); color:var(--world-control-accent); border-color:var(--world-control-border-hover); }
 .music-world .world-record-inspector__actions .world-start-track:hover:not(:disabled) { background:var(--world-control-accent-hover); color:var(--world-control-on-accent); }
 .music-world .world-record-inspector__actions .world-start-track:active:not(:disabled) { background:var(--world-control-accent-pressed); }
+.world-mv-cast-controls { position: absolute; z-index: 12; left: 50%; bottom: 28px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; max-width: calc(100% - 32px); padding: 10px 14px; border: 1px solid #ffffff24; border-radius: 12px; background: #101419e8; color: #f4f5ef; font: 13px/1.4 'Segoe UI', 'Microsoft YaHei', sans-serif; }
+.world-mv-cast-controls > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.world-mv-cast-controls button { flex-shrink: 0; border: 0; border-radius: 6px; padding: 7px 10px; background: transparent; color: var(--world-control-accent); font: inherit; cursor: pointer; }
+.world-mv-cast-controls button:hover { background: #ffffff12; color: var(--world-control-accent-hover); }
+.world-mv-cast-controls button:focus-visible { outline: 2px solid var(--world-control-accent); outline-offset: 2px; }
+.world-mv-cast-controls button:disabled { opacity: .5; cursor: default; }

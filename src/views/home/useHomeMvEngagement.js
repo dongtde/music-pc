@@ -1,6 +1,7 @@
 import { reactive, ref, shallowRef } from 'vue'
 import { getMvCommentsData } from '../../services/netease'
 import { createLruCache } from '../../utils/lruCache'
+import { formatCompactCount } from '../../utils/number'
 import {
   HOME_DANMAKU_COMMENT_LIMIT as homeDanmakuCommentLimit
 } from './homeConstants'
@@ -17,6 +18,8 @@ export function useHomeMvEngagement({ activeMv, activeMvId }) {
   const homeMvCommentState = reactive(createCommentState())
   const homeMvDanmakuState = reactive(createCommentState())
   const mvCommentCache = createLruCache(24)
+  const mvCommentCounts = reactive(new Map())
+  const mvCommentRequests = new Map()
   let homeMvDanmakuRequestId = 0
 
   function cacheHomeMvComments(trackId, data) {
@@ -33,6 +36,9 @@ export function useHomeMvEngagement({ activeMv, activeMvId }) {
       more: Boolean(data.more),
       offset: data.comments?.length ?? 0
     })
+    mvCommentCounts.delete(id)
+    mvCommentCounts.set(id, data.total ?? 0)
+    if (mvCommentCounts.size > 100) mvCommentCounts.delete(mvCommentCounts.keys().next().value)
   }
 
   function restoreHomeMvComments(trackId) {
@@ -50,6 +56,8 @@ export function useHomeMvEngagement({ activeMv, activeMvId }) {
   function applyHomeMvComments(trackId, data) {
     Object.assign(homeMvCommentState, {
       trackId: String(trackId ?? ''),
+      loaded: true,
+      loading: mvCommentRequests.has(String(trackId ?? '')),
       error: '',
       hotComments: data.hotComments ?? [],
       comments: data.comments ?? [],
@@ -71,51 +79,72 @@ export function useHomeMvEngagement({ activeMv, activeMvId }) {
       restoreHomeMvComments(mv.id)
     }
 
-    if (!homeMvCommentState.comments.length && !homeMvCommentState.hotComments.length) {
+    if (!homeMvCommentState.loaded) {
       await loadHomeMvComments(mv.id, { reset: true })
     }
   }
 
-  async function loadHomeMvComments(trackId, { reset = false } = {}) {
+  function loadHomeMvComments(trackId, { reset = false, mv = activeMv.value } = {}) {
     const id = String(trackId ?? '')
-
-    if (!id || homeMvCommentState.loading) {
-      return
+    if (!id) return
+    if (mvCommentRequests.has(id)) {
+      if (homeMvCommentState.trackId === id) homeMvCommentState.loading = true
+      return mvCommentRequests.get(id)
     }
-
-    homeMvCommentState.loading = true
-    homeMvCommentState.error = ''
-
-    try {
+    const worldMv = String(mv?.id) === id && mv.source === 'world-mv-feed'
+    const resourceId = worldMv ? mv.commentId : id
+    const previous = homeMvCommentState.trackId === id
+      ? { ...homeMvCommentState }
+      : mvCommentCache.get(id) ?? createCommentState(id)
+    if (homeMvCommentState.trackId === id) {
+      homeMvCommentState.loading = true
+      homeMvCommentState.error = ''
+    }
+    const request = Promise.resolve().then(async () => {
+      if (!resourceId) throw new Error('这支视频暂无可用的歌曲评论')
       const data = await getMvCommentsData({
-        id,
+        id: resourceId,
         limit: homeDanmakuCommentLimit,
-        offset: reset ? 0 : homeMvCommentState.offset
+        offset: reset ? 0 : previous.offset
       })
       const nextData = {
-        hotComments: reset ? data.hotComments : homeMvCommentState.hotComments,
-        comments: reset ? data.comments : [...homeMvCommentState.comments, ...data.comments],
+        hotComments: reset ? data.hotComments : previous.hotComments,
+        comments: reset ? data.comments : [...previous.comments, ...data.comments],
         total: data.total,
-        more: data.more,
+        more: Boolean(data.more && data.comments.length),
         offset: reset
           ? data.comments.length
-          : homeMvCommentState.comments.length + data.comments.length
+          : previous.offset + data.comments.length
       }
 
       cacheHomeMvComments(id, nextData)
-      applyHomeMvComments(id, nextData)
-    } catch (error) {
+      if (String(homeMvCommentState.trackId) === id) applyHomeMvComments(id, nextData)
+    }).catch(error => {
       console.warn('Failed to load home MV comments:', error)
-      homeMvCommentState.error = error?.message || 'MV 评论加载失败'
-    } finally {
-      homeMvCommentState.loading = false
-    }
+      if (String(homeMvCommentState.trackId) === id) homeMvCommentState.error = worldMv ? '评论暂时加载失败，请重试' : error?.message || 'MV 评论加载失败'
+    }).finally(() => {
+      mvCommentRequests.delete(id)
+      if (String(homeMvCommentState.trackId) === id) homeMvCommentState.loading = false
+    })
+    mvCommentRequests.set(id, request)
+    return request
+  }
+
+  function prefetchHomeMvComments(mv = activeMv.value) {
+    if (!mv?.id || mv.source !== 'world-mv-feed') return
+    const id = String(mv.id)
+    if (id === String(activeMv.value?.id) && homeMvCommentState.trackId !== id) restoreHomeMvComments(id)
+    if (!mvCommentCache.has(id)) return loadHomeMvComments(id, { reset: true, mv })
   }
 
   function loadMoreHomeMvComments() {
     if (homeMvCommentState.more) {
-      loadHomeMvComments(homeMvCommentState.trackId || activeMv.value?.id)
+      return loadHomeMvComments(homeMvCommentState.trackId || activeMv.value?.id)
     }
+  }
+
+  function retryHomeMvComments() {
+    return loadHomeMvComments(homeMvCommentState.trackId || activeMv.value?.id, { reset: true })
   }
 
   function toggleHomeMvDanmaku() {
@@ -220,10 +249,14 @@ export function useHomeMvEngagement({ activeMv, activeMvId }) {
   }
 
   function getHomeMvCommentLabel(mv) {
-    if (String(mv?.id) === String(homeMvCommentState.trackId) && homeMvCommentState.total) {
-      return formatActionCount(homeMvCommentState.total)
+    if (String(mv?.id) === String(homeMvCommentState.trackId) && homeMvCommentState.loaded) {
+      if (mv?.source === 'world-mv-feed') return formatCompactCount(homeMvCommentState.total)
+      return formatActionCount(homeMvCommentState.total) || '0'
     }
-
+    if (mv?.source === 'world-mv-feed') {
+      const count = mvCommentCounts.get(String(mv.id))
+      return count == null ? '评论' : formatCompactCount(count)
+    }
     return formatActionCount(getHomeMvStats(mv).commentCount)
   }
 
@@ -237,7 +270,9 @@ export function useHomeMvEngagement({ activeMv, activeMvId }) {
     restoreHomeMvComments,
     applyHomeMvComments,
     openHomeMvComments,
+    prefetchHomeMvComments,
     loadMoreHomeMvComments,
+    retryHomeMvComments,
     toggleHomeMvDanmaku,
     resetHomeMvDanmakuStream,
     loadMoreHomeMvDanmaku,
@@ -252,6 +287,7 @@ function createCommentState(trackId = '') {
   return {
     trackId,
     loading: false,
+    loaded: false,
     error: '',
     hotComments: [],
     comments: [],
