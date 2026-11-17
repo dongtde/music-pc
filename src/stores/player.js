@@ -302,6 +302,14 @@ export function usePlayerStore() {
     return state.queueVersion
   }
 
+  function removeFromQueue(index, expectedVersion = state.queueVersion) {
+    if (expectedVersion !== state.queueVersion || !Number.isInteger(index) || index < 0 || index >= state.queue.length) return false
+    const tracks = state.queue.filter((_, trackIndex) => trackIndex !== index)
+    // Removing a queue entry leaves the current audio playing, just like clearing the queue.
+    // Room replacement commands validate the shared queue version on the server.
+    return routePlayback('queue', { tracks }, () => tracks.length ? setQueue(tracks, state.queueSource) : clearQueue())
+  }
+
   function clearQueue() {
     if (!state.queue.length && isSameQueueSource(state.queueSource, DEFAULT_QUEUE_SOURCE)) {
       persistQueueSnapshot()
@@ -577,6 +585,7 @@ export function usePlayerStore() {
     setQueue: (tracks, source) => routePlayback('append', { tracks }, () => setQueue(tracks, source)),
     appendToQueue: (tracks, source) => routePlayback('append', { tracks: Array.isArray(tracks) ? tracks : [tracks] }, () => appendToQueue(tracks, source)),
     clearQueue: () => routePlayback('clear', {}, clearQueue),
+    removeFromQueue,
     setPlayMode: mode => routePlayback('mode', { mode }, () => setPlayMode(mode)),
     getRelativeQueueTrack,
     shouldRestartCurrentTrackOnEnded,

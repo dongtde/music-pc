@@ -53,7 +53,7 @@ export function createScreenList(ctx, { images, invalidate = () => {} }) {
     if (hoveredKey) { hoveredKey = ''; invalidate() }
   }
 
-  function draw({ items, area, scroll = 0, playback = {}, accent = controls.accent, songsOnly = false, action = 'play', now = 0, revealAge = Infinity, audioLevels = null, fontSizes = {} }) {
+  function draw({ items, area, scroll = 0, playback = {}, accent = controls.accent, songsOnly = false, action = 'play', now = 0, revealAge = Infinity, audioLevels = null, fontSizes = {}, trailingAction = null }) {
     const { rowHeight } = area, first = Math.floor(scroll), count = Math.ceil(area.height / rowHeight) + 1
     const scale = rowHeight / 94, coverSize = Math.round(64 * scale)
     const inset = Math.max(10, 12 * scale), titleSize = fontSizes.title ?? Math.max(20, Math.round(24 * scale))
@@ -99,7 +99,8 @@ export function createScreenList(ctx, { images, invalidate = () => {} }) {
         ctx.restore()
       }
       const titleX = cover.x + coverSize + Math.max(12, 20 * scale)
-      const right = area.x + area.width - inset - 3
+      const actionWidth = trailingAction ? 44 : 0
+      const right = area.x + area.width - inset - 3 - actionWidth
       const timeWidth = song ? Math.max(60, timeSize * 4.2) : 28 * scale
       const textWidth = Math.max(20, right - timeWidth - 16 * scale - titleX)
       const metadata = item.artist || item.tag || item.description || item.desc || item.label || ''
@@ -112,6 +113,10 @@ export function createScreenList(ctx, { images, invalidate = () => {} }) {
       } else if (hovered) {
         ctx.save(); ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.lineCap = ctx.lineJoin = 'round'
         ctx.beginPath(); ctx.moveTo(right - 10, y + rowHeight / 2 - 7); ctx.lineTo(right - 3, y + rowHeight / 2); ctx.lineTo(right - 10, y + rowHeight / 2 + 7); ctx.stroke(); ctx.restore()
+      }
+      if (trailingAction && bounds.h && progress > .5) {
+        const button = { x: area.x + area.width - inset - 38, y: y + (rowHeight - 40) / 2, w: 38, h: 40 }
+        trailingAction({ ...row, button, hitArea: clipped(button, area), hovered: contains(button, pointer) })
       }
       ctx.restore()
     }

@@ -6,8 +6,9 @@ import { WORLD_SCENES } from './worldScenes.js'
 import { normalizeDanmakuOpacity } from './danmakuSettings.js'
 import { createScreenList } from './createScreenList.js'
 import { worldControls as controls } from './worldControlTheme.js'
+import { DEFAULT_LOUNGE_CLIMATE, LOUNGE_TIMES, LOUNGE_WEATHERS, formatLoungeTime } from './loungeClimate.js'
 
-export const TERMINAL_SLIDERS = ['progress','volume','danmaku-opacity']
+export const TERMINAL_SLIDERS = ['progress','volume','danmaku-opacity','climate-hour']
 export const TERMINAL_QUEUE = {x:28,y:143,width:392,height:480,rowHeight:72}
 export const TERMINAL_ACCOUNT = {x:1304,y:10,width:272,height:57}
 export const TERMINAL_MODES = [{value:'shuffle',label:'随机播放'},{value:'order',label:'顺序播放'},{value:'single',label:'单曲循环'},{value:'list',label:'列表循环'}]
@@ -22,8 +23,9 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
   let playback={},queue=[],queueVersion,queueReference,currentId='',scroll=0,menu=''
   let account={isLoggedIn:false,displayName:'点击登录',avatarUrl:''}
   let room={id:'',isHost:false,connected:false,count:0,capacity:10,status:''}
+  let settingsTab='space',viewMode='third',climate={...DEFAULT_LOUNGE_CLIMATE},climateSignature=''
   const images=createScreenImages(()=>{dirty=true;invalidate()},32)
-  const zone=(x,y,w,h,action,payload,label)=>zones.push({x,y,w,h,action,payload,label})
+  const zone=(x,y,w,h,action,payload,label,axis='x')=>zones.push({x,y,w,h,action,payload,label,axis})
   const changed=()=>{dirty=true;invalidate()}
   const queueList=createScreenList(ctx,{images,invalidate:changed})
   const maxScroll=()=>Math.max(0,queue.length-TERMINAL_QUEUE.height/TERMINAL_QUEUE.rowHeight)
@@ -46,7 +48,7 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
   }
   function slider(x,y,w,value,action,color=controls.accent){
     rounded(ctx,x,y,w,5,3,'#7296a345');rounded(ctx,x,y,Math.max(2,w*value),5,3,color)
-    rounded(ctx,x+w*value-6,y-4,13,13,7,controls.accent);zone(x,y-20,w,45,action,undefined,action==='volume'?'调节音量':action==='progress'?'调节进度':'调节弹幕不透明度')
+    rounded(ctx,x+w*value-6,y-4,13,13,7,controls.accent);zone(x,y-20,w,45,action,undefined,action==='volume'?'调节音量':action==='progress'?'调节进度':action==='climate-hour'?'调节场景时间':'调节弹幕不透明度')
   }
   function settingToggle(y,label,enabled,action){
     text(ctx,label,1154,y+26,21,ink.light)
@@ -58,7 +60,12 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
     text(ctx,'播放列表',36,116,25,ink.light)
     text(ctx,queue.length+' 首',352,116,18,ink.muted,70)
     const area=TERMINAL_QUEUE
-    queueList.draw({items:queue,area,scroll,playback:state,songsOnly:true,now,audioLevels})
+    queueList.draw({items:queue,area,scroll,playback:state,songsOnly:true,now,audioLevels,trailingAction:row=>{
+      const {button,hitArea,item,index,hovered}=row
+      rounded(ctx,button.x,button.y,button.w,button.h,7,hovered?controls.selected:controls.surface)
+      drawPlayerIcon(ctx,'trash',button.x+button.w/2,button.y+button.h/2,22,controls.accent)
+      if(hitArea.h)zone(hitArea.x,hitArea.y,hitArea.w,hitArea.h,'queue-remove',{index,id:item.id,version:queueVersion},'从播放列表移除 '+(item.name||'这首歌'))
+    }})
     if(!queue.length){
       text(ctx,'播放列表还是空的',57,292,23,ink.light)
       text(ctx,'去发现屏挑选一首音乐',57,329,18,ink.muted)
@@ -98,41 +105,84 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
   }
   function drawSettings(state){
     text(ctx,'空间设置',1154,116,25,ink.light)
-    text(ctx,sceneLoading?'正在切换场景…':'音乐场景',1154,156,18,ink.muted)
-    if(sceneId==='sky-lounge')button(1394,128,170,30,'天气与时间 ↗','climate',null,{size:17})
+    const tabs=[{id:'space',label:'空间'},{id:'time',label:'时间天气'},{id:'person',label:'人物'}]
+    tabs.forEach((tab,index)=>button(1154+index*140,134,130,38,tab.label,'terminal-settings-tab',tab.id,{selected:settingsTab===tab.id,size:19}))
+    if(settingsTab==='space')drawSpaceSettings(state)
+    else if(settingsTab==='time')drawTimeSettings()
+    else drawPersonSettings()
+    button(1154,586,195,40,'应用设置 ↗','settings',null,{size:19})
+    button(1365,586,199,40,'返回 2D ↗','environment','2d',{size:19})
+  }
+  function drawSpaceSettings(state){
+    text(ctx,sceneLoading?'正在切换场景…':'音乐场景',1154,204,18,ink.muted)
     WORLD_SCENES.forEach((place,index)=>{
-      const y=171+index*43,selected=sceneId===place.id
-      button(1154,y,410,37,place.name,'scene',place.id,{selected,size:20})
+      const x=1154+(index%2)*210,y=220+Math.floor(index/2)*48,selected=sceneId===place.id
+      button(x,y,200,40,place.name,'scene',place.id,{selected,size:19})
     })
-    text(ctx,'画质',1154,360,18,ink.muted)
-    QUALITIES.forEach((option,index)=>button(1154+index*140,378,130,40,option.label,'quality',option.id,{selected:quality===option.id,size:19}))
-    settingToggle(430,'舞台灯光',state.lightsEnabled!==false,'lights-toggle')
-    settingToggle(478,'弹幕',state.danmakuEnabled!==false,'danmaku-toggle')
-    text(ctx,'不透明度',1154,548,17,ink.muted)
+    text(ctx,'画质',1154,342,18,ink.muted)
+    QUALITIES.forEach((option,index)=>button(1154+index*140,358,130,40,option.label,'quality',option.id,{selected:quality===option.id,size:19}))
+    settingToggle(425,'舞台灯光',state.lightsEnabled!==false,'lights-toggle')
+    settingToggle(476,'弹幕',state.danmakuEnabled!==false,'danmaku-toggle')
+    text(ctx,'不透明度',1154,553,17,ink.muted)
     const opacity=normalizeDanmakuOpacity(state.danmakuOpacity)
-    slider(1250,540,247,opacity,'danmaku-opacity')
-    text(ctx,Math.round(opacity*100)+'%',1510,549,17,ink.light)
-    button(1154,575,195,46,'设置 ↗','settings',null,{size:20})
-    button(1365,575,199,46,'返回 2D ↗','environment','2d',{size:20})
+    slider(1250,545,247,opacity,'danmaku-opacity')
+    text(ctx,Math.round(opacity*100)+'%',1510,554,17,ink.light)
+  }
+  function drawTimeSettings(){
+    const date=new Date(),pad=value=>String(value).padStart(2,'0')
+    text(ctx,`${date.getFullYear()}年${date.getMonth()+1}月${date.getDate()}日  ${['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][date.getDay()]}`,1154,207,20,ink.light)
+    text(ctx,`${pad(date.getHours())}:${pad(date.getMinutes())}`,1154,254,36,controls.accent)
+    text(ctx,'本地时间',1290,251,18,ink.muted)
+    if(sceneId!=='sky-lounge'){
+      text(ctx,'场景时间与天气',1154,316,21,ink.light)
+      text(ctx,'切换到云端会所后，可调节昼夜与天气。',1154,354,18,ink.muted,410)
+      button(1154,382,410,44,sceneLoading?'正在切换场景…':'前往云端会所','scene','sky-lounge',{size:20})
+      return
+    }
+    const hour=climate.mode==='manual'?climate.hour:climate.currentHour??climate.hour
+    text(ctx,'场景时间',1154,296,18,ink.muted)
+    text(ctx,formatLoungeTime(hour),1478,296,21,controls.accent)
+    LOUNGE_TIMES.forEach((time,index)=>button(1154+index*105,312,95,36,time.label,'climate-change',{hour:time.hour,mode:'manual'},{selected:climate.mode==='manual'&&climate.hour===time.hour,size:18}))
+    slider(1164,374,390,THREE.MathUtils.clamp(hour/23.75,0,1),'climate-hour')
+    const modes=[{id:'manual',label:'手动调节'},{id:'local',label:'本地时间'},{id:'cycle',label:'昼夜流转'}]
+    modes.forEach((mode,index)=>button(1154+index*140,409,130,36,mode.label,'climate-change',{mode:mode.id,hour},{selected:climate.mode===mode.id,size:18}))
+    text(ctx,'窗外天气',1154,480,18,ink.muted)
+    LOUNGE_WEATHERS.forEach((weather,index)=>button(1154+(index%2)*210,494+Math.floor(index/2)*40,200,34,weather.label,'climate-change',{weather:weather.id},{selected:climate.weather===weather.id,size:18}))
+  }
+  function drawPersonSettings(){
+    text(ctx,'观看视角',1154,210,21,ink.light)
+    button(1154,230,200,44,'第一人称','view-mode','first',{selected:viewMode==='first'})
+    button(1364,230,200,44,'第三人称','view-mode','third',{selected:viewMode==='third'})
+    text(ctx,'也可按 V 快速切换',1154,305,18,ink.muted)
+    text(ctx,'当前角色',1154,364,21,ink.light)
+    rounded(ctx,1154,386,410,94,9,controls.selected)
+    drawPlayerIcon(ctx,'user',1187,433,32,controls.accent)
+    text(ctx,'Fantasy Queen',1221,427,24,ink.light,320)
+    text(ctx,'已选用',1221,457,18,controls.accent)
+    text(ctx,'当前有 1 个可用角色',1154,515,18,ink.muted)
   }
   function drawMenu(state){
     if(menu==='mode'){
-      rounded(ctx,484,295,276,229,10,'#213e4b');zone(484,295,276,229,'noop')
-      text(ctx,'播放顺序',503,325,17,ink.muted)
+      rounded(ctx,484,275,190,249,14,'#213e4b');zone(484,275,190,249,'noop')
+      text(ctx,'播放顺序',502,309,18,ink.muted)
       TERMINAL_MODES.forEach((mode,index)=>{
-        const y=339+index*43,selected=state.playMode===mode.value
-        rounded(ctx,494,y,256,39,5,selected?controls.selected:controls.surface)
-        drawPlayerIcon(ctx,mode.value,518,y+20,23,controls.accent)
-        text(ctx,mode.label,545,y+27,20,controls.accent)
-        if(selected)text(ctx,'✓',719,y+27,20,controls.accent)
-        zone(494,y,256,39,'play-mode',mode.value,mode.label)
+        const y=325+index*47,selected=state.playMode===mode.value
+        if(selected)rounded(ctx,494,y,170,43,9,controls.selected)
+        drawPlayerIcon(ctx,mode.value,516,y+21.5,21,selected?controls.accent:ink.muted)
+        text(ctx,mode.label,540,y+28,20,selected?controls.accent:ink.light,112,selected?500:400)
+        zone(494,y,170,43,'play-mode',mode.value,mode.label)
       })
     }else if(menu==='volume'){
       const volume=THREE.MathUtils.clamp(Number(state.volume)||0,0,1)
-      rounded(ctx,848,391,248,124,10,'#213e4b');zone(848,391,248,124,'noop')
-      text(ctx,'音量',869,426,20,ink.light);text(ctx,Math.round(volume*100)+'%',1022,426,18,ink.muted)
-      icon(volume?'volume':'muted',879,473,'mute',null,volume?'静音':'恢复音量',23)
-      slider(921,470,148,volume,'volume')
+      rounded(ctx,990,230,110,300,12,'#213e4b');zone(990,230,110,300,'noop')
+      centered('音量',1045,261,20,ink.light,90)
+      centered(Math.round(volume*100)+'%',1045,293,19,controls.accent,90)
+      const top=316,height=154,thumbY=top+height*(1-volume)
+      rounded(ctx,1042,top,6,height,3,'#7296a345')
+      if(volume>0)rounded(ctx,1042,thumbY,6,height*volume,3,controls.accent)
+      rounded(ctx,1038,thumbY-7,14,14,7,controls.accent)
+      zone(1025,top,40,height,'volume',undefined,'调节音量','y')
+      icon(volume?'volume':'muted',1045,502,'mute',null,volume?'静音':'恢复音量',23)
     }
   }
   function drawAccount(){
@@ -145,30 +195,25 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
     const area=TERMINAL_ACCOUNT
     zone(area.x,area.y,area.width,area.height,'account',null,account.isLoggedIn?'查看账号信息':'登录账号')
   }
-  function drawListening(){
-    if(room.id){
-      const label=room.connected?`一起听 · ${room.id} · ${room.count}/${room.capacity}`:'一起听 · 正在重新连接'
-      button(510,17,480,43,label,'station','lobby',{selected:true,size:19})
-      text(ctx,room.isHost?'你是房主':'共同控制',1008,46,17,ink.muted,130)
-    }else{
-      button(540,17,350,43,'一起听  ↗','station','lobby',{size:19})
-    }
-  }
   function draw(state,now=performance.now(),audioLevels=null){
     playback=state;queue=Array.isArray(state.queue)?state.queue:EMPTY_QUEUE
     const nextId=String(state.track?.id||'')
-    if(queueReference!==queue||queueVersion!==state.queueVersion){queueReference=queue;queueVersion=state.queueVersion;currentId=nextId;scroll=0;revealCurrent()}
+    if(queueReference!==queue||queueVersion!==state.queueVersion){
+      const reveal=queueVersion===undefined||currentId!==nextId
+      queueReference=queue;queueVersion=state.queueVersion;currentId=nextId
+      queueList.reset();if(reveal)revealCurrent();changed()
+    }
     else if(currentId!==nextId){currentId=nextId;revealCurrent()}
     scroll=THREE.MathUtils.clamp(scroll,0,maxScroll())
     const track=state.track||{},motion=!state.reducedMotion&&(state.loading||queueList.getState().animating)
     if(track.coverUrl!==previousCover){previousCover=track.coverUrl;dirty=true}
-    const next=[track.id,track.name,track.artist,state.playing,state.loading,state.loadingTrack?.id,(state.pendingKeys||[]).join(','),state.reducedMotion,Math.floor(state.currentTime*4),state.duration,state.volume,state.playMode,state.queueVersion,queue.length,state.danmakuEnabled,state.danmakuOpacity,state.lightsEnabled,sceneId,sceneLoading,quality,menu,scroll,motion?Math.floor(now/50):0].join('|')
+    const next=[track.id,track.name,track.artist,state.playing,state.loading,state.loadingTrack?.id,(state.pendingKeys||[]).join(','),state.reducedMotion,Math.floor(state.currentTime*4),state.duration,state.volume,state.playMode,state.queueVersion,queue.length,state.danmakuEnabled,state.danmakuOpacity,state.lightsEnabled,sceneId,sceneLoading,quality,menu,scroll,settingsTab,viewMode,climateSignature,settingsTab==='time'?Math.floor(Date.now()/60000):0,motion?Math.floor(now/50):0].join('|')
     if(!dirty&&(signature===next||now-lastDraw<40))return motion
     dirty=false;lastDraw=now;signature=next;zones=[]
     ctx.fillStyle='#0b202b';ctx.fillRect(0,0,WIDTH,HEIGHT)
     ctx.fillStyle='#102b36';ctx.fillRect(458,80,663,570)
     text(ctx,'澜音  /  控制终端',36,49,23,ink.light)
-    drawAccount();drawListening()
+    drawAccount()
     ctx.fillStyle='#9abcc82b';ctx.fillRect(28,76,1536,1);ctx.fillRect(456,96,1,530);ctx.fillRect(1120,96,1,530)
     drawQueue(state,now,audioLevels);drawPlayer(state,now);drawSettings(state);drawMenu(state)
     surface.refresh();return !state.reducedMotion&&(state.loading||queueList.getState().animating)
@@ -179,7 +224,8 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
     if(action)return zones.find(zone=>zone.action===action)
     const control=zones.findLast(zone=>{
       const padding=TERMINAL_SLIDERS.includes(zone.action)?8:0
-      return x>=zone.x-padding&&x<=zone.x+zone.w+padding&&y>=zone.y&&y<=zone.y+zone.h
+      const verticalPadding=zone.axis==='y'?padding:0
+      return x>=zone.x-padding&&x<=zone.x+zone.w+padding&&y>=zone.y-verticalPadding&&y<=zone.y+zone.h+verticalPadding
     })
     if(control)return control
     const row=queueList.hitTest({x,y})
@@ -188,8 +234,9 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
   function hitTest(uv,action){
     draw(playback)
     const target=rawHit(uv,action);if(!target||target.disabled)return null
-    if(room.id&&!room.connected&&['toggle','previous','next','queue-play','play-mode','progress'].includes(target.action))return {action:'room-open',payload:'details'}
-    return {action:target.action,payload:TERMINAL_SLIDERS.includes(target.action)?THREE.MathUtils.clamp((uv.x*WIDTH-target.x)/target.w,0,1):target.payload}
+    if(room.id&&!room.connected&&['toggle','previous','next','queue-play','queue-remove','play-mode','progress'].includes(target.action))return {action:'room-open',payload:'details'}
+    const value=target.axis==='y'?1-((1-uv.y)*HEIGHT-target.y)/target.h:(uv.x*WIDTH-target.x)/target.w
+    return {action:target.action,payload:TERMINAL_SLIDERS.includes(target.action)?THREE.MathUtils.clamp(value,0,1):target.payload}
   }
   function closeMenus(){if(menu){menu='';changed()}}
   function select(uv,options){
@@ -200,6 +247,7 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
       closeMenus();return hit
     }
     queueList.cancelClick()
+    if(hit?.action==='terminal-settings-tab'){settingsTab=hit.payload;closeMenus();changed();return null}
     if(hit?.action==='terminal-menu'){menu=menu===hit.payload?'':hit.payload;changed();return null}
     if(hit?.action==='noop')return null
     if(hit?.action!=='volume'&&hit?.action!=='mute')closeMenus()
@@ -216,13 +264,19 @@ export function createControlTerminal(pavilion, hitTargets, invalidate) {
     hint:uv=>rawHit(uv)?.label||'控制终端',
     setScene(id,loading=false){sceneId=id;sceneLoading=loading;changed()},
     setQuality(value){quality=QUALITIES.some(option=>option.id===value)?value:'balanced';changed()},
+    setViewMode(value){if(viewMode!==value){viewMode=value==='first'?'first':'third';changed()}},
+    setClimate(value){
+      const next=[value.weather,value.mode,value.hour,Math.floor((value.currentHour??value.hour)*60)].join('|')
+      if(next!==climateSignature){climate={...value};climateSignature=next;if(settingsTab==='time')changed()}
+    },
+    refreshClock(){if(settingsTab==='time')changed()},
     setRoom(value){if(JSON.stringify(value)!==JSON.stringify(room)){room={...value};changed()}},
     setAccount(value={}){
       const loggedIn=Boolean(value.isLoggedIn),next={isLoggedIn:loggedIn,displayName:loggedIn?String(value.displayName||'我的账号'):'点击登录',avatarUrl:loggedIn?String(value.avatarUrl||''):''}
       if(next.isLoggedIn===account.isLoggedIn&&next.displayName===account.displayName&&next.avatarUrl===account.avatarUrl)return
       account=next;changed()
     },
-    getState:()=>({scene:sceneId,loading:sceneLoading,quality,menu,scroll,account:{...account},room:{...room},queueLength:queue.length,...queueList.getState(),lightsEnabled:playback.lightsEnabled!==false,danmakuEnabled:playback.danmakuEnabled!==false,danmakuOpacity:normalizeDanmakuOpacity(playback.danmakuOpacity),controls:zones.map(z=>z.action)}),
+    getState:()=>({scene:sceneId,loading:sceneLoading,quality,menu,settingsTab,viewMode,climate:{...climate},scroll,account:{...account},room:{...room},queueLength:queue.length,...queueList.getState(),lightsEnabled:playback.lightsEnabled!==false,danmakuEnabled:playback.danmakuEnabled!==false,danmakuOpacity:normalizeDanmakuOpacity(playback.danmakuOpacity),controls:zones.map(z=>z.action)}),
     dispose(){images.dispose();surface.texture.dispose()},
   }
 }

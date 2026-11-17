@@ -14,6 +14,7 @@
  */
 // Canvas equivalents of the Lucide icons used by the 2D player.
 const modePaths = {
+  trash:['M3 6h18','M9 6V4h6v2','M5 6l1 14h12l1-14','M10 10v6','M14 10v6'],
   'house-plus':['M13.22 2.416a2 2 0 0 0-2.511.057l-7 5.999A2 2 0 0 0 3 10v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7.354','M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8','M15 6h6','M18 3v6'],
   refresh:['M3 11a9 9 0 0 1 15.36-6.36L21 7','M21 3v4h-4','M21 13a9 9 0 0 1-15.36 6.36L3 17','M3 21v-4h4'],
   settings:['M4 6h4m4 0h8M4 12h8m4 0h4M4 18h2m4 0h10','M8 3v6m4 0v6M6 15v6'],

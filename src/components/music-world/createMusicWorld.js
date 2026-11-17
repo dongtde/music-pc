@@ -463,7 +463,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     resizeRenderer()
   }
 
-  function setViewMode(value){viewMode=value==='first'?'first':'third';onStatus?.({viewMode});invalidate()}
+  function setViewMode(value){viewMode=value==='first'?'first':'third';terminal?.setViewMode(viewMode);onStatus?.({viewMode});invalidate()}
   function jump(){
     if(disposed||!active||records?.getState().inspecting)return
     if(seated){cancelTravel();stand();return}
@@ -576,6 +576,7 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
       if (visibleSurfaces.intersectsObject(surface.mesh)) feedMotion = Boolean(surface.draw?.(now,audioLevels)) || feedMotion
     })
     const screenMotion = mvCast?.isActive() ? mvCast.isPlaying() : visibleSurfaces.intersectsObject(screenMesh) ? screen.draw(playback, now) : false
+    terminal.setClimate(environments.getClimate())
     const terminalMotion = visibleSurfaces.intersectsObject(terminal.mesh) ? terminal.draw(playback, now,audioLevels) : false
     lightGrid.invalidate()
     try { renderer.render(scene, viewCamera) } catch { renderBudget.abort();active=false;stop();onAction?.('error');return }
@@ -749,7 +750,8 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
     setQuality,
     setActive(value) { active=Boolean(value); if(active)invalidate();else {mvCast?.stop();cancelTravel();stop()} },
     async setScene(id,onProgress){const applied=await environments.select(id,onProgress);if(applied)invalidate();return applied},
-    setClimate(value){environments.setClimate(value)},
+    setClimate(value){environments.setClimate(value);terminal.setClimate(environments.getClimate())},
+    refreshTerminalClock(){terminal.refreshClock()},
     setPlayback(value) {
       if(previousTrack!==value.track?.id || Math.abs((value.currentTime||0)-(playback.currentTime||0))>2) { rhythm.reset();lightShow?.reset(); previousTrack=value.track?.id }
       const stopMotion=Boolean(value.reducedMotion)&&!reducedMotion
