@@ -112,7 +112,7 @@ const hotLoading = ref(false), hotError = ref('')
 const searchPlayback = computed(() => ({ ...props.playback, pendingKeys: [...new Set([...(props.playback.pendingKeys || []), ...pending.value])] }))
 const screenStyle = computed(() => ({
   width: `${SCREEN_INPUT_SIZE}px`, height: `${SCREEN_INPUT_SIZE}px`,
-  transform: props.placement?.transform
+  transform: props.placement?.transform, clipPath: props.placement?.clipPath || 'none'
 }))
 let revision = 0, disposed = false
 

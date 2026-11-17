@@ -25,7 +25,7 @@ const props = defineProps({ open: Boolean, placement: { type: Object, default: n
 const emit = defineEmits(['activate', 'close', 'cast'])
 const screen = ref(null), visited = ref(false)
 const active = computed(() => props.open && Boolean(props.placement))
-const screenStyle = computed(() => ({ width: `${SCREEN_INPUT_SIZE}px`, height: `${SCREEN_INPUT_SIZE}px`, transform: props.placement?.transform }))
+const screenStyle = computed(() => ({ width: `${SCREEN_INPUT_SIZE}px`, height: `${SCREEN_INPUT_SIZE}px`, transform: props.placement?.transform, clipPath: props.placement?.clipPath || 'none' }))
 
 function onKey(event) {
   if (event.key === 'Escape') { event.preventDefault(); emit('close') }

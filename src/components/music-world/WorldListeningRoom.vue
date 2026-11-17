@@ -48,7 +48,7 @@ const props=defineProps({lobby:{type:Object,required:true},mode:{type:String,req
 const emit=defineEmits(['close'])
 const lobby=props.lobby,dialog=ref(null),draftName=ref(lobby.name),draftServer=ref(lobby.serverUrl),draftQuery=ref(lobby.query)
 const validationError=ref('')
-const screenStyle=computed(()=>({width:`${SCREEN_INPUT_SIZE}px`,height:`${SCREEN_INPUT_SIZE}px`,transform:props.placement?.transform,visibility:props.placement?'visible':'hidden'}))
+const screenStyle=computed(()=>({width:`${SCREEN_INPUT_SIZE}px`,height:`${SCREEN_INPUT_SIZE}px`,transform:props.placement?.transform,clipPath:props.placement?.clipPath||'none',visibility:props.placement?'visible':'hidden'}))
 const blocked=computed(()=>lobby.busy||lobby.state.connecting)
 const title=computed(()=>({code:'加入房间',settings:'昵称与连接设置',search:'搜索房间',copy:'邀请好友'}[props.mode]))
 const submitLabel=computed(()=>({code:'加入房间',settings:'保存设置',search:'搜索房间'}[props.mode]))

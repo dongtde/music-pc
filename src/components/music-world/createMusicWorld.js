@@ -71,8 +71,9 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   function syncListeningScreen() {
     if (!listeningInputOpen || !lobbyScreen) return
     const rect = canvas.getBoundingClientRect(), parent = canvas.parentElement.getBoundingClientRect()
-    const placement = projectListeningScreen(lobbyScreen.mesh, viewCamera, { width: rect.width, height: rect.height, left: rect.left - parent.left, top: rect.top - parent.top })
-    if ((placement?.transform || '') !== listeningTransform) { listeningTransform = placement?.transform || ''; onListeningScreen?.(placement) }
+    const placement = projectListeningScreen(lobbyScreen.mesh, viewCamera, { width: rect.width, height: rect.height, left: rect.left - parent.left, top: rect.top - parent.top, occluders: [scene] })
+    const signature = placement ? placement.transform + placement.clipPath : ''
+    if (signature !== listeningTransform) { listeningTransform = signature; onListeningScreen?.(placement) }
   }
   function setListeningInputOpen(value) {
     listeningInputOpen = Boolean(value)
@@ -83,8 +84,9 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   function syncSongSearchScreen() {
     if (!songSearchScreen) return
     const rect = canvas.getBoundingClientRect(), parent = canvas.parentElement.getBoundingClientRect()
-    const placement = projectListeningScreen(songSearchScreen.mesh, viewCamera, { width: rect.width, height: rect.height, left: rect.left - parent.left, top: rect.top - parent.top, occluders: [terminal?.mesh] })
-    if ((placement?.transform || '') !== songSearchTransform) { songSearchTransform = placement?.transform || ''; onSongSearchScreen?.(placement) }
+    const placement = projectListeningScreen(songSearchScreen.mesh, viewCamera, { width: rect.width, height: rect.height, left: rect.left - parent.left, top: rect.top - parent.top, occluders: [scene] })
+    const signature = placement ? placement.transform + placement.clipPath : ''
+    if (signature !== songSearchTransform) { songSearchTransform = signature; onSongSearchScreen?.(placement) }
   }
   function setSongSearchOpen(value) {
     songSearchOpen = Boolean(value)
@@ -94,8 +96,9 @@ export async function createMusicWorld(canvas, { onStatus, onAction, onProgress,
   function syncMvScreen() {
     if (!mvScreen) return
     const rect = canvas.getBoundingClientRect(), parent = canvas.parentElement.getBoundingClientRect()
-    const placement = projectListeningScreen(mvScreen.mesh, viewCamera, { width: rect.width, height: rect.height, left: rect.left - parent.left, top: rect.top - parent.top, occluders: [terminal?.mesh] })
-    if ((placement?.transform || '') !== mvTransform) { mvTransform = placement?.transform || ''; onMvScreen?.(placement) }
+    const placement = projectListeningScreen(mvScreen.mesh, viewCamera, { width: rect.width, height: rect.height, left: rect.left - parent.left, top: rect.top - parent.top, occluders: [scene] })
+    const signature = placement ? placement.transform + placement.clipPath : ''
+    if (signature !== mvTransform) { mvTransform = signature; onMvScreen?.(placement) }
   }
   function setMvOpen(value) {
     mvOpen = Boolean(value)
