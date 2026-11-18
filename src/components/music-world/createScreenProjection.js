@@ -9,7 +9,7 @@ export function createScreenProjection() {
   const local = new Matrix4(), clip = new Matrix4(), point = new Vector4()
   const position = new Vector3(), normal = new Vector3(), eye = new Vector3()
   const occlusion = createScreenOcclusion(SCREEN_INPUT_SIZE)
-  return (mesh, camera, { width, height, left = 0, top = 0, occluders = [] }) => {
+  const project = (mesh, camera, { width, height, left = 0, top = 0, occluders = [] }) => {
     if (!mesh || width <= 0 || height <= 0) return null
     for (let parent = mesh; parent; parent = parent.parent) if (!parent.visible) return null
     mesh.updateWorldMatrix(true, false)
@@ -33,7 +33,8 @@ export function createScreenProjection() {
       corners.push({ x: point.x / point.w, y: point.y / point.w })
     }
     if (corners.every(p => p.x < -1) || corners.every(p => p.x > 1) || corners.every(p => p.y < -1) || corners.every(p => p.y > 1)) return null
-    const clipPath = occlusion(mesh, camera, occluders)
+    const pixelHeight = (Math.max(...corners.map(p => p.y)) - Math.min(...corners.map(p => p.y))) * height / 2
+    const clipPath = occlusion(mesh, camera, occluders, pixelHeight)
     if (clipPath === 'path("M0 0Z")') return null
     const e = clip.elements, sx = width / 2, sy = height / 2, divisor = e[15]
     const x = i => (sx * e[i] + (sx + left) * e[i + 3]) / divisor
@@ -41,4 +42,7 @@ export function createScreenProjection() {
     const matrix = [x(0), y(0), 0, e[3] / divisor, x(4), y(4), 0, e[7] / divisor, 0, 0, 1, 0, x(12), y(12), 0, 1]
     return { transform: `matrix3d(${matrix.map(value => Number(value.toFixed(10))).join(',')})`, clipPath, size: SCREEN_INPUT_SIZE }
   }
+  project.beginFrame = occlusion.beginFrame
+  project.prepare = occlusion.prepare
+  return project
 }

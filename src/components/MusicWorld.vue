@@ -7,8 +7,8 @@
       <span v-if="listeningRoom.state.room" class="world-avatar-controls__online">{{ listeningRoom.state.connected ? (listeningRoom.state.presence?.players.length||0)+' 人在场' : '重连中' }}</span>
     </div>
     <WorldListeningRoom v-if="listeningPanel && ready && !suspended && !routeOpen" :mode="listeningPanel" :lobby="lobby" :placement="listeningPlacement" @close="closeListeningRoom" />
-    <WorldSongSearch v-if="ready && !suspended && !routeOpen" :open="songSearchOpen" :placement="panel || commentOpen || selectedRecord || listeningPanel || mvOpen ? null : songSearchPlacement" :playback="{ ...listening, reducedMotion }" :add-tracks="enqueueTracks" @activate="openSongSearch" @close="closeSongSearch" />
-    <WorldMvScreen v-if="ready && !suspended && !routeOpen" :open="mvOpen" :placement="panel || commentOpen || selectedRecord || listeningPanel || songSearchOpen ? null : mvPlacement" @activate="openMv" @close="closeMv" @cast="castMv" />
+    <WorldSongSearch v-if="ready && !suspended && !routeOpen" ref="songSearchController" :open="songSearchOpen" :placement="songSearchPlacement" :add-tracks="enqueueTracks" @state="world?.setSongSearchState($event)" @activate="openSongSearch" @close="closeSongSearch" />
+    <WorldMvScreen v-if="ready && !suspended && !routeOpen" ref="mvController" :open="mvOpen" @state="world?.setMvState($event)" @activate="openMv" />
     <div v-if="status.mvCast && ready && !suspended && !routeOpen" class="world-mv-cast-controls" aria-label="大屏投屏控制" @pointerdown.stop @keydown.stop>
       <span>{{ status.mvCast.loading ? '正在投屏' : '正在大屏播放' }} · {{ status.mvCast.title }}</span>
       <button type="button" :disabled="status.mvCast.loading" @click="world?.toggleMvCast()">{{ status.mvCast.playing ? '暂停' : '播放' }}</button>
@@ -111,7 +111,8 @@ const WorldSongSearch=defineAsyncComponent(()=>import('./music-world/WorldSongSe
 const WorldMvScreen=defineAsyncComponent(()=>import('./music-world/WorldMvScreen.vue'))
 const listeningRoom=useListeningRoomStore(),listeningPanel=ref(''),listeningPlacement=shallowRef(null)
 const songSearchOpen=ref(false),songSearchPlacement=shallowRef(null)
-const mvOpen=ref(false),mvPlacement=shallowRef(null)
+const mvOpen=ref(false)
+const songSearchController=ref(null),mvController=ref(null)
 const roomSummary=computed(()=>({id:listeningRoom.state.room?.id||'',isHost:listeningRoom.state.room?.hostId===listeningRoom.state.memberId,connected:listeningRoom.state.connected,count:listeningRoom.state.room?.members.length||0,capacity:listeningRoom.state.room?.capacity||10,status:listeningRoom.state.syncStatus}))
 const props=defineProps({suspended:{type:Boolean,default:false}})
 const canvas=ref(null),canvasKey=ref(0),ready=ref(false),sceneReady=ref(false),failed=ref(false),progress=ref(0),exploring=ref(true),panel=ref(false),panelEl=ref(null),notice=ref('')
@@ -215,7 +216,7 @@ async function changeScene(id){
   entranceScene.value=destination;ready.value=false;sceneReady.value=false;progress.value=0
   panel.value=false;commentOpen.value=false;listeningPanel.value='';listeningPlacement.value=null
   songSearchOpen.value=false;songSearchPlacement.value=null;world.setSongSearchOpen(false)
-  releaseMv();mvPlacement.value=null
+  releaseMv()
   world.stopMvCast()
   world.clearMovement();world.cancelTravel();world.dismissRecord();world.setListeningInputOpen(false)
   selectedRecord.value=null
@@ -271,11 +272,11 @@ async function initialize(){
   abort=new AbortController();const signal=abort.signal
   ready.value=false;sceneReady.value=false;failed.value=false;progress.value=0;canvasKey.value++;await nextTick()
   listeningPanel.value='';listeningPlacement.value=null;songSearchOpen.value=false;songSearchPlacement.value=null
-  mvOpen.value=false;mvPlacement.value=null
+  mvOpen.value=false
   if(disposed||signal.aborted)return
   try{
     sampler=createWorldAudioSampler(player.getAudioElement())
-    world=await createMusicWorld(canvas.value,{signal,quality:quality.value,sampleAudio:()=>sampler?.sample(),onProgress:value=>{if(!signal.aborted)progress.value=value*baseProgress},onStatus:receiveStatus,onAction:handleAction,onListeningScreen:value=>listeningPlacement.value=value,onSongSearchScreen:value=>songSearchPlacement.value=value,onMvScreen:value=>mvPlacement.value=value,onPresence:listeningRoom.movePresence,onSeat:takeSeat})
+    world=await createMusicWorld(canvas.value,{signal,quality:quality.value,sampleAudio:()=>sampler?.sample(),onProgress:value=>{if(!signal.aborted)progress.value=value*baseProgress},onStatus:receiveStatus,onAction:handleAction,onListeningScreen:value=>listeningPlacement.value=value,onSongSearchScreen:value=>songSearchPlacement.value=value,onPresence:listeningRoom.movePresence,onSeat:takeSeat})
     if(signal.aborted)return
     world.setClimate(climate.value)
     syncPresence();await listeningRoom.setPresenceActive(!props.suspended&&!routeOpen.value)
@@ -313,8 +314,12 @@ async function handleAction(action,payload){
   if(action==='section')openSection(payload)
   else if(action==='song-search-open')openSongSearch()
   else if(action==='song-search-close')closeSongSearch()
+  else if(action==='song-search-control')songSearchController.value?.select(payload)
   else if(action==='mv-open')openMv()
   else if(action==='mv-close')closeMv()
+  else if(action==='mv-control')mvController.value?.select(payload)
+  else if(action==='mv-cast')castMv(payload)
+  else if(action==='mv-playing'){if(player.state.isPlaying)void player.togglePlay()}
   else if(action==='feed-scroll')feeds.scroll(payload.id,payload.delta)
   else if(action==='feed-select')feeds.select(payload.id,payload.item)
   else if(action==='feed-back')feeds.back(payload.id)
@@ -370,7 +375,7 @@ watch(roomSummary,value=>world?.setListeningRoom(value))
 watch(()=>JSON.stringify(lobby.snapshot),()=>world?.setListeningLobby(lobby.snapshot))
 watch(()=>[listeningRoom.state.presence,listeningRoom.state.connected,listeningRoom.state.room?.id],syncPresence)
 watch(()=>[routeOpen.value,props.suspended],([covered,suspended])=>{void listeningRoom.setPresenceActive(!covered&&!suspended)})
-watch(()=>[routeOpen.value,props.suspended,listeningPanel.value,songSearchOpen.value,mvOpen.value],([covered,suspended,roomOpen,searchOpen,videoOpen])=>{world?.setActive(!covered&&!suspended);world?.setListeningInputOpen(!covered&&!suspended&&Boolean(roomOpen));world?.setSongSearchOpen(!covered&&!suspended&&searchOpen);world?.setMvOpen(!covered&&!suspended&&videoOpen);if(covered||suspended){listeningPanel.value='';listeningPlacement.value=null;songSearchOpen.value=false;songSearchPlacement.value=null;mvOpen.value=false;mvPlacement.value=null}if(covered||suspended||roomOpen||searchOpen||videoOpen){world?.clearMovement();world?.dismissRecord();panel.value=false;commentOpen.value=false}syncPlayback()})
+watch(()=>[routeOpen.value,props.suspended,listeningPanel.value,songSearchOpen.value,mvOpen.value],([covered,suspended,roomOpen,searchOpen,videoOpen])=>{world?.setActive(!covered&&!suspended);world?.setListeningInputOpen(!covered&&!suspended&&Boolean(roomOpen));world?.setSongSearchOpen(!covered&&!suspended&&searchOpen);world?.setMvOpen(!covered&&!suspended&&videoOpen);if(covered||suspended){listeningPanel.value='';listeningPlacement.value=null;songSearchOpen.value=false;songSearchPlacement.value=null;mvOpen.value=false}if(covered||suspended||roomOpen||searchOpen||videoOpen){world?.clearMovement();world?.dismissRecord();panel.value=false;commentOpen.value=false}syncPlayback()})
 watch(()=>listening.value.track?.id,async()=>{
   const token=++lyricsToken;lyrics.value=[];comments.setTrack(listening.value.track)
   if(!listening.value.track?.id)return
