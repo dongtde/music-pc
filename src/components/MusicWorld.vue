@@ -3,7 +3,7 @@
     <canvas ref="canvas" :key="canvasKey" class="music-world__canvas" :inert="!ready || failed" :aria-hidden="!ready || failed" tabindex="0" aria-label="3D 音乐馆。WASD 行走，空格跳跃，V 切换视角，拖动环顾，E 互动，Home 返回中庭。" @pointerdown="exploring=true" />
     <output v-if="status.performance" style="position:absolute;bottom:24px;right:24px;z-index:4;padding:8px 12px;border-radius:8px;background:#10232ddd;color:#bad4d1;font:11px monospace;pointer-events:none" aria-label="渲染性能" :data-metrics="JSON.stringify(status.performance)">{{ status.performance.fps }} FPS · P95 {{ status.performance.frameP95 }} ms · CPU {{ status.performance.cpuP95 }} ms · {{ status.performance.quality }} · {{ status.performance.width }} × {{ status.performance.height }}</output>
     <div v-if="ready&&!suspended&&!routeOpen&&!panel&&!commentOpen&&!selectedRecord&&!listeningPanel&&!songSearchOpen&&!mvOpen" class="world-avatar-controls" @keydown.stop>
-      <button type="button" :title="status.seated?'起身':'跳跃 · 空格'" :aria-label="status.seated?'起身':'跳跃'" @click="jumpAvatar"><ArrowUp :size="18" /></button>
+      <button type="button" class="world-return-2d" title="返回 2D 页面" aria-label="返回 2D 页面" @click="returnTo2D">2D</button>
       <span v-if="listeningRoom.state.room" class="world-avatar-controls__online">{{ listeningRoom.state.connected ? (listeningRoom.state.presence?.players.length||0)+' 人在场' : '重连中' }}</span>
     </div>
     <WorldListeningRoom v-if="listeningPanel && ready && !suspended && !routeOpen" :mode="listeningPanel" :lobby="lobby" :placement="listeningPlacement" @close="closeListeningRoom" />
@@ -73,7 +73,7 @@
 <script setup>
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, ArrowUpRight, ArrowUp, Disc3, Heart, Loader2, Play, Search, X } from 'lucide-vue-next'
+import { ArrowLeft, ArrowUpRight, Disc3, Heart, Loader2, Play, Search, X } from 'lucide-vue-next'
 import { usePlayerStore } from '../stores/player'
 import { useListeningRoomStore } from '../stores/listeningRoom'
 import { useAuthStore } from '../stores/auth'
@@ -147,7 +147,6 @@ function saveDanmakuOpacity(){clearTimeout(opacitySaveTimer);opacitySaveTimer=0;
 function changeDanmakuOpacity(value){danmakuOpacity.value=normalizeDanmakuOpacity(value);clearTimeout(opacitySaveTimer);opacitySaveTimer=setTimeout(saveDanmakuOpacity,180)}
 function returnTo2D(){environment.setMode('2d');if(route.name==='space')router.push(environment.state.returnPath||'/home')}
 function openMap(){releaseMv();releaseSongSearch();world?.clearMovement();world?.cancelTravel()}
-function jumpAvatar(){world?.jump();canvas.value?.focus({preventScroll:true})}
 function syncPresence(){
   const state=listeningRoom.state
   const preserved=world?.setPresence(state.presence,{memberId:state.memberId,roomId:state.room?.id||'',connected:state.connected,preservePosition:Boolean(state.enteredRoomId)&&state.enteredRoomId===state.room?.id})
