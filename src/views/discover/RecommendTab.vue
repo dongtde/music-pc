@@ -71,7 +71,7 @@
 
       <section class="skeleton-section">
         <span class="skeleton-title skeleton-title--small" />
-        <div class="media-grid">
+        <div class="media-grid media-grid--recommend">
           <article
             v-for="item in 5"
             :key="`mv-skeleton-${item}`"
@@ -124,17 +124,31 @@
     <template v-else>
     <section
       class="hero"
+      :class="{ 'hero--swiping': heroSwiping }"
+      role="region"
+      aria-roledescription="轮播"
+      aria-label="编辑推荐"
       @mouseenter="stopHeroAutoplay"
       @mouseleave="startHeroAutoplay"
+      @focusin="pauseHeroForFocus"
+      @focusout="resumeHeroAfterFocus"
+      @pointerdown="startHeroSwipe"
+      @pointermove="moveHeroSwipe"
+      @pointerup="finishHeroSwipe"
+      @pointercancel="cancelHeroSwipe()"
+      @lostpointercapture.self="cancelHeroSwipe()"
+      @click.capture="suppressHeroSwipeClick"
     >
       <div
         class="hero__track"
-        :style="{ transform: `translateX(-${activeHeroIndex * 100}%)` }"
+        :style="{ transform: `translateX(calc(-${activeHeroIndex * 100}% + ${heroSwipeOffset}px))` }"
       >
         <div
           v-for="(page, pageIndex) in heroPages"
           :key="`hero-page-${pageIndex}`"
           class="hero__page"
+          :inert="pageIndex !== activeHeroIndex"
+          :aria-hidden="pageIndex !== activeHeroIndex"
         >
           <article
             v-for="(slide, slideIndex) in page"
@@ -142,7 +156,8 @@
             class="hero__slide"
             :class="`hero__slide--${slide.tone}`"
             role="button"
-            tabindex="0"
+            :tabindex="pageIndex === activeHeroIndex ? 0 : -1"
+            :aria-label="slide.title"
             @click="handleHeroSlideClick(slide)"
             @keydown.enter.prevent="handleHeroSlideClick(slide)"
             @keydown.space.prevent="handleHeroSlideClick(slide)"
@@ -152,7 +167,9 @@
               class="hero__image"
               :src="slide.imageUrl"
               :alt="slide.title"
-              loading="lazy"
+              :loading="pageIndex === activeHeroIndex ? 'eager' : 'lazy'"
+              :fetchpriority="pageIndex === activeHeroIndex ? 'high' : 'low'"
+              draggable="false"
               decoding="async"
             />
             <div v-if="!slide.imageUrl" class="hero__visual" aria-hidden="true">
@@ -191,6 +208,7 @@
           type="button"
           :class="{ active: activeHeroIndex === index }"
           :aria-label="`切换到第 ${index + 1} 页`"
+          :aria-current="activeHeroIndex === index ? 'true' : undefined"
           @click="setHeroSlide(index)"
         />
       </div>
@@ -282,7 +300,7 @@
 
     <section class="latest-section">
       <SectionTitle title="推荐 MV" />
-      <div class="media-grid">
+      <div class="media-grid media-grid--recommend" aria-label="推荐 MV 列表">
         <router-link
           v-for="mv in homeRecommendedMvs"
           :key="mv.id"
@@ -375,7 +393,7 @@
         <div
           ref="recommendedSingleTrack"
           class="song-list song-list--recommend"
-          :class="{ 'song-list--recommend-carousel': isCompactCarouselLayout }"
+          :class="{ 'song-list--recommend-carousel': isCompactCarouselLayout || isMobile2D }"
           :style="recommendedSingleListStyle"
           aria-label="推荐单曲列表"
         >
@@ -465,7 +483,8 @@ import {
   onDeactivated,
   onMounted,
   onUnmounted,
-  ref
+  ref,
+  watch
 } from 'vue';
 import { useRouter } from 'vue-router';
 import { useMessage } from 'naive-ui';
@@ -492,6 +511,7 @@ import { createLruCache } from '../../utils/lruCache';
 import { createMvRouteQuery } from '../../utils/mv';
 import { getPlaybackErrorDisplay } from '../../utils/playbackError';
 import { isAbortError } from '../../utils/request';
+import { useResponsiveLayout } from '../../composables/useResponsiveLayout';
 
 const HOME_SKELETON_MIN_MS = 360;
 const HOME_PARTIAL_RETRY_DELAY_MS = 900;
@@ -510,6 +530,7 @@ const PLAYLIST_CAROUSEL_WIDE_COLUMNS = 6;
 const PLAYLIST_CAROUSEL_COMPACT_GAP = 16;
 const PLAYLIST_CAROUSEL_WIDE_GAP = 22;
 
+const { isMobile2D } = useResponsiveLayout();
 const player = usePlayerStore();
 const router = useRouter();
 const message = useMessage();
@@ -564,7 +585,7 @@ const playlistCarouselStyle = computed(() => {
   };
 });
 const recommendedSingleListStyle = computed(() => {
-  if (!isCompactCarouselLayout.value) {
+  if (isMobile2D.value || !isCompactCarouselLayout.value) {
     return {};
   }
 
@@ -618,8 +639,21 @@ const fallbackHeroSlides = [
 const heroSlides = ref(fallbackHeroSlides);
 const activeHeroIndex = ref(0);
 const heroActionLoadingId = ref('');
-const heroPages = computed(() => chunkItems(heroSlides.value, HERO_SLIDES_PER_PAGE));
+const heroFocusWithin = ref(false);
+const heroSwipeOffset = ref(0);
+const heroSwiping = ref(false);
+let heroSwipe = null;
+let heroSuppressClickUntil = 0;
+const heroSlidesPerPage = computed(() => isMobile2D.value ? 1 : HERO_SLIDES_PER_PAGE);
+const heroPages = computed(() => chunkItems(heroSlides.value, heroSlidesPerPage.value));
 const heroLastIndex = computed(() => Math.max(heroPages.value.length - 1, 0));
+watch(heroSlidesPerPage, (nextSize, previousSize) => {
+  cancelHeroSwipe(false);
+  // Keep the currently visible banner when a phone rotates or becomes a tablet.
+  const firstSlide = activeHeroIndex.value * previousSize;
+  activeHeroIndex.value = Math.min(Math.floor(firstSlide / nextSize), heroLastIndex.value);
+  startHeroAutoplay();
+});
 const recommendCarouselPageStarts = computed(() =>
   getPlaylistCarouselPageStarts(
     recommendPlaylists.value.length,
@@ -716,6 +750,71 @@ function chunkItems(items, size) {
   return chunks.length ? chunks : [[]];
 }
 
+function startHeroSwipe(event) {
+  if (!isMobile2D.value || heroLastIndex.value <= 0 || event.pointerType !== 'touch' ||
+      event.isPrimary === false || event.button > 0 || !event.target.closest?.('.hero__track')) return;
+  cancelHeroSwipe(false);
+  heroSwipe = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    width: event.currentTarget.clientWidth,
+    element: event.currentTarget,
+    horizontal: false,
+  };
+  stopHeroAutoplay();
+}
+
+function moveHeroSwipe(event) {
+  if (!heroSwipe || event.pointerId !== heroSwipe.pointerId) return;
+  const dx = event.clientX - heroSwipe.startX;
+  const dy = event.clientY - heroSwipe.startY;
+  if (!heroSwipe.horizontal) {
+    if (Math.abs(dy) >= 10 && Math.abs(dy) >= Math.abs(dx)) {
+      cancelHeroSwipe();
+      return;
+    }
+    if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
+    heroSwipe.horizontal = true;
+    heroSwiping.value = true;
+    if (event.isTrusted) heroSwipe.element.setPointerCapture(event.pointerId);
+  }
+  const atEdge = (activeHeroIndex.value === 0 && dx > 0) ||
+    (activeHeroIndex.value === heroLastIndex.value && dx < 0);
+  heroSwipeOffset.value = Math.max(-heroSwipe.width, Math.min(heroSwipe.width, atEdge ? dx / 3 : dx));
+  event.preventDefault();
+}
+
+function finishHeroSwipe(event) {
+  if (!heroSwipe || event.pointerId !== heroSwipe.pointerId) return;
+  if (heroSwipe.horizontal) {
+    const dx = event.clientX - heroSwipe.startX;
+    const threshold = Math.min(64, Math.max(40, heroSwipe.width * .16));
+    if (Math.abs(dx) >= threshold) {
+      if (dx < 0) nextHeroSlide();
+      else prevHeroSlide();
+    }
+    heroSuppressClickUntil = Date.now() + 500;
+    event.preventDefault();
+  }
+  cancelHeroSwipe();
+}
+
+function cancelHeroSwipe(resume = true) {
+  const swipe = heroSwipe;
+  heroSwipe = null;
+  heroSwipeOffset.value = 0;
+  heroSwiping.value = false;
+  if (swipe?.element.hasPointerCapture?.(swipe.pointerId)) swipe.element.releasePointerCapture(swipe.pointerId);
+  if (resume) startHeroAutoplay();
+}
+
+function suppressHeroSwipeClick(event) {
+  if (Date.now() >= heroSuppressClickUntil) return;
+  event.preventDefault();
+  event.stopPropagation();
+}
+
 function setHeroSlide(index) {
   activeHeroIndex.value = Math.min(Math.max(index, 0), heroLastIndex.value);
   startHeroAutoplay();
@@ -740,7 +839,9 @@ function prevHeroSlide() {
 function startHeroAutoplay() {
   stopHeroAutoplay();
 
-  if (!isRecommendTabActive || heroLastIndex.value <= 0) {
+  if (!isRecommendTabActive || heroSwipe || heroLastIndex.value <= 0 || heroFocusWithin.value ||
+      document.documentElement.dataset.reducedMotion === 'true' ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     return;
   }
 
@@ -757,6 +858,17 @@ function stopHeroAutoplay() {
     window.clearInterval(heroTimer);
     heroTimer = undefined;
   }
+}
+
+function pauseHeroForFocus() {
+  heroFocusWithin.value = true;
+  stopHeroAutoplay();
+}
+
+function resumeHeroAfterFocus(event) {
+  if (event.currentTarget.contains(event.relatedTarget)) return;
+  heroFocusWithin.value = false;
+  startHeroAutoplay();
 }
 
 async function handleHeroSlideClick(slide) {
@@ -1499,6 +1611,7 @@ function activateRecommendTab() {
 
 function deactivateRecommendTab() {
   isRecommendTabActive = false;
+  cancelHeroSwipe(false);
   stopHeroAutoplay();
   stopRecommendedMvPreview();
   clearPartialHomeDataRetry();

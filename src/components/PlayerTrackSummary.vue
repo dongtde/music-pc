@@ -1,6 +1,7 @@
 <template>
   <div class="track-summary">
     <button
+      v-if="showArtwork"
       ref="albumArtButton"
       class="album-art album-art--mini album-art-button"
       :class="{ 'album-art-button--expanded': albumArtHidden }"
@@ -14,7 +15,24 @@
       </span>
     </button>
     <div class="track-summary__body">
-      <div class="track-summary__text">
+      <button
+        v-if="isMobile || isCompact"
+        class="mobile-track-open"
+        :class="{ 'mobile-track-open--lyrics': showMiniLyrics }"
+        type="button"
+        :aria-label="fullPlayerOpen ? '收起全屏播放器' : '打开全屏播放器'"
+        @click="$emit('toggle-full-player')"
+      >
+        <template v-if="showMiniLyrics">
+          <strong><OverflowMarquee :key="miniLyric.text" :text="miniLyric.text" /></strong>
+          <small v-if="miniLyric.secondary"><OverflowMarquee :key="miniLyric.secondary" :text="miniLyric.secondary" /></small>
+        </template>
+        <template v-else>
+          <strong>{{ track.name }}</strong>
+          <small>{{ track.artist }}</small>
+        </template>
+      </button>
+      <div v-else class="track-summary__text">
         <span
           ref="trackMetaViewport"
           class="track-summary__marquee"
@@ -55,9 +73,11 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Maximize2, Minimize2 } from 'lucide-vue-next'
 import PlayerTrackActions from './PlayerTrackActions.vue'
+import OverflowMarquee from './OverflowMarquee.vue'
+import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 
 const props = defineProps({
   track: {
@@ -72,6 +92,14 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  showArtwork: {
+    type: Boolean,
+    default: true
+  },
+  miniLyric: {
+    type: Object,
+    default: null
+  },
   liked: {
     type: Boolean,
     default: false
@@ -83,6 +111,8 @@ const props = defineProps({
 })
 
 defineEmits(['toggle-full-player', 'toggle-like', 'open-comments'])
+const { isMobile2D: isMobile, isCompact } = useResponsiveLayout()
+const showMiniLyrics = computed(() => isMobile.value && !props.fullPlayerOpen && Boolean(props.miniLyric?.text))
 
 const albumArtButton = ref(null)
 const trackMetaViewport = ref(null)

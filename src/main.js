@@ -15,6 +15,11 @@ import { syncStoredKugouBrowserCookies } from './utils/kugouAuth'
 import './styles/main.css'
 import './styles/home.css'
 import './styles/world-shell.css'
+import './styles/mobile-theme.css'
+import './styles/mobile.css'
+import './styles/mobile-pages.css'
+import './styles/tablet-home.css'
+import './styles/typography.css'
 
 const app = createApp(App)
 

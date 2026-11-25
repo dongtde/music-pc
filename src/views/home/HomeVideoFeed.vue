@@ -1,6 +1,7 @@
 <template>
   <section
     v-show="active || preview"
+    :id="embedded ? undefined : 'home-video-feed'"
     class="soda-video-feed"
     :class="{ 'soda-video-feed--embedded': embedded, 'soda-video-feed--preview': preview && !active }"
     aria-label="沉浸式视频 MV"
@@ -75,6 +76,7 @@
               class="soda-mv-poster"
               type="button"
               :disabled="mvQueueLoading || isActiveMvLoading(mv)"
+              :aria-label="`播放 ${mv.title}`"
               @click.stop="playMvFromGesture(index)"
             >
               <img v-if="!embedded && mv.coverUrl" :src="mv.coverUrl" :alt="mv.title" />
@@ -108,8 +110,8 @@
             <p class="soda-mv-soundtrack"><span>{{ mv.artist }} · {{ mv.title }}</span></p>
           </section>
           <section v-else class="soda-mv-caption">
-            <h1>{{ mv.title }}</h1>
-            <p>{{ mv.artist }}<span v-if="mv.playCount"> · {{ mv.playCount }} 播放</span></p>
+            <h1 :title="mv.title">{{ mv.title }}</h1>
+            <p :title="mv.artist">{{ mv.artist }}<span v-if="mv.playCount"> · {{ mv.playCount }} 播放</span></p>
             <small v-if="mv.desc">{{ mv.desc }}</small>
           </section>
 
@@ -121,7 +123,8 @@
             :song="{ id: mv.id, name: mv.title }"
             :hot-comments="homeMvDanmakuState.hotComments"
             :comments="homeMvDanmakuState.comments"
-            :max-items="homeDanmakuMaxItems"
+            :max-items="isMobile2D ? 3 : homeDanmakuMaxItems"
+            :lanes="isMobile2D ? 1 : undefined"
             :has-more="homeMvDanmakuState.more"
             :loading="homeMvDanmakuState.loading"
             :prefetch-threshold="homeDanmakuPrefetchThreshold"
@@ -140,6 +143,7 @@
               :aria-label="`${isHomeMvLiked(mv) ? '取消喜欢' : '喜欢'} ${getHomeMvLikeLabel(mv)}`"
               :title="isHomeMvLiked(mv) ? '取消喜欢' : '喜欢'"
               :class="{ active: isHomeMvLiked(mv) }"
+              :aria-pressed="isHomeMvLiked(mv)"
               @click.stop="toggleHomeMvLike(mv)"
             >
               <Heart :size="24" :fill="isHomeMvLiked(mv) ? 'currentColor' : 'none'" />
@@ -166,6 +170,7 @@
               :aria-label="homeMvDanmakuEnabled ? '关闭弹幕' : '开启弹幕'"
               :title="homeMvDanmakuEnabled ? '关闭弹幕' : '开启弹幕'"
               :class="{ active: homeMvDanmakuEnabled }"
+              :aria-pressed="homeMvDanmakuEnabled"
               @click.stop="toggleHomeMvDanmaku"
             >
               <Radio :size="24" />
@@ -182,6 +187,7 @@
               :aria-valuemin="0"
               :aria-valuemax="Math.floor(getHomeMvDuration(mv) || 0)"
               :aria-valuenow="getHomeMvProgressNow(mv)"
+              :aria-disabled="!embedded && (index !== activeMvIndex || !homeMvState.isReady) || undefined"
               :aria-label="`${mv.title} 播放进度`"
               @pointerdown="seekHomeMvFromProgress($event, mv)"
             >
@@ -195,7 +201,7 @@
         </template>
       </article>
 
-      <div v-if="mvQueueLoading && !mvQueue.length" class="soda-video-empty">
+      <div v-if="mvQueueLoading && !mvQueue.length" class="soda-video-empty" role="status" aria-live="polite">
         <Loader2 class="soda-spin" :size="34" />
         <span>正在加载 MV</span>
       </div>
@@ -236,6 +242,7 @@ import DanmakuLayer from '../../components/DanmakuLayer.vue'
 import { useHomeVideoFeed } from './useHomeVideoFeed'
 import MvMediaFrame from '../../components/music-world/MvMediaFrame.vue'
 import WorldMvComments from '../../components/music-world/WorldMvComments.vue'
+import { useResponsiveLayout } from '../../composables/useResponsiveLayout'
 
 const CommentModal = defineAsyncComponent(() => import('../../components/CommentModal.vue'))
 const props = defineProps({
@@ -248,6 +255,7 @@ const props = defineProps({
   }
 })
 const emit = defineEmits(['cast', 'activate'])
+const { isMobile2D } = useResponsiveLayout()
 async function activatePreview(event) {
   if (!props.embedded || !props.preview || props.active) return
   if (event.type === 'keydown' && !['ArrowDown', 'ArrowUp', ' ', 'Enter'].includes(event.key)) return

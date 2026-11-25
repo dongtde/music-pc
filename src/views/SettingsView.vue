@@ -127,6 +127,30 @@
 
         <div class="setting-block">
           <div class="setting-block__head">
+            <ArrowUpFromLine :size="22" />
+            <div>
+              <h2>大播放器动效</h2>
+              <p>{{ theme.state.reducedMotion ? '已开启减少动效，以下动画暂不播放。' : '手机端点击底部播放器时的展开与收起效果，选择后自动保存。' }}</p>
+            </div>
+          </div>
+
+          <div class="effect-list" role="group" aria-label="大播放器动效">
+            <button
+              v-for="effect in theme.fullPlayerEffects"
+              :key="effect.value"
+              type="button"
+              :class="{ active: theme.state.fullPlayerTransition === effect.value }"
+              :aria-pressed="theme.state.fullPlayerTransition === effect.value"
+              @click="theme.setFullPlayerTransition(effect.value)"
+            >
+              <strong>{{ effect.label }}</strong>
+              <small>{{ effect.desc }}</small>
+            </button>
+          </div>
+        </div>
+
+        <div class="setting-block">
+          <div class="setting-block__head">
             <Gauge :size="22" />
             <div>
               <h2>减少动效</h2>
@@ -191,7 +215,7 @@
 <script setup>
 import { computed, onMounted } from 'vue'
 import { useMessage } from 'naive-ui'
-import { Gauge, Gift, ListMusic, Moon, Paintbrush, Palette, Sun, Wand2 } from 'lucide-vue-next'
+import { ArrowUpFromLine, Gauge, Gift, ListMusic, Moon, Paintbrush, Palette, Sun, Wand2 } from 'lucide-vue-next'
 import { useAuthStore } from '../stores/auth'
 import { useThemeStore } from '../stores/theme'
 import '../styles/settings.css'

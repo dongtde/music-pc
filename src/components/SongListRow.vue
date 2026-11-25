@@ -1,9 +1,17 @@
 <template>
   <div
     class="song-list-row"
-    :class="{ 'is-playing': isPlaying(track), 'is-compact': compact }"
+    :class="{ 'is-playing': isPlaying(track), 'is-compact': compact, 'is-queue-layout': queueLayout }"
     role="button"
     tabindex="0"
+    @pointerdown="handleRowPointerDown"
+    @pointermove="handleRowPointerMove"
+    @pointerup="handleRowPointerUp"
+    @pointercancel="cancelRowPointer"
+    @pointerleave="cancelRowPointer"
+    @contextmenu="cancelRowPointer"
+    @lostpointercapture="cancelRowPointer"
+    @dragstart="cancelRowPointer"
     @dblclick="handleRowDoubleClick"
     @keydown="handleRowKeydown"
   >
@@ -18,6 +26,7 @@
           decoding="async"
         />
         <button
+          v-if="showPlayIcon"
           class="song-list-row__play"
           :class="{ 'song-list-row__play--playing': isPlaying(track) }"
           type="button"
@@ -115,6 +124,8 @@ import { useMessage } from 'naive-ui'
 import { AudioLines, Play, Video } from 'lucide-vue-next'
 import { usePlayerStore } from '../stores/player'
 import { useAuthStore } from '../stores/auth'
+import { useEnvironmentStore } from '../stores/environment'
+import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { getAudioQualityBadges } from '../utils/audioQuality'
 import { createKugouMvRouteTarget } from '../utils/mv'
 import { getSongAccessBadges } from '../utils/songAccess'
@@ -122,6 +133,11 @@ import { getSongAccessBadges } from '../utils/songAccess'
 const player = usePlayerStore()
 const auth = useAuthStore()
 const message = useMessage()
+const environment = useEnvironmentStore()
+const { isMobile } = useResponsiveLayout()
+const isPhone2d = computed(() => isMobile.value && environment.state.mode === '2d')
+const ROW_TAP_MOVE_THRESHOLD = 10
+let rowPointer = null
 
 const props = defineProps({
   track: {
@@ -131,6 +147,14 @@ const props = defineProps({
   compact: {
     type: Boolean,
     default: false
+  },
+  queueLayout: {
+    type: Boolean,
+    default: false
+  },
+  showPlayIcon: {
+    type: Boolean,
+    default: true
   },
   showVipPlaybackWarning: {
     type: Boolean,
@@ -153,8 +177,65 @@ function isPlaying(track) {
   return track.isPlaying || (player.state.currentTrack.id === track.id && player.state.isPlaying)
 }
 
+function handleRowPointerDown(event) {
+  if (rowPointer || event.isPrimary === false) {
+    cancelRowPointer()
+    return
+  }
+
+  if (!isPhone2d.value || event.button !== 0 || isInteractiveTarget(event.target)) {
+    return
+  }
+
+  const scrollParents = []
+  for (let parent = event.currentTarget.parentElement; parent; parent = parent.parentElement) {
+    scrollParents.push({ element: parent, top: parent.scrollTop, left: parent.scrollLeft })
+  }
+
+  rowPointer = {
+    id: event.pointerId,
+    trackId: props.track.id,
+    x: event.clientX,
+    y: event.clientY,
+    moved: false,
+    scrollParents
+  }
+}
+
+function handleRowPointerMove(event) {
+  if (!rowPointer || rowPointer.id !== event.pointerId) {
+    return
+  }
+
+  rowPointer.moved ||= Math.hypot(event.clientX - rowPointer.x, event.clientY - rowPointer.y) > ROW_TAP_MOVE_THRESHOLD
+}
+
+function handleRowPointerUp(event) {
+  const pointer = rowPointer
+  cancelRowPointer()
+
+  if (!pointer || pointer.id !== event.pointerId || !isPhone2d.value ||
+      pointer.trackId !== props.track.id || event.button !== 0 ||
+      pointer.moved || isInteractiveTarget(event.target)) {
+    return
+  }
+
+  const moved = Math.hypot(event.clientX - pointer.x, event.clientY - pointer.y) > ROW_TAP_MOVE_THRESHOLD
+  const scrolled = pointer.scrollParents.some(({ element, top, left }) =>
+    element.scrollTop !== top || element.scrollLeft !== left
+  )
+
+  if (!moved && !scrolled) {
+    playTrack()
+  }
+}
+
+function cancelRowPointer() {
+  rowPointer = null
+}
+
 function handleRowDoubleClick(event) {
-  if (isInteractiveTarget(event?.target)) {
+  if (isPhone2d.value || isInteractiveTarget(event?.target)) {
     return
   }
 
@@ -187,7 +268,7 @@ function handleRowKeydown(event) {
 }
 
 function isInteractiveTarget(target) {
-  return Boolean(target?.closest?.('a, button'))
+  return Boolean(target?.closest?.('a, button, input, select, textarea, summary, [contenteditable="true"], [role="link"]'))
 }
 
 function getArtistLinks(track = {}) {
@@ -585,7 +666,8 @@ function normalizeRouteId(value) {
   line-height: 1;
 }
 
-.song-list-row__badge {
+.song-list-row__badge,
+.song-list-row__video {
   gap: 2px;
   min-width: 28px;
   padding: 0 4px 0 3px;
@@ -625,12 +707,6 @@ function normalizeRouteId(value) {
   border-color: var(--theme-badge-strong-border);
   color: var(--theme-badge-color);
   background: var(--theme-badge-strong-bg);
-}
-
-.song-list-row__video {
-  width: 19px;
-  border: 1px solid var(--border-strong);
-  color: var(--text-muted);
 }
 
 .song-list-row__video:hover {
@@ -677,5 +753,137 @@ function normalizeRouteId(value) {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1.12);
   }
+}
+
+/* Keep each complete selector inside :global so Vue preserves its descendants. */
+:global(html[data-layout='mobile-2d'] .song-list-row),
+:global(html[data-layout='mobile-2d'] .song-list-row.is-compact) {
+  box-sizing: border-box;
+  height: 64px;
+  min-height: 64px;
+  max-height: 64px;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  gap: 8px;
+  padding: 8px 6px;
+  border-radius: 12px;
+  color: var(--mobile-text);
+  background: transparent;
+  touch-action: pan-y pinch-zoom;
+}
+
+:global(html[data-layout='mobile-2d'] .song-list-row .song-list-row__album) {
+  display: none;
+}
+
+:global(html[data-layout='mobile-2d'] .song-list-row .song-list-row__main) {
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+}
+
+:global(html[data-layout='mobile-2d'] .song-list-row .song-list-row__cover) {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+}
+
+:global(html[data-layout='mobile-2d'] .song-list-row.is-compact .song-list-row__main) {
+  grid-template-columns: 40px minmax(0, 1fr);
+}
+
+:global(html[data-layout='mobile-2d'] .song-list-row.is-compact .song-list-row__cover) {
+  width: 40px;
+  height: 40px;
+}
+
+:global(html[data-layout='mobile-2d'] .song-list-row .song-list-row__title) {
+  gap: 3px;
+  overflow: hidden;
+}
+
+:global(html[data-layout='mobile-2d'] .song-list-row .song-list-row__name) {
+  gap: 4px;
+  min-height: 24px;
+  overflow: hidden;
+}
+
+:global(html[data-layout='mobile-2d'] .song-list-row .song-list-row__title strong) {
+  flex: 1 0 36%;
+  color: var(--mobile-text);
+  font-size: 15px;
+  font-weight: 550;
+  line-height: 22px;
+}
+
+:global(html[data-layout='mobile-2d'] .song-list-row .song-list-row__artists),
+:global(html[data-layout='mobile-2d'] .song-list-row .song-list-row__title > small) {
+  max-width: 100%;
+  line-height: 17px;
+  color: var(--mobile-muted);
+  font-size: 12px;
+}
+
+:global(html[data-layout='mobile-2d'] .song-list-row .song-list-row__artist) {
+  display: block;
+  line-height: 17px;
+}
+
+:global(html[data-layout='mobile-2d'] .song-list-row .song-list-row__badge),
+:global(html[data-layout='mobile-2d'] .song-list-row .song-list-row__quality),
+:global(html[data-layout='mobile-2d'] .song-list-row .song-list-row__video) {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 44px;
+  border-color: var(--mobile-border-strong);
+  border-radius: 4px;
+  background: transparent;
+  font-size: 9px;
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+
+:global(html[data-layout='mobile-2d'] .song-list-row .song-list-row__badge > span),
+:global(html[data-layout='mobile-2d'] .song-list-row .song-list-row__quality) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(html[data-layout='mobile-2d'] .song-list-row .song-list-row__quality) {
+  line-height: 12px;
+}
+
+:global(html[data-layout='mobile-2d'] .song-list-row.is-queue-layout .song-list-row__name > strong) {
+  flex: 0 1 auto;
+}
+
+:global(html[data-layout='mobile-2d'] .song-list-row.is-queue-layout .song-list-row__badge),
+:global(html[data-layout='mobile-2d'] .song-list-row.is-queue-layout .song-list-row__quality),
+:global(html[data-layout='mobile-2d'] .song-list-row.is-queue-layout .song-list-row__video) {
+  flex: 0 0 auto;
+}
+
+:global(html[data-layout='mobile-2d'] .song-list-row .song-list-row__play),
+:global(html[data-layout='mobile-2d'] .song-list-row.is-compact .song-list-row__play) {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  color: #fff;
+  background: rgba(0, 0, 0, .12);
+  box-shadow: none;
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+:global(html[data-layout='mobile-2d'] .song-list-row:active) {
+  background: var(--mobile-surface-soft);
+}
+
+:global(html[data-layout='mobile-2d'] .song-list-row.is-playing) {
+  background: rgba(var(--accent-rgb), .07);
+}
+:global(html[data-layout='mobile-2d'] .song-list-row .song-list-row__time) {
+  color: var(--mobile-muted);
+  font-size: 11px;
 }
 </style>

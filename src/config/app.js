@@ -36,6 +36,7 @@ export const SETTINGS_DEFAULTS = {
     mode: 'dark',
     transition: 'fade',
     queueTransition: 'slide-left',
+    fullPlayerTransition: 'slide',
     primaryColor: '#ff3f73',
     reducedMotion: false,
   },
@@ -103,6 +104,24 @@ export const QUEUE_TRANSITION_EFFECTS = [
     label: '缩放展开',
     value: 'scale',
     desc: '从右下角展开面板',
+  },
+];
+
+export const FULL_PLAYER_TRANSITION_EFFECTS = [
+  {
+    label: '流畅上滑',
+    value: 'slide',
+    desc: '从底部平滑展开，收起时向下滑回',
+  },
+  {
+    label: '景深展开',
+    value: 'depth',
+    desc: '上滑时加入圆角舒展、封面缩放和内容错峰浮现',
+  },
+  {
+    label: '关闭动画',
+    value: 'none',
+    desc: '立即展开和收起大播放器',
   },
 ];
 

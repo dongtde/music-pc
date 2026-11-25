@@ -130,13 +130,14 @@ import {
 } from '../services/netease'
 import { usePaginatedComments } from '../composables/usePaginatedComments'
 import { useQueuePlayback } from '../composables/useQueuePlayback'
+import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useVirtualRows } from '../composables/useVirtualRows'
 import { formatCompactCount } from '../utils/number'
 import { isAbortError } from '../utils/request'
 import '../styles/album.css'
 import '../styles/playlist.css'
 
-const TRACK_ROW_HEIGHT = 58
+const { songRowHeight } = useResponsiveLayout()
 
 const route = useRoute()
 const message = useMessage()
@@ -182,7 +183,7 @@ const {
 } = useVirtualRows(albumTracks, {
   root: pageRoot,
   list: trackVirtualList,
-  rowHeight: TRACK_ROW_HEIGHT
+  rowHeight: songRowHeight
 })
 
 const commentState = usePaginatedComments({

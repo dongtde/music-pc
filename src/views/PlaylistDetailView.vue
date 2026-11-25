@@ -1,5 +1,9 @@
 <template>
-  <div ref="pageRoot" class="view playlist-detail" @scroll.passive="scheduleVirtualRangeUpdate">
+  <div
+    ref="pageRoot"
+    class="view playlist-detail"
+    @scroll.passive="handlePageScroll"
+  >
     <section
       v-if="isLoading"
       class="playlist-detail-skeleton"
@@ -72,9 +76,24 @@
         </div>
 
         <div class="playlist-hero__content">
-          <!-- <span class="tag">歌单</span> -->
-          <h1>{{ playlist.title }}</h1>
-          <p>{{ playlist.description }}</p>
+          <h1 ref="heroTitle" class="playlist-title">
+            <OverflowMarquee :text="playlist.title" :enabled="isMobile2D" :active="!mobileHeaderVisible" />
+          </h1>
+          <div class="playlist-description" :class="{ 'is-expanded': descriptionExpanded }">
+            <p id="playlist-description">{{ playlist.description }}</p>
+            <button
+              v-if="isMobile2D && playlist.description"
+              class="playlist-description__toggle"
+              type="button"
+              :aria-label="descriptionExpanded ? '收起歌单简介' : '展开歌单简介'"
+              :aria-expanded="descriptionExpanded"
+              aria-controls="playlist-description"
+              @click="descriptionExpanded = !descriptionExpanded"
+            >
+              <ChevronDown v-if="descriptionExpanded" :size="18" />
+              <ArrowRight v-else :size="18" />
+            </button>
+          </div>
 
           <div class="playlist-meta">
             <span class="playlist-avatar">
@@ -87,11 +106,11 @@
               />
               <template v-else>{{ creatorInitial }}</template>
             </span>
-            <strong>{{ playlist.creator }}</strong>
-            <span>{{ playlist.updated }}</span>
-            <span>{{ playlist.trackCount }} 首歌</span>
-            <span>{{ playlist.listeners }} 次播放</span>
-            <span v-if="playlist.tags?.length">{{
+            <strong class="playlist-meta__creator">{{ playlist.creator }}</strong>
+            <span class="playlist-meta__updated">{{ playlist.updated }}</span>
+            <span class="playlist-meta__count">{{ playlist.trackCount }} 首歌</span>
+            <span class="playlist-meta__listeners">{{ playlist.listeners }} 次播放</span>
+            <span v-if="playlist.tags?.length" class="playlist-meta__tags">{{
               playlist.tags.join(' / ')
             }}</span>
           </div>
@@ -144,6 +163,9 @@
               v-for="track in visiblePlaylistTracks"
               :key="track.id"
               :track="track"
+              :compact="isMobile2D"
+              :queue-layout="isMobile2D"
+              :show-play-icon="!isMobile2D"
               @play="playPlaylistTrack"
             />
           </div>
@@ -184,12 +206,13 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { MessageCircle, Play } from 'lucide-vue-next';
+import { ArrowRight, ChevronDown, MessageCircle, Play } from 'lucide-vue-next';
 import { useMessage } from 'naive-ui';
 import CommentModal from '../components/CommentModal.vue';
 import SongListRow from '../components/SongListRow.vue';
+import OverflowMarquee from '../components/OverflowMarquee.vue';
 import {
   getPlaylistCommentStatsData,
   getPlaylistCommentsData,
@@ -201,21 +224,29 @@ import { SKELETON_MIN_MS } from '../config/app';
 import { useLoadMoreTrigger } from '../composables/useLoadMoreTrigger';
 import { usePaginatedComments } from '../composables/usePaginatedComments';
 import { useQueuePlayback } from '../composables/useQueuePlayback';
+import { useResponsiveLayout } from '../composables/useResponsiveLayout';
 import { useVirtualRows } from '../composables/useVirtualRows';
 import { useLibraryStore } from '../stores/library';
 import { isAbortError } from '../utils/request';
 import { waitForMinimumDelay } from '../utils/time';
 import '../styles/playlist.css';
+import '../styles/mobile-playlist.css';
 
 const PLAYLIST_INITIAL_TRACK_LIMIT = 100;
 const PLAYLIST_TRACK_PAGE_SIZE = 100;
-const TRACK_ROW_HEIGHT = 58;
+const { isMobile2D, songRowHeight } = useResponsiveLayout();
+const emit = defineEmits(['playlist-header-change']);
 
 const route = useRoute();
 const message = useMessage();
 const library = useLibraryStore();
 
 const pageRoot = ref(null);
+const heroTitle = ref(null);
+const mobileHeaderVisible = ref(false);
+const descriptionExpanded = ref(false);
+let headerFrame = 0;
+let headerObserver = null;
 const remotePlaylist = ref(null);
 const remoteTracks = ref([]);
 const isLoading = ref(false);
@@ -265,7 +296,7 @@ const {
 } = useVirtualRows(playlistTracks, {
   root: pageRoot,
   list: trackVirtualList,
-  rowHeight: TRACK_ROW_HEIGHT,
+  rowHeight: songRowHeight,
 });
 
 const creatorInitial = computed(
@@ -329,6 +360,54 @@ const loadMoreController = useLoadMoreTrigger({
   scrollThreshold: 720,
 });
 
+function updateMobileHeader() {
+  if (!isMobile2D.value || isLoading.value || !pageRoot.value) {
+    mobileHeaderVisible.value = false;
+    return;
+  }
+
+  const headerBottom = pageRoot.value.closest('.main-panel')?.querySelector('.topbar')?.getBoundingClientRect().bottom
+    ?? pageRoot.value.getBoundingClientRect().top;
+  mobileHeaderVisible.value = Boolean(heroTitle.value && heroTitle.value.getBoundingClientRect().bottom <= headerBottom + 8);
+}
+
+function scheduleHeaderUpdate() {
+  if (headerFrame) return;
+  headerFrame = window.requestAnimationFrame(() => {
+    headerFrame = 0;
+    updateMobileHeader();
+  });
+}
+
+function handlePageScroll() {
+  scheduleVirtualRangeUpdate();
+  if (isMobile2D.value) scheduleHeaderUpdate();
+}
+
+watch([() => playlist.value.title, mobileHeaderVisible], () => {
+  emit('playlist-header-change', {
+    title: playlist.value.title,
+    visible: mobileHeaderVisible.value,
+    collapsed: mobileHeaderVisible.value,
+  });
+}, { immediate: true });
+
+watch([isLoading, isMobile2D, descriptionExpanded, heroTitle], async () => {
+  await nextTick();
+  headerObserver?.disconnect();
+  if (isMobile2D.value) {
+    [pageRoot.value, heroTitle.value].filter(Boolean).forEach((element) => headerObserver?.observe(element));
+  }
+  updateMobileHeader();
+  updateVirtualRange();
+});
+
+onMounted(() => {
+  headerObserver = new ResizeObserver(scheduleHeaderUpdate);
+  if (isMobile2D.value && pageRoot.value) headerObserver.observe(pageRoot.value);
+  scheduleHeaderUpdate();
+});
+
 watch(
   () => route.params.id,
   (id) => {
@@ -345,6 +424,8 @@ watch(
 
 onUnmounted(() => {
   playlistLoadToken += 1;
+  headerObserver?.disconnect();
+  if (headerFrame) window.cancelAnimationFrame(headerFrame);
   abortDetailRequest();
   abortTrackRequest();
   loadMoreController.cleanup();
@@ -367,6 +448,9 @@ async function loadPlaylistDetail(id) {
   abortDetailRequest();
   abortTrackRequest();
   loadMoreController.cleanup();
+  descriptionExpanded.value = false;
+  mobileHeaderVisible.value = false;
+  if (pageRoot.value) pageRoot.value.scrollTop = 0;
   remotePlaylist.value = null;
   remoteTracks.value = [];
   prefetchedCommentTotal.value = null;

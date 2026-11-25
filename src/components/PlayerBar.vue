@@ -1,25 +1,38 @@
 <template>
   <FullScreenPlayer
     v-if="fullPlayerMounted"
-    :open="fullPlayerOpen"
+    :open="fullPlayerRequestedOpen"
     :track="currentTrack"
+    :home-mode="homePlayer"
+    v-model:mobile-page="fullPlayerMobilePage"
+    :liked="currentTrackLiked"
     :source-rect="fullPlayerCoverRect"
     :danmaku-enabled="danmakuEnabled"
     :danmaku-hot-comments="fullPlayerDanmakuState.hotComments"
     :danmaku-comments="fullPlayerDanmakuState.comments"
     :danmaku-has-more="fullPlayerDanmakuState.more"
     :danmaku-loading="fullPlayerDanmakuState.loading"
+    :danmaku-error="fullPlayerDanmakuState.error"
     :danmaku-prefetch-threshold="fullPlayerDanmakuPrefetchThreshold"
-    :danmaku-max-items="fullPlayerDanmakuMaxItems"
+    :danmaku-max-items="isMobile ? 18 : fullPlayerDanmakuMaxItems"
     :danmaku-activation-delay="fullPlayerDanmakuActivationDelay"
     :visualizer-mode="fullPlayerVisualizerMode"
     :player-bar-height="playerBarHeight"
+    :transport-element="playerBar"
     @danmaku-need-more="loadMoreFullPlayerDanmaku"
+    @toggle-like="toggleCurrentTrackLike"
+    @toggle-danmaku="toggleDanmaku"
+    @retry-danmaku="retryFullPlayerDanmaku"
     @close="closeFullPlayer"
     @cover-flight-end="handleCoverFlightEnd"
+    @transition-start="handleFullPlayerTransitionStart"
+    @transition-end="handleFullPlayerTransitionEnd"
     @toggle-play="player.togglePlay()"
     @previous="playPreviousTrack"
     @next="playNextTrack"
+    @swipe-next="playSwipedTrack(1, $event)"
+    @swipe-previous="playSwipedTrack(-1, $event)"
+    @home-section="$emit('home-section-change', $event)"
   />
 
   <footer
@@ -27,18 +40,31 @@
     ref="playerBar"
     class="player"
     :class="{ 'player--full-screen': fullPlayerOpen }"
-    :style="playerStyle"
+    :data-mobile-page="isMobile && fullPlayerOpen ? fullPlayerMobilePage : undefined"
+    :data-expansion-phase="isMobile ? fullPlayerMotionPhase || undefined : undefined"
+    :data-expansion-effect="isMobile ? theme.state.fullPlayerTransition : undefined"
+    :style="[playerStyle, { visibility: fullPlayerMotionPhase === 'pending' ? 'hidden' : undefined }]"
+    @pointerdown="startMiniPlayerSwipe"
+    @pointermove="moveMiniPlayerSwipe"
+    @pointerup="finishMiniPlayerSwipe"
+    @pointercancel="cancelMiniPlayerSwipe"
+    @lostpointercapture="cancelMiniPlayerSwipe"
+    @click.capture="suppressMiniPlayerSwipeClick"
   >
-    <PlayerTrackSummary
+    <component
+      :is="isMobile && !fullPlayerOpen ? MiniPlayerTrackTransition : PlayerTrackSummary"
+      v-bind="isMobile && !fullPlayerOpen ? { ...miniPlayerAdjacentTracks, enabled: !hidden } : {}"
       ref="trackSummary"
       :track="currentTrack"
       :full-player-open="fullPlayerOpen"
       :album-art-hidden="albumArtHidden"
       :liked="currentTrackLiked"
       :comment-total="displaySongCommentTotal"
+      :mini-lyric="miniPlayerLyric"
       @toggle-full-player="toggleFullPlayer"
       @toggle-like="toggleCurrentTrackLike"
       @open-comments="openSongCommentsModal"
+      @cancel-swipe="cancelMiniPlayerSwipe"
     />
 
     <div class="player-center">
@@ -66,6 +92,18 @@
           @increase="increaseVolume"
           @toggle-mute="toggleMute"
         />
+        <PlayerQueuePopover
+          v-if="isMobile && fullPlayerOpen && fullPlayerMobilePage === 'cover'"
+          :open="queueMenuOpen"
+          :tracks="queueTracks"
+          :transition-name="`queue-${theme.state.queueTransition}`"
+          :immersive="fullPlayerOpen"
+          :cover-style="currentTrackCoverStyle"
+          @toggle="toggleQueueMenu"
+          @close="closePlayerPopovers"
+          @play-track="playQueueTrack"
+          @clear="clearQueue"
+        />
       </div>
       <PlayerProgressBar
         :current-label="formatTime(displayProgressTime)"
@@ -87,13 +125,17 @@
     </div>
 
     <div class="player-tools">
+      <button v-if="isMobile && fullPlayerOpen" class="icon-button mobile-player-comment" type="button" aria-label="歌曲评论" @click="openSongCommentsModal">
+        <MessageSquare :size="21" :stroke-width="1.5" />
+        <small v-if="mobileCommentCount">{{ mobileCommentCount }}</small>
+      </button>
       <PlayerDanmakuToggle
         :visible="fullPlayerOpen"
         :enabled="danmakuEnabled"
         @toggle="toggleDanmaku"
       />
       <PlayerVisualizerPopover
-        :visible="fullPlayerOpen"
+        :visible="fullPlayerOpen && (!isMobile || fullPlayerMobilePage === 'cover')"
         :open="visualizerMenuOpen"
         :active-mode="activeVisualizerMode"
         :active-value="fullPlayerVisualizerMode"
@@ -119,15 +161,24 @@
         @toggle="toggleDesktopLyrics"
       />
       <PlayerQueuePopover
+        v-if="!isMobile || !fullPlayerOpen || fullPlayerMobilePage !== 'cover'"
         :open="queueMenuOpen"
         :tracks="queueTracks"
         :transition-name="`queue-${theme.state.queueTransition}`"
+        :immersive="fullPlayerOpen"
+        :cover-style="currentTrackCoverStyle"
         @toggle="toggleQueueMenu"
+        @close="closePlayerPopovers"
         @play-track="playQueueTrack"
         @clear="clearQueue"
       />
     </div>
+    <span v-if="isMobile && !fullPlayerOpen" class="mobile-mini-progress" aria-hidden="true"><span :style="{ width: `${displayProgressPercentage}%` }" /></span>
   </footer>
+
+  <Teleport to="body">
+    <button v-if="isMobile && (modeMenuOpen || qualityMenuOpen || visualizerMenuOpen)" class="mobile-player-backdrop" type="button" aria-label="关闭播放面板" @click="closePlayerPopovers" />
+  </Teleport>
 
   <CommentModal
     v-if="songCommentsModalMounted"
@@ -146,7 +197,7 @@
 
 <script setup>
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
-import { Activity, Repeat, Repeat1, Repeat2, Shuffle, Sparkles, Volume2, VolumeX } from 'lucide-vue-next'
+import { Activity, MessageSquare, Repeat, Repeat1, Repeat2, Shuffle, Sparkles, Volume2, VolumeX } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import PlayerDanmakuToggle from './PlayerDanmakuToggle.vue'
 import PlayerDesktopLyricsButton from './PlayerDesktopLyricsButton.vue'
@@ -155,6 +206,7 @@ import PlayerProgressBar from './PlayerProgressBar.vue'
 import PlayerQualityPopover from './PlayerQualityPopover.vue'
 import PlayerQueuePopover from './PlayerQueuePopover.vue'
 import PlayerTrackSummary from './PlayerTrackSummary.vue'
+import MiniPlayerTrackTransition from './MiniPlayerTrackTransition.vue'
 import PlayerTransportControls from './PlayerTransportControls.vue'
 import PlayerVisualizerPopover from './PlayerVisualizerPopover.vue'
 import PlayerVolumePopover from './PlayerVolumePopover.vue'
@@ -169,15 +221,18 @@ import { useDesktopLyricsBridge } from '../composables/useDesktopLyricsBridge'
 import { useFullPlayerDanmakuComments } from '../composables/useFullPlayerDanmakuComments'
 import { useProgressLyrics } from '../composables/useProgressLyrics'
 import { useTaskbarControlsBridge } from '../composables/useTaskbarControlsBridge'
+import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { readStorage, writeStorage } from '../utils/storage'
 import { formatTime } from '../utils/time'
 import { getAudioQualityDefinition, getAudioQualityOptions } from '../utils/audioQuality'
 import { getPlaybackErrorDisplay } from '../utils/playbackError'
+import { getLyricFrame } from '../utils/lyrics'
+import { getMiniPlayerSwipeDirection, getPlayerSwipeAxis } from '../utils/mobilePlayerSwipe'
 import '../styles/player.css'
 
 const loadFullScreenPlayer = () => import('./FullScreenPlayer.vue')
-defineProps({ hidden: { type: Boolean, default: false } })
-const emit = defineEmits(['full-player-change'])
+const props = defineProps({ hidden: { type: Boolean, default: false }, homePlayer: { type: Boolean, default: false } })
+const emit = defineEmits(['full-player-change', 'home-navigation', 'home-section-change'])
 const CommentModal = defineAsyncComponent(() => import('./CommentModal.vue'))
 const FullScreenPlayer = defineAsyncComponent(loadFullScreenPlayer)
 const theme = useThemeStore()
@@ -185,6 +240,7 @@ const player = usePlayerStore()
 const library = useLibraryStore()
 const auth = useAuthStore()
 const message = useMessage()
+const { isMobile2D: isMobile } = useResponsiveLayout()
 const hasAccountLogin = computed(() => auth.state.isLoggedIn && auth.state.loginType !== 'guest')
 const fallbackFullPlayerVisualizerMode = 'spectrum'
 const validFullPlayerVisualizerModes = new Set(['particles', 'spectrum'])
@@ -193,8 +249,24 @@ const volumeMenuOpen = ref(false)
 const queueMenuOpen = ref(false)
 const qualityMenuOpen = ref(false)
 const visualizerMenuOpen = ref(false)
-const fullPlayerOpen = ref(false)
+const fullPlayerRequestedOpen = ref(false)
+const fullPlayerClosing = ref(false)
+const fullPlayerMotionPhase = ref('')
+const fullPlayerOpen = computed({
+  get: () => fullPlayerRequestedOpen.value || (isMobile.value && fullPlayerClosing.value),
+  set(open) {
+    if (open) {
+      fullPlayerClosing.value = false
+      fullPlayerMotionPhase.value = isMobile.value && !props.homePlayer ? 'pending' : ''
+    } else if (isMobile.value && fullPlayerRequestedOpen.value) {
+      fullPlayerClosing.value = true
+    }
+    fullPlayerRequestedOpen.value = open
+  }
+})
 const fullPlayerMounted = ref(false)
+const fullPlayerMobilePage = ref('cover')
+const swipeTrackBusy = ref(false)
 const fullPlayerCoverRect = ref(null)
 const trackSummary = ref(null)
 const playerBar = ref(null)
@@ -223,6 +295,8 @@ let fullPlayerPreloadHandleType = ''
 let fullPlayerBackgroundTaskTimer = 0
 let lastQueueTrackKey = ''
 let lastQueueTrackRequestedAt = 0
+let miniPlayerSwipe = null
+let miniPlayerSuppressClickUntil = 0
 
 const fallbackCoverPalette = {
   primary: '#213245',
@@ -248,6 +322,15 @@ const activeVisualizerMode = computed(() =>
   visualizerModes.find((mode) => mode.value === fullPlayerVisualizerMode.value) ?? visualizerModes[0]
 )
 const currentTrack = computed(() => player.state.currentTrack)
+const miniPlayerAdjacentTracks = computed(() => {
+  const queue = player.state.queue
+  if (queue.length < 2) return { previousTrack: null, nextTrack: null }
+  const index = queue.findIndex(track => String(track.id) === String(currentTrack.value.id))
+  return {
+    previousTrack: queue[index < 0 ? queue.length - 1 : (index - 1 + queue.length) % queue.length],
+    nextTrack: queue[index < 0 ? 0 : (index + 1) % queue.length]
+  }
+})
 const currentTrackComments = useCurrentTrackComments({
   track: currentTrack,
   onBeforeOpen: closePlayerPopovers,
@@ -269,6 +352,12 @@ const openSongCommentsModal = currentTrackComments.openModal
 const loadMoreSongComments = currentTrackComments.loadMore
 const progressLyrics = useProgressLyrics({
   previewTime: progressPreviewTime
+})
+const miniPlayerLyric = computed(() => {
+  if (!isMobile.value || fullPlayerOpen.value || !player.state.isPlaying || player.state.isLoading) return null
+  const { activeLine, nextLine } = getLyricFrame(progressLyrics.lines.value, player.state.currentTime)
+  if (activeLine.placeholder || !activeLine.text) return null
+  return { text: activeLine.text, secondary: activeLine.translation || nextLine?.text || '' }
 })
 const fullPlayerDanmaku = useFullPlayerDanmakuComments({
   track: currentTrack,
@@ -318,6 +407,10 @@ const activePlaybackQualityValue = computed(
 const activeAudioQuality = computed(() => getAudioQualityDefinition(activePlaybackQualityValue.value))
 const qualityButtonLabel = computed(() => `音质：${activeAudioQuality.value.label}`)
 const currentTrackLiked = computed(() => library.isTrackLiked(currentTrack.value))
+const mobileCommentCount = computed(() => {
+  const total = Number(displaySongCommentTotal.value)
+  return total > 0 ? new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 }).format(total) : ''
+})
 const volume = computed({
   get: () => Math.round(player.state.volume * 100),
   set: (value) => {
@@ -393,6 +486,7 @@ watch(
 watch(
   () => currentTrack.value.id,
   () => {
+    cancelMiniPlayerSwipe()
     progressLyrics.reset()
     currentTrackComments.syncTrack(currentTrack.value)
     fullPlayerDanmaku.reset(currentTrack.value)
@@ -404,7 +498,20 @@ watch(
   { immediate: true }
 )
 
+watch(
+  [() => currentTrack.value.id, isMobile, fullPlayerOpen, () => player.state.isPlaying],
+  ([, mobile, expanded, playing]) => {
+    if (!mobile || expanded) cancelMiniPlayerSwipe()
+    if (mobile && !expanded && playing) void progressLyrics.load(currentTrack.value)
+  },
+  { immediate: true }
+)
+watch(() => props.hidden, hidden => {
+  if (hidden) cancelMiniPlayerSwipe()
+})
+
 watch(fullPlayerOpen, (open) => {
+  if (!open) fullPlayerMobilePage.value = 'cover'
   emit('full-player-change', open)
   if (open && danmakuEnabled.value) {
     scheduleFullPlayerBackgroundTasks()
@@ -413,6 +520,23 @@ watch(fullPlayerOpen, (open) => {
 
   clearFullPlayerBackgroundTasks()
 })
+watch([fullPlayerOpen, isMobile, fullPlayerMobilePage], ([open, mobile, page]) => {
+  if (typeof document === 'undefined') return
+  if (open && mobile) document.documentElement.dataset.playerPage = page
+  else delete document.documentElement.dataset.playerPage
+}, { immediate: true })
+watch(fullPlayerMobilePage, closePlayerPopovers)
+watch(() => props.homePlayer, (active, previous) => {
+  if (!active && !previous) return
+  fullPlayerMobilePage.value = 'cover'
+  fullPlayerOpen.value = active
+  if (active) {
+    fullPlayerMounted.value = true
+    fullPlayerCoverRect.value = null
+    preloadFullPlayer()
+  }
+  closePlayerPopovers()
+}, { immediate: true })
 
 watch(fullPlayerVisualizerMode, (mode) => {
   persistFullPlayerVisualizerMode(mode)
@@ -505,8 +629,13 @@ function persistFullPlayerVisualizerMode(value) {
 function isValidVisualizerMode(value) {
   return validFullPlayerVisualizerModes.has(String(value ?? ''))
 }
+function retryFullPlayerDanmaku() {
+  fullPlayerDanmaku.reset(currentTrack.value)
+  void loadMoreFullPlayerDanmaku()
+}
 
 function toggleFullPlayer() {
+  if (props.homePlayer) { emit('home-navigation'); return }
   const now = performance.now()
 
   if (now - lastAlbumArtToggleAt.value < 500) {
@@ -528,10 +657,20 @@ function toggleFullPlayer() {
 }
 
 function closeFullPlayer() {
+  if (props.homePlayer) { emit('home-navigation'); return }
   fullPlayerCoverRect.value = getAlbumArtRect()
   albumArtHidden.value = true
   fullPlayerOpen.value = false
   closePlayerPopovers()
+}
+
+function handleFullPlayerTransitionStart(phase) {
+  fullPlayerMotionPhase.value = phase
+}
+
+function handleFullPlayerTransitionEnd(phase) {
+  if (fullPlayerMotionPhase.value === phase) fullPlayerMotionPhase.value = ''
+  if (phase === 'leave' && !fullPlayerRequestedOpen.value) fullPlayerClosing.value = false
 }
 
 function handleCoverFlightEnd(direction) {
@@ -811,6 +950,101 @@ function isNeteaseTrackId(trackId) {
   return /^\d+$/.test(String(trackId ?? '')) || /^[a-f0-9]{32}$/i.test(String(trackId ?? ''))
 }
 
+function startMiniPlayerSwipe(event) {
+  if (!isMobile.value || fullPlayerOpen.value || props.hidden || trackSummary.value?.busy || swipeTrackBusy.value || player.state.isLoading
+    || event.pointerType !== 'touch' || event.isPrimary === false || event.button > 0) return
+  const element = event.currentTarget
+  const text = element.querySelector('.mobile-track-open')?.getBoundingClientRect()
+  const play = element.querySelector('.play-button')?.getBoundingClientRect()
+  if (!text || !play || event.clientX < text.left || event.clientX > play.right
+    || event.clientY < Math.min(text.top, play.top) || event.clientY > Math.max(text.bottom, play.bottom)) return
+  miniPlayerSwipe = {
+    id: event.pointerId, x: event.clientX, y: event.clientY,
+    width: trackSummary.value?.getSwipeWidth?.() ?? text.width,
+    axis: null, element
+  }
+}
+
+function moveMiniPlayerSwipe(event) {
+  if (!miniPlayerSwipe || miniPlayerSwipe.id !== event.pointerId) return
+  const dx = event.clientX - miniPlayerSwipe.x
+  const dy = event.clientY - miniPlayerSwipe.y
+  if (!miniPlayerSwipe.axis) {
+    const axis = getPlayerSwipeAxis(dx, dy, { page: 'lyrics' })
+    if (axis === 'scroll') { cancelMiniPlayerSwipe(); return }
+    if (!axis) return
+    miniPlayerSwipe.axis = axis
+    if (event.isTrusted) miniPlayerSwipe.element.setPointerCapture(event.pointerId)
+  }
+  trackSummary.value?.drag?.(dx)
+  miniPlayerSuppressClickUntil = Date.now() + 500
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+function finishMiniPlayerSwipe(event) {
+  if (!miniPlayerSwipe || miniPlayerSwipe.id !== event.pointerId) return
+  const swipe = miniPlayerSwipe
+  const direction = swipe.axis === 'horizontal' ? getMiniPlayerSwipeDirection({
+    dx: event.clientX - swipe.x, dy: event.clientY - swipe.y, width: swipe.width
+  }) : 0
+  cancelMiniPlayerSwipe(event, { settle: false })
+  if (swipe.axis !== 'horizontal') return
+  event.preventDefault()
+  event.stopPropagation()
+  void finishMiniPlayerTrackSwipe(direction)
+}
+
+async function finishMiniPlayerTrackSwipe(direction) {
+  const request = await trackSummary.value?.finish?.(direction)
+  if (!request) return
+  if (!isMobile.value || fullPlayerOpen.value || props.hidden) {
+    await request.complete(false)
+    return
+  }
+  await playSwipedTrack(direction, request)
+}
+
+function cancelMiniPlayerSwipe(event, { settle = true } = {}) {
+  if (!miniPlayerSwipe || (event?.pointerId != null && event.pointerId !== miniPlayerSwipe.id)) return
+  if (event?.type === 'lostpointercapture' && event.target !== miniPlayerSwipe.element) return
+  const swipe = miniPlayerSwipe
+  miniPlayerSwipe = null
+  if (swipe.axis === 'horizontal') miniPlayerSuppressClickUntil = Date.now() + 500
+  if (swipe.element.hasPointerCapture?.(swipe.id)) swipe.element.releasePointerCapture(swipe.id)
+  if (settle && swipe.axis === 'horizontal') void trackSummary.value?.cancel?.()
+}
+
+function suppressMiniPlayerSwipeClick(event) {
+  if (event.detail !== 0 && Date.now() < miniPlayerSuppressClickUntil) {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+}
+
+async function playSwipedTrack(direction, request) {
+  const queue = player.state.queue
+  if (swipeTrackBusy.value || player.state.isLoading || queue.length < 2) {
+    void request?.complete?.(false)
+    return
+  }
+  const index = queue.findIndex(track => String(track.id) === String(currentTrack.value.id))
+  const requestedIndex = request?.track ? queue.findIndex(track => String(track.id) === String(request.track.id)) : null
+  if (requestedIndex === -1) {
+    void request?.complete?.(false)
+    return
+  }
+  const target = requestedIndex ?? (index < 0 ? (direction > 0 ? 0 : queue.length - 1) : (index + direction + queue.length) % queue.length)
+  const track = queue[target]
+  swipeTrackBusy.value = true
+  try {
+    await playTrackFromControls(track)
+  } finally {
+    swipeTrackBusy.value = false
+    void request?.complete?.(String(currentTrack.value.id) === String(track.id))
+  }
+}
+
 async function playPreviousTrack() {
   await playQueueRelative(-1)
 }
@@ -899,6 +1133,12 @@ function handleOutsideClick(event) {
   closePlayerPopovers()
 }
 
+function handlePlayerEscape(event) {
+  if (event.key !== 'Escape') return
+  if (queueMenuOpen.value || modeMenuOpen.value || qualityMenuOpen.value || visualizerMenuOpen.value || volumeMenuOpen.value) closePlayerPopovers()
+  else if (fullPlayerOpen.value) closeFullPlayer()
+}
+
 function syncPlayerBarHeight() {
   const height = playerBar.value?.getBoundingClientRect?.().height
 
@@ -916,13 +1156,16 @@ onMounted(() => {
   }
 
   document.addEventListener('pointerdown', handleOutsideClick)
+  document.addEventListener('keydown', handlePlayerEscape)
   removeTrackEndedListener = player.onTrackEnded(handleTrackEnded)
   scheduleFullPlayerPreload()
 })
 
 onUnmounted(() => {
+  cancelMiniPlayerSwipe()
   window.removeEventListener('resize', syncPlayerBarHeight)
   document.removeEventListener('pointerdown', handleOutsideClick)
+  document.removeEventListener('keydown', handlePlayerEscape)
   cancelFullPlayerPreload()
   clearFullPlayerBackgroundTasks()
   playerBarResizeObserver?.disconnect()

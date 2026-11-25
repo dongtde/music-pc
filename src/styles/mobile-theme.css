@@ -1,0 +1,77 @@
+/* One visual system for the opt-in 2D phone and tablet layouts. */
+:root:is([data-layout='mobile-2d'], [data-layout='compact-2d']) {
+  --mobile-bg: #121316;
+  --mobile-surface: #1d1f24;
+  --mobile-surface-soft: #24262c;
+  --mobile-surface-hover: #2c2e35;
+  --mobile-text: #f7f7fa;
+  --mobile-muted: #a2a3ad;
+  --mobile-text-soft: #d4d5dd;
+  --mobile-border: rgba(255, 255, 255, 0.065);
+  --mobile-border-strong: rgba(255, 255, 255, 0.12);
+  --mobile-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+  --mobile-cover-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+  --mobile-inline: 20px;
+  --mobile-radius: 16px;
+  --mobile-radius-sm: 12px;
+  --mobile-header-height: 84px;
+  --mobile-nav-height: 60px;
+  --mobile-mini-height: 68px;
+  --mobile-expanded-height: 208px;
+  --mobile-top-inset: env(safe-area-inset-top, 0px);
+  --mobile-bottom-inset: env(safe-area-inset-bottom, 0px);
+
+  --app-bg: var(--mobile-bg);
+  --panel-bg: var(--mobile-surface);
+  --sidebar-bg: var(--mobile-bg);
+  --topbar-bg: var(--mobile-bg);
+  --card-bg: var(--mobile-surface);
+  --card-bg-hover: var(--mobile-surface-hover);
+  --control-bg: var(--mobile-surface-soft);
+  --control-bg-hover: var(--mobile-surface-hover);
+  --text-main: var(--mobile-text);
+  --text-strong: var(--mobile-text);
+  --text-muted: var(--mobile-muted);
+  --text-soft: var(--mobile-text-soft);
+  --border-subtle: var(--mobile-border);
+  --border-strong: var(--mobile-border-strong);
+  --shadow-color: rgba(0, 0, 0, 0.16);
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(146, 148, 159, 0.24);
+  --scrollbar-thumb-hover: rgba(146, 148, 159, 0.4);
+  --active-bg: rgba(var(--accent-rgb), 0.09);
+  --layout-duration-fast: 220ms;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+:root[data-theme='light']:is([data-layout='mobile-2d'], [data-layout='compact-2d']) {
+  --mobile-bg: #f7f7f9;
+  --mobile-surface: #ffffff;
+  --mobile-surface-soft: #efeff3;
+  --mobile-surface-hover: #e7e8ee;
+  --mobile-text: #202127;
+  --mobile-muted: #737580;
+  --mobile-text-soft: #525560;
+  --mobile-border: rgba(22, 27, 36, 0.06);
+  --mobile-border-strong: rgba(22, 27, 36, 0.12);
+  --mobile-shadow: 0 6px 24px rgba(22, 27, 36, 0.055);
+  --mobile-cover-shadow: 0 10px 28px rgba(22, 27, 36, 0.12);
+  --shadow-color: rgba(22, 27, 36, 0.08);
+}
+
+:root[data-layout='compact-2d'] {
+  --mobile-inline: 24px;
+  --mobile-header-height: 64px;
+}
+
+@media (max-width: 359px) {
+  :root[data-layout='mobile-2d'] { --mobile-inline: 16px; }
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) body {
+  background: var(--mobile-bg);
+  color: var(--mobile-text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}

@@ -1,0 +1,126 @@
+/* The artwork page and the existing shared transport move as one phone player. */
+html[data-layout='mobile-2d'] {
+  --mobile-player-open-duration: 480ms;
+  --mobile-player-close-duration: 340ms;
+  --mobile-player-open-ease: cubic-bezier(.22, 1, .36, 1);
+  --mobile-player-close-ease: cubic-bezier(.4, 0, .8, .2);
+}
+
+html[data-layout='mobile-2d'] [data-expansion-effect='depth'] {
+  --mobile-player-open-duration: 580ms;
+  --mobile-player-close-duration: 380ms;
+}
+
+html[data-layout='mobile-2d'] .full-player-page:is(.mobile-player-slide-enter-active, .mobile-player-depth-enter-active) {
+  transition: transform var(--mobile-player-open-duration) var(--mobile-player-open-ease),
+    opacity var(--mobile-player-open-duration) var(--mobile-player-open-ease),
+    border-radius var(--mobile-player-open-duration) var(--mobile-player-open-ease);
+  transform-origin: center bottom;
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+
+html[data-layout='mobile-2d'] .full-player-page:is(.mobile-player-slide-leave-active, .mobile-player-depth-leave-active) {
+  transition: transform var(--mobile-player-close-duration) var(--mobile-player-close-ease),
+    opacity var(--mobile-player-close-duration) var(--mobile-player-close-ease),
+    border-radius var(--mobile-player-close-duration) var(--mobile-player-close-ease);
+  transform-origin: center bottom;
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+
+html[data-layout='mobile-2d'] .full-player-page:is(.mobile-player-slide-enter-from, .mobile-player-slide-leave-to) {
+  transform: translate3d(0, 100%, 0);
+}
+
+html[data-layout='mobile-2d'] .full-player-page:is(.mobile-player-depth-enter-from, .mobile-player-depth-leave-to) {
+  border-radius: 32px 32px 0 0;
+  opacity: .78;
+  transform: translate3d(0, 100%, 0) scale(.96);
+}
+
+html[data-layout='mobile-2d'] .full-player-page:is(.mobile-player-slide-enter-to, .mobile-player-slide-leave-from, .mobile-player-depth-enter-to, .mobile-player-depth-leave-from) {
+  border-radius: 0;
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+/* Animate wrapper layers, leaving the song/page swipe transforms untouched. */
+html[data-layout='mobile-2d'] .mobile-player-depth-enter-active .mobile-full-player__artwork {
+  animation: mobile-player-artwork-reveal 580ms var(--mobile-player-open-ease) both;
+}
+
+html[data-layout='mobile-2d'] .mobile-player-depth-enter-active .mobile-full-player__content {
+  animation: mobile-player-content-reveal 440ms 100ms var(--mobile-player-open-ease) both;
+}
+
+html[data-layout='mobile-2d'] .mobile-player-depth-enter-active :is(.full-player__close, .full-player__view-switch, .mobile-full-player__tabs) {
+  animation: mobile-player-chrome-reveal 300ms 160ms ease-out both;
+}
+
+/* Keep first-open controls hidden until the lazy player has mounted. */
+html[data-layout='mobile-2d'] .app-shell > .player[data-expansion-phase='pending'] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+html[data-layout='mobile-2d'] .app-shell > .player.player--full-screen:is([data-expansion-phase='enter'], [data-expansion-phase='leave']) {
+  transition: none;
+  pointer-events: none;
+  will-change: transform;
+}
+
+html[data-layout='mobile-2d'] .app-shell > .player.player--full-screen[data-expansion-phase='enter'] {
+  animation: mobile-player-transport-in var(--mobile-player-open-duration) var(--mobile-player-open-ease) both;
+}
+
+html[data-layout='mobile-2d'] .app-shell > .player.player--full-screen[data-expansion-phase='leave'] {
+  animation: mobile-player-transport-out var(--mobile-player-close-duration) var(--mobile-player-close-ease) both;
+}
+
+html[data-layout='mobile-2d'] .full-player-page:is(.mobile-player-none-enter-active, .mobile-player-none-leave-active),
+html[data-layout='mobile-2d'] .app-shell > .player.player--full-screen[data-expansion-effect='none'] {
+  animation: none;
+  transition: none;
+}
+
+@keyframes mobile-player-transport-in {
+  from { transform: translate3d(0, 100dvh, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+
+@keyframes mobile-player-transport-out {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(0, 100dvh, 0); }
+}
+
+@keyframes mobile-player-artwork-reveal {
+  from { opacity: .65; transform: scale(1.08); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes mobile-player-content-reveal {
+  from { opacity: 0; transform: translate3d(0, 24px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes mobile-player-chrome-reveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+html[data-layout='mobile-2d'][data-reduced-motion='true'] .full-player-page,
+html[data-layout='mobile-2d'][data-reduced-motion='true'] .full-player-page *,
+html[data-layout='mobile-2d'][data-reduced-motion='true'] .app-shell > .player[data-expansion-phase] {
+  animation: none !important;
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-layout='mobile-2d'] .full-player-page,
+  html[data-layout='mobile-2d'] .full-player-page *,
+  html[data-layout='mobile-2d'] .app-shell > .player[data-expansion-phase] {
+    animation: none !important;
+    transition: none !important;
+  }
+}

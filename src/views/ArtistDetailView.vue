@@ -428,6 +428,7 @@ import ArtistVideoCard from '../components/ArtistVideoCard.vue'
 import SongListRow from '../components/SongListRow.vue'
 import { useLoadMoreTrigger } from '../composables/useLoadMoreTrigger'
 import { useQueuePlayback } from '../composables/useQueuePlayback'
+import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useVirtualRows } from '../composables/useVirtualRows'
 import {
   getArtistAlbumsData,
@@ -449,7 +450,7 @@ const ARTIST_TAB_SKELETON_MIN_MS = 360
 const ARTIST_FEATURED_PREVIEW_IDLE_TIMEOUT = 1200
 const ARTIST_FEATURED_PREVIEW_FALLBACK_DELAY = 320
 const ARTIST_TAB_CACHE_SIZE = 48
-const TRACK_ROW_HEIGHT = 58
+const { songRowHeight } = useResponsiveLayout()
 
 const route = useRoute()
 const message = useMessage()
@@ -597,7 +598,7 @@ const {
 } = useVirtualRows(rankedArtistSongs, {
   root: pageRoot,
   list: artistSongsVirtualList,
-  rowHeight: TRACK_ROW_HEIGHT
+  rowHeight: songRowHeight
 })
 
 const featuredAlbums = computed(() => artistAlbums.value.slice(0, 6))

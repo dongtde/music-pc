@@ -1,10 +1,11 @@
 <template>
   <div ref="pageRoot" class="view library-view" @scroll.passive="scheduleLibraryRangeUpdate">
-    <section class="library-head">
+    <MobileLibraryHeader v-if="isMobile && environment.state.mode === '2d'" />
+    <section class="library-head" :class="{ 'library-head--mobile': isMobile && environment.state.mode === '2d' }">
       <div>
-        <span class="library-kicker">{{ activeMeta.kicker }}</span>
-        <h1>{{ activeMeta.title }}</h1>
-        <p>{{ activeMeta.description }}</p>
+        <span v-if="!isMobile || environment.state.mode !== '2d'" class="library-kicker">{{ activeMeta.kicker }}</span>
+        <h1>{{ activeMeta.title }}<small v-if="isMobile && environment.state.mode === '2d'">{{ tracks.length }} 首</small></h1>
+        <p v-if="!isMobile || environment.state.mode !== '2d'">{{ activeMeta.description }}</p>
       </div>
 
       <div v-if="showLibraryActions" class="library-actions">
@@ -104,21 +105,25 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { CloudDownload, Heart, History, Play, RotateCw, Upload } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
+import MobileLibraryHeader from '../components/MobileLibraryHeader.vue'
 import SongListRow from '../components/SongListRow.vue'
 import { useQueuePlayback } from '../composables/useQueuePlayback'
+import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useVirtualRows } from '../composables/useVirtualRows'
 import { useLibraryStore } from '../stores/library'
 import { useAuthStore } from '../stores/auth'
+import { useEnvironmentStore } from '../stores/environment'
 import { getDownloadedSongsData } from '../services/netease'
 import '../styles/library.css'
 import '../styles/playlist.css'
 
-const TRACK_ROW_HEIGHT = 58
+const { isMobile, songRowHeight } = useResponsiveLayout()
 
 const route = useRoute()
 const message = useMessage()
 const library = useLibraryStore()
 const auth = useAuthStore()
+const environment = useEnvironmentStore()
 const pageRoot = ref(null)
 const fileInput = ref(null)
 const trackVirtualList = ref(null)
@@ -153,7 +158,7 @@ const {
 } = useVirtualRows(rankedTracks, {
   root: pageRoot,
   list: trackVirtualList,
-  rowHeight: TRACK_ROW_HEIGHT
+  rowHeight: songRowHeight
 })
 const activeMeta = computed(() => {
   if (viewType.value === 'liked') {

@@ -54,6 +54,7 @@
           <div v-if="!activeMv" class="mv-watch__empty">
             <Video :size="48" />
             <span>{{ loading ? '正在加载 MV' : '暂无可播放 MV' }}</span>
+            <button v-if="usesEditorialLayout && !loading" class="mv-state__retry" type="button" @click="loadBootData">重新加载</button>
           </div>
 
           <div v-if="videoRecoveryVisible" class="mv-watch__recovery" role="alert">
@@ -346,9 +347,25 @@
           </button>
         </section>
 
-        <section v-if="errorMessage" class="mv-state mv-state--error">{{ errorMessage }}</section>
+        <section v-if="errorMessage" class="mv-state mv-state--error" role="alert">
+          <span>{{ errorMessage }}</span>
+          <button v-if="usesEditorialLayout" class="mv-state__retry" type="button" :disabled="loading" @click="loadBootData">重新加载</button>
+        </section>
 
         <template v-if="activeBrowseTab === 'recommend'">
+          <section
+            v-if="usesEditorialLayout && !loading && !errorMessage && !heroMvs.length && !browseSections.length"
+            class="mv-empty"
+            role="status"
+          >
+            <Video :size="40" aria-hidden="true" />
+            <strong>暂时没有推荐视频</strong>
+            <p>重新加载推荐，或去视频库看看。</p>
+            <div class="mv-empty__actions">
+              <button class="mv-state__retry" type="button" @click="loadBootData">重新加载</button>
+              <button class="mv-state__retry mv-state__retry--secondary" type="button" @click="activeBrowseTab = 'library'">浏览视频库</button>
+            </div>
+          </section>
           <section v-for="section in browseSections" :key="section.id" class="mv-browse-section">
             <header class="mv-section-head">
               <h2>{{ section.title }}</h2>
@@ -486,7 +503,12 @@
             </div>
           </div>
         </div>
-        <div v-else class="mv-state">暂无 MV 数据，换个筛选条件试试。</div>
+        <div v-else class="mv-state" :class="{ 'mv-empty': usesEditorialLayout }" role="status">
+          <Video v-if="usesEditorialLayout" :size="40" aria-hidden="true" />
+          <strong v-if="usesEditorialLayout">这个分类暂无视频</strong>
+          <span>暂无 MV 数据，换个筛选条件试试。</span>
+          <button v-if="usesEditorialLayout" class="mv-state__retry" type="button" :disabled="filteredLoading" @click="reloadFiltered">重新加载</button>
+        </div>
 
         <div v-if="filteredLoading && filteredMvs.length" class="mv-library__loading" role="status" aria-live="polite">
           <LoaderCircle :size="17" class="mv-spin" />
@@ -541,6 +563,7 @@ import {
 import CommentModal from '../components/CommentModal.vue'
 import DanmakuLayer from '../components/DanmakuLayer.vue'
 import { useLoadMoreTrigger } from '../composables/useLoadMoreTrigger'
+import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useVirtualRows } from '../composables/useVirtualRows'
 import {
   getFilteredMvsData,
@@ -552,6 +575,7 @@ import {
   toggleMvSubscribeData
 } from '../services/netease'
 import { useAuthStore } from '../stores/auth'
+import { useEnvironmentStore } from '../stores/environment'
 import { usePlayerStore } from '../stores/player'
 import { createLruCache } from '../utils/lruCache'
 import { createKugouMvRouteTarget, createMvRouteQuery as createSharedMvRouteQuery } from '../utils/mv'
@@ -573,6 +597,9 @@ const router = useRouter()
 const auth = useAuthStore()
 const player = usePlayerStore()
 const message = useMessage()
+const { isNarrow } = useResponsiveLayout()
+const environment = useEnvironmentStore()
+const usesEditorialLayout = computed(() => isNarrow.value && environment.state.mode === '2d')
 const viewRoot = ref(null)
 const playerSection = ref(null)
 const playerStage = ref(null)
@@ -2351,9 +2378,40 @@ function createMvGridRows(items = [], columns = 1) {
   return rows
 }
 
+// Keep virtual grouping and estimates in sync with the opt-in 2D page CSS.
+function getResponsiveFilteredGridMetrics() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return null
+  }
+
+  const layout = document.documentElement.dataset.layout
+  if (layout !== 'mobile-2d' && layout !== 'compact-2d') {
+    return null
+  }
+
+  const element = filteredVirtualList.value || viewRoot.value || document.documentElement
+  const styles = window.getComputedStyle(element)
+  const readMetric = (name, fallback) => {
+    const value = Number.parseFloat(styles.getPropertyValue(name))
+    return Number.isFinite(value) && value > 0 ? value : fallback
+  }
+
+  return {
+    columns: Math.max(1, Math.floor(readMetric('--mv-grid-columns', layout === 'mobile-2d' ? 2 : 3))),
+    columnGap: readMetric('--mv-grid-column-gap', 16),
+    rowGap: readMetric('--mv-grid-row-gap', 24),
+    cardMetaHeight: readMetric('--mv-grid-card-meta-height', 74)
+  }
+}
+
 function getFilteredGridColumnCount() {
   if (typeof window === 'undefined') {
     return 5
+  }
+
+  const responsiveMetrics = getResponsiveFilteredGridMetrics()
+  if (responsiveMetrics) {
+    return responsiveMetrics.columns
   }
 
   if (window.innerWidth <= 1240) {
@@ -2368,17 +2426,26 @@ function getFilteredGridColumnCount() {
 }
 
 function getEstimatedFilteredGridRowHeight() {
-  const listWidth = filteredVirtualList.value?.clientWidth || viewRoot.value?.clientWidth || 0
+  const responsiveMetrics = getResponsiveFilteredGridMetrics()
+  let listWidth = filteredVirtualList.value?.clientWidth || viewRoot.value?.clientWidth || 0
   const columns = Math.max(1, filteredGridColumns.value)
+
+  if (responsiveMetrics && !filteredVirtualList.value && viewRoot.value) {
+    const styles = window.getComputedStyle(viewRoot.value)
+    listWidth -= (Number.parseFloat(styles.paddingLeft) || 0) + (Number.parseFloat(styles.paddingRight) || 0)
+  }
 
   if (!listWidth) {
     return FILTERED_GRID_DEFAULT_ROW_HEIGHT
   }
 
-  const cardWidth = (listWidth - FILTERED_GRID_COLUMN_GAP * (columns - 1)) / columns
+  const columnGap = responsiveMetrics?.columnGap ?? FILTERED_GRID_COLUMN_GAP
+  const rowGap = responsiveMetrics?.rowGap ?? FILTERED_GRID_ROW_GAP
+  const cardMetaHeight = responsiveMetrics?.cardMetaHeight ?? 42
+  const cardWidth = (listWidth - columnGap * (columns - 1)) / columns
   const coverHeight = Math.max(0, cardWidth) * 9 / 16
 
-  return Math.ceil(coverHeight + 42 + FILTERED_GRID_ROW_GAP)
+  return Math.ceil(coverHeight + cardMetaHeight + rowGap)
 }
 
 function getElementOuterHeight(element) {

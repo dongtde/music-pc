@@ -1,0 +1,246 @@
+/* Phone playlist detail: artwork header and an inset song-list divider. */
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail {
+  --mobile-header-height: 56px;
+  --mobile-nav-height: 0px;
+  --playlist-header-height: calc(var(--mobile-header-height) + var(--mobile-top-inset));
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar.topbar--playlist {
+  position: absolute;
+  inset: 0 0 auto;
+  grid-template-columns: 44px minmax(0, 1fr);
+  padding-inline: 12px var(--mobile-inline);
+  background: transparent;
+  transition: background-color 180ms ease;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist .mobile-topbar-title {
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist-title-visible .mobile-topbar-title {
+  opacity: 1;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist :is(.mobile-topbar-title h1, .history-actions button) {
+  color: #fff;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar.topbar--playlist-collapsed {
+  background: var(--mobile-bg);
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist-collapsed :is(.mobile-topbar-title h1, .history-actions button) {
+  color: var(--mobile-text);
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .view.playlist-detail {
+  position: relative;
+  padding: 0 0 24px;
+  background: var(--mobile-bg);
+  scrollbar-width: none;
+  scroll-padding-top: var(--playlist-header-height);
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-hero {
+  position: relative;
+  display: block;
+  margin: 0;
+  border: 0;
+  isolation: isolate;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-cover {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+  box-shadow: none;
+  mask-image: linear-gradient(180deg, #000 20%, rgba(0, 0, 0, .88) 40%, rgba(0, 0, 0, .12) 76%, transparent 92%);
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-cover__image {
+  object-position: center top;
+}
+
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-hero__content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: calc(clamp(260px, 78vw, 440px) + var(--mobile-top-inset)) var(--mobile-inline) 20px;
+  border: 0;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-hero .playlist-title {
+  order: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--accent) 65%, var(--mobile-text));
+  font-size: clamp(22px, 5.8vw, 30px);
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-title .overflow-marquee {
+  justify-content: center;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-title .overflow-marquee.is-overflowing {
+  justify-content: start;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-meta {
+  order: 1;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+  text-align: center;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-meta > .playlist-meta__creator {
+  max-width: calc(100% - 38px);
+  flex: 0 1 auto;
+  color: var(--mobile-text);
+  font-size: var(--type-body);
+  overflow-wrap: anywhere;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-meta > .playlist-meta__updated,
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-meta > .playlist-meta__tags {
+  flex-basis: 100%;
+  color: var(--mobile-muted);
+  font-size: var(--type-meta);
+  line-height: 1.5;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-meta > :is(.playlist-meta__count, .playlist-meta__listeners, .playlist-meta__updated:empty) {
+  display: none;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-description {
+  display: flex;
+  min-width: 0;
+  order: 2;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-description p {
+  display: block;
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  color: var(--mobile-muted);
+  font-size: var(--type-body);
+  line-height: 1.7;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-description.is-expanded {
+  align-items: start;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-description.is-expanded p {
+  overflow: visible;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: unset;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-description__toggle {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--mobile-text-soft);
+  background: transparent;
+  cursor: pointer;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-description__toggle svg {
+  box-sizing: content-box;
+  padding: 4px;
+  border-radius: 50%;
+  background: var(--mobile-surface-soft);
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-actions {
+  order: 3;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 18px;
+  border: 0;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-actions .playlist-action {
+  height: 46px;
+  min-height: 46px;
+  flex: 0 1 124px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-size: var(--type-control);
+  font-weight: 500;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail > .playlist-table {
+  margin: 12px 14px 0;
+  padding: 0;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail > .playlist-table::before {
+  display: block;
+  margin: 0 6px 16px;
+  border-top: 1px solid var(--mobile-border-strong);
+  content: '';
+}
+
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail > .playlist-state {
+  margin-inline: var(--mobile-inline);
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-detail-skeleton__hero {
+  position: relative;
+  display: block;
+  padding: 0 var(--mobile-inline) 20px;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-detail-skeleton__cover {
+  width: calc(100% + 2 * var(--mobile-inline));
+  max-width: none;
+  height: clamp(260px, 78vw, 440px);
+  margin-inline: calc(-1 * var(--mobile-inline));
+  aspect-ratio: auto;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail-skeleton__content {
+  margin-top: 16px;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail-skeleton__table {
+  margin-inline: var(--mobile-inline);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist,
+  html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist .mobile-topbar-title {
+    transition: none;
+  }
+}

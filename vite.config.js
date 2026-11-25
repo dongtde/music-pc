@@ -40,6 +40,10 @@ export default defineConfig(({ mode }) => {
   return {
     base: mode === 'desktop' ? './' : '/',
     plugins: [vue()],
+    optimizeDeps: {
+      // Archived previews and builds under output/ are not renderer entries.
+      entries: ['index.html'],
+    },
     define: {
       __APP_BUILD_VERSION__: JSON.stringify(appBuildVersion),
     },

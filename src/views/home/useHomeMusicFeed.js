@@ -353,6 +353,13 @@ export function useHomeMusicFeed({ active }) {
       return
     }
 
+    // Native touch scrolling must not be captured by the mouse drag handler.
+    // Arm the existing gesture gate; playback still starts only on a new slide.
+    if (event.pointerType === 'touch') {
+      autoPlayAfterGesture.value = true
+      return
+    }
+
     feedSnapRequestId += 1
     feedDragging.value = true
     feedDragState.pointerId = event.pointerId
@@ -413,6 +420,10 @@ export function useHomeMusicFeed({ active }) {
   }
 
   function shouldIgnoreFeedDrag(event) {
+    // Preview lyrics are part of the touch feed; full lyrics own vertical drags.
+    if (event.pointerType === 'touch' && event.target?.closest?.('.soda-lyrics-panel--single-line, .soda-lyrics-panel--preview-lines')) {
+      return false
+    }
     return Boolean(event.target?.closest?.(
       '.soda-lyrics-panel, .soda-action-rail, .soda-slide__progress, button, a, input, textarea, select'
     ))

@@ -76,7 +76,8 @@
           :title="compact ? item.label : undefined"
         >
           <component :is="icons[item.icon]" :size="18" />
-          <span>{{ item.label }}</span>
+          <span class="nav-item__label">{{ item.label }}</span>
+          <span class="nav-item__compact-label" aria-hidden="true">{{ item.compactLabel || item.label }}</span>
           <em v-if="item.badge">{{ item.badge }}</em>
         </router-link>
       </section>
@@ -176,7 +177,7 @@ const sidebarGroups = computed(() => [
   {
     title: '发现',
     items: [
-      { label: '发现音乐', to: '/home', icon: 'House' },
+      { label: '发现音乐', compactLabel: '发现', to: '/home', icon: 'House' },
       {
         label: '音乐厅',
         to: '/discover/recommend',
@@ -191,10 +192,11 @@ const sidebarGroups = computed(() => [
   {
     title: '我的音乐',
     items: [
-      { label: '本地与下载', to: '/library/local', icon: 'CloudDownload' },
-      { label: '最近播放', to: '/library/recent', icon: 'History' },
+      { label: '本地与下载', compactLabel: '下载', to: '/library/local', icon: 'CloudDownload' },
+      { label: '最近播放', compactLabel: '最近', to: '/library/recent', icon: 'History' },
       {
         label: '我喜欢的音乐',
+        compactLabel: '喜欢',
         to: '/library/liked',
         icon: 'Heart',
         badge: formatBadge(library.likedCount.value)

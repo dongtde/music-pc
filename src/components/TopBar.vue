@@ -1,34 +1,57 @@
 <template>
-  <header class="topbar">
+  <header
+    class="topbar"
+    :class="{
+      'topbar--search-open': searchExpanded,
+      'topbar--detail': isMobileDetail,
+      'topbar--playlist': isMobilePlaylist,
+      'topbar--playlist-title-visible': isMobilePlaylist && playlistHeader.visible,
+      'topbar--playlist-collapsed': isMobilePlaylist && playlistHeader.collapsed,
+    }"
+  >
+    <div v-if="isMobile" class="mobile-topbar-title" :aria-hidden="isMobilePlaylist && !playlistHeader.visible">
+      <h1 v-if="isMobilePlaylist">
+        <OverflowMarquee :text="playlistHeader.title || mobilePageTitle" :active="playlistHeader.visible" />
+      </h1>
+      <h1 v-else>{{ isMobileDetail ? mobilePageTitle : '澜音' }}</h1>
+    </div>
     <div class="history-actions">
       <button type="button" title="后退" aria-label="后退" @click="router.back()"><ChevronLeft :size="20" /></button>
       <button type="button" title="前进" aria-label="前进" @click="router.forward()"><ChevronRight :size="20" /></button>
     </div>
 
     <div
+      v-if="!isMobilePlaylist"
       ref="searchWrap"
       class="top-search"
       :class="{ 'top-search--open': searchExpanded }"
       @focusout="handleSearchFocusOut"
       @pointerdown.capture="handleSearchPointerDown"
     >
+      <button v-if="isMobile && !searchExpanded" class="mobile-search-trigger" type="button" aria-label="搜索音乐" @click="openMobileSearch"><Search :size="21" /></button>
       <n-input
+        ref="searchInput"
+        aria-label="搜索音乐、歌手或专辑"
         v-model:value="searchKeyword"
         round
         clearable
         :placeholder="searchPlaceholder"
         class="search-input"
+        :inert="isMobile && !searchExpanded"
+        :aria-hidden="isMobile && !searchExpanded"
         @focus="openSearchPanel"
         @clear="clearSearch"
         @keydown.enter.prevent="submitSearch()"
+        @keydown.esc.prevent="closeMobileSearch"
       >
         <template #prefix>
           <Search :size="18" />
         </template>
       </n-input>
+      <button v-if="isMobile && searchExpanded" class="mobile-search-cancel" type="button" @pointerdown.prevent @click="closeMobileSearch">取消</button>
 
       <Transition name="search-panel" @after-leave="handleSearchPanelAfterLeave">
-        <div v-if="searchPanelVisible" class="search-panel" @pointerdown.prevent>
+        <div v-if="searchPanelVisible" class="search-panel" @pointerdown="handlePanelPointerDown">
         <section v-if="!trimmedKeyword && !searchedKeyword" class="search-section">
           <div v-if="searchHistory.length" class="search-history-block">
             <header class="search-section__head search-section__head--controls">
@@ -216,6 +239,10 @@
     <router-link class="icon-button" to="/settings" title="设置" aria-label="设置">
       <Settings :size="18" />
     </router-link>
+    <button v-if="isMobile && !isMobileDetail" class="mobile-account-button" type="button" :aria-label="auth.state.isLoggedIn ? '我的账号' : '登录账号'" @click="auth.openLoginModal">
+      <img v-if="mobileAvatarUrl" :src="mobileAvatarUrl" alt="" />
+      <UserRound v-else :size="20" />
+    </button>
     <WindowControls class="topbar__window-controls" />
 
     <n-modal
@@ -269,7 +296,7 @@
 </template>
 
 <script setup>
-import { computed, defineComponent, h, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ChevronLeft,
@@ -287,10 +314,12 @@ import {
   Sun,
   Trash2,
   User,
+  UserRound,
   Video
 } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import SongListRow from './SongListRow.vue'
+import OverflowMarquee from './OverflowMarquee.vue'
 import WindowControls from './WindowControls.vue'
 import {
   useSearchBoot,
@@ -300,8 +329,17 @@ import {
 import { getSearchResultData } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
 import { useThemeStore } from '../stores/theme'
+import { useAuthStore } from '../stores/auth'
 import { getPlaybackErrorDisplay } from '../utils/playbackError'
 import { isAbortError } from '../utils/request'
+import { useResponsiveLayout } from '../composables/useResponsiveLayout'
+
+defineProps({
+  playlistHeader: {
+    type: Object,
+    default: () => ({ title: '', visible: false, collapsed: false })
+  }
+})
 
 const SearchGroup = defineComponent({
   name: 'SearchGroup',
@@ -393,8 +431,24 @@ const featureModalSections = [
 
 const theme = useThemeStore()
 const player = usePlayerStore()
+const auth = useAuthStore()
+const mobileAvatarUrl = auth.avatarUrl
 const router = useRouter()
 const message = useMessage()
+const { isMobile2D: isMobile } = useResponsiveLayout()
+const isMobileDetail = computed(() => isMobile.value && /^\/(playlist|album|artist|settings|podcast\/[^/]+|kugou-mv)(\/|$)/.test(router.currentRoute.value.path) && !['/podcast/rank', '/podcast/sleep', '/podcast/radio'].includes(router.currentRoute.value.path))
+const isMobilePlaylist = computed(() => isMobile.value && router.currentRoute.value.name === 'playlist')
+const mobilePageTitle = computed(() => {
+  const currentRoute = router.currentRoute.value
+  const root = currentRoute.path.split('/')[1]
+  return { home: '现在就听', discover: '发现', podcast: '电台', mv: '视频', video: '视频', library: '我的音乐', settings: '设置', playlist: '歌单', album: '专辑', artist: '歌手', 'kugou-mv': '视频', friends: '朋友' }[root] || currentRoute.meta.title || '现在就听'
+})
+
+function openMobileSearch() {
+  openSearchPanel()
+  nextTick(() => searchInput.value?.focus())
+}
+const searchInput = ref(null)
 const searchWrap = ref(null)
 const featureModalVisible = ref(false)
 const searchExpanded = ref(false)
@@ -448,9 +502,31 @@ watch(trimmedKeyword, (keyword) => {
   }
 })
 
+watch(() => router.currentRoute.value.fullPath, closeMobileSearch)
+
+function updateSearchViewport() {
+  if (!isMobile.value) return
+  const viewport = window.visualViewport
+  const top = viewport?.offsetTop || 0
+  document.documentElement.style.setProperty('--search-viewport-height', `${viewport?.height || window.innerHeight}px`)
+  document.documentElement.style.setProperty('--search-viewport-top', `${top}px`)
+}
+
+function closeMobileSearch() {
+  closeSearchPanel()
+  searchInput.value?.blur()
+}
+
+function handlePanelPointerDown(event) {
+  if (event.pointerType !== 'touch') event.preventDefault()
+}
+
 onMounted(() => {
   loadSearchBoot()
   document.addEventListener('pointerdown', handleOutsideClick)
+  updateSearchViewport()
+  window.visualViewport?.addEventListener('resize', updateSearchViewport)
+  window.visualViewport?.addEventListener('scroll', updateSearchViewport)
 })
 
 onUnmounted(() => {
@@ -458,9 +534,23 @@ onUnmounted(() => {
   window.clearTimeout(searchPanelTimer)
   window.clearTimeout(searchPanelCloseTimer)
   document.removeEventListener('pointerdown', handleOutsideClick)
+  window.visualViewport?.removeEventListener('resize', updateSearchViewport)
+  window.visualViewport?.removeEventListener('scroll', updateSearchViewport)
 })
 
 function openSearchPanel() {
+  updateSearchViewport()
+  if (isMobile.value) {
+    window.clearTimeout(searchPanelTimer)
+    window.clearTimeout(searchPanelCloseTimer)
+    searchPanelTimer = 0
+    searchPanelCloseTimer = 0
+    searchPanelLeaving = false
+    loadSearchHistory()
+    searchExpanded.value = true
+    searchPanelVisible.value = true
+    return
+  }
   if (searchPanelVisible.value) {
     return
   }
@@ -536,6 +626,7 @@ function handleSearchPointerDown() {
 }
 
 function handleSearchFocusOut(event) {
+  if (isMobile.value && searchExpanded.value) return
   const relatedTarget = event.relatedTarget
 
   if (

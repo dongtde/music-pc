@@ -1,0 +1,1870 @@
+/* Mobile pages · V2 editorial contract
+   Mission: make real artwork and music the hierarchy, not desktop chrome.
+   Uses mobile-theme.css semantic colors, 20/16/24px inline space, 16/12px
+   radii and a 4/8px rhythm. Type: 26–28 page / 20 section / 15 card / 12 meta.
+   Do: quiet surfaces, open shelves, one accent primary action, 44px controls,
+   visible focus, honest existing loading/error/empty states, reduced motion.
+   Don't: pink outlines on every card, permanent center-cover play overlays,
+   fixed text widths, invented content, or changes to the shell / Home / audio
+   player / library header / SongListRow height. All rules opt in to 2D only. */
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) {
+  --pages-inline: var(--mobile-inline, 20px);
+  --pages-card-columns: 2;
+  --pages-card-gap: 16px;
+  --pages-media-columns: 2;
+  --pages-shelf-columns: 2.15;
+  --pages-radius: var(--mobile-radius, 16px);
+  --pages-radius-sm: var(--mobile-radius-sm, 12px);
+  --pages-surface: var(--mobile-surface, var(--panel-bg));
+  --pages-surface-soft: var(--mobile-surface-soft, var(--control-bg));
+  --pages-text: var(--mobile-text, var(--text-main));
+  --pages-muted: var(--mobile-muted, var(--text-muted));
+  --pages-border: var(--mobile-border, var(--border-subtle));
+  --pages-shadow: var(--mobile-shadow, 0 4px 16px rgba(0, 0, 0, 0.08));
+  --pages-danger: #ff7882;
+  --pages-success: #60c69b;
+  --pages-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --pages-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  /* VideoView reads these exact metrics. 40px title + 18px artist + 2×8px. */
+  --mv-grid-columns: 2;
+  --mv-grid-column-gap: 16px;
+  --mv-grid-row-gap: 24px;
+  --mv-grid-card-meta-height: 74px;
+}
+
+html[data-layout='compact-2d'] {
+  --pages-inline: var(--mobile-inline, 24px);
+  --pages-card-columns: 3;
+  --pages-shelf-columns: 3.15;
+  --mv-grid-columns: 3;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d'])[data-theme='light'] {
+  --pages-danger: #b93b4c;
+  --pages-success: #217b56;
+}
+
+/* Shared page rhythm. The route's scroll container remains the same. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.view.discover, .view.playlist-detail, .view.album-detail, .view.artist-detail, .view.library-view, .view.podcast-view, .view.podcast-detail-view, .view.mv-view, .view.settings-view) {
+  min-width: 0;
+  padding-inline: var(--pages-inline);
+  padding-bottom: 32px;
+  color: var(--pages-text);
+  overscroll-behavior-y: contain;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.view.playlist-detail, .view.album-detail, .view.artist-detail, .view.podcast-detail-view, .view.settings-view) {
+  padding-top: 12px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover-page, .artist-tab-panel) {
+  animation: mobile-pages-enter 360ms var(--pages-enter) both;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .section-title, .artist-detail-section__head h2, .podcast-view .podcast-section__head strong, .podcast-showcase__head > strong, .mv-section-head h2) {
+  min-width: 0;
+  margin: 0;
+  color: var(--pages-text);
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .section-head, .artist-library-head, .album-library-head, .artist-detail-section__head, .podcast-section__head, .podcast-showcase__head, .mv-section-head) {
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .section-head .section-title, .artist-library-head .section-title, .album-library-head .section-title) {
+  margin: 0;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .latest-section, .chart-section + .chart-section, .artist-detail-section) {
+  margin-top: 32px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.artist-library-head > small, .album-library-head > small, .artist-detail-section__head > small, .podcast-section__head small) {
+  flex-shrink: 0;
+  color: var(--pages-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* Tabs are navigation, filters are quieter selections. Neither is a pill wall. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover > .tabs, .discover .filter-row, .discover .playlist-category-strip, .discover .artist-filter-panel > div, .artist-detail-tabs, .artist-detail-tags, .podcast-view .podcast-filter-options, .podcast-view .podcast-chip-row, .mv-tabs, .mv-filter-group) {
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover > .tabs, .discover .filter-row, .discover .playlist-category-strip, .discover .artist-filter-panel > div, .artist-detail-tabs, .podcast-filter-options, .podcast-chip-row, .mv-tabs, .mv-filter-group) > * {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover > .tabs, .artist-detail-tabs, .mv-tabs) {
+  height: auto;
+  min-height: 52px;
+  align-items: center;
+  gap: 24px;
+  margin: 0 0 16px;
+  padding-block: 4px;
+  border-bottom: 1px solid var(--pages-border);
+  background: transparent;
+  box-shadow: none;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover > .tabs a, .artist-detail-tabs button, .mv-tabs button) {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  height: auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+  border: 0;
+  color: var(--pages-muted);
+  background: transparent;
+  font-size: 15px;
+  font-weight: 600;
+  transition: color 140ms var(--pages-ease);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover > .tabs a.active, .artist-detail-tabs button.active, .mv-tabs button.active) {
+  color: var(--accent);
+  background: transparent;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover > .tabs a.active::after,
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-detail-tabs button::after,
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-tabs button.active::after {
+  bottom: -4px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--accent);
+  box-shadow: none;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .filter-row, .discover .playlist-category-strip, .podcast-filter-options, .podcast-chip-row) {
+  gap: 8px;
+  margin-bottom: 20px;
+  padding-block: 4px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .artists-page, .discover .albums-page, .discover .playlists-page) {
+  padding-top: 0;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .artist-filter-panel, .mv-filter-panel) {
+  gap: 4px;
+  margin-bottom: 24px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .artist-filter-panel > div, .mv-filter-group) {
+  align-items: center;
+  gap: 4px;
+  padding-block: 4px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.artist-filter-panel strong, .mv-filter-group > span) {
+  width: auto;
+  flex: 0 0 36px;
+  color: var(--pages-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .filter-row button, .playlist-category-chip, .artist-filter-panel button, .podcast-filter-options button, .podcast-chip-row button, .mv-filter-group button, .artist-sort-tabs button) {
+  min-width: 44px;
+  min-height: 44px;
+  height: auto;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--pages-muted);
+  background: transparent;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 500;
+  touch-action: manipulation;
+  transition: color 140ms var(--pages-ease), background-color 140ms var(--pages-ease);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .filter-row button.active, .playlist-category-chip.active, .artist-filter-panel button.active, .podcast-filter-options button.active, .podcast-chip-row button.active, .mv-filter-group button.active, .artist-sort-tabs button.active) {
+  padding-inline: 12px;
+  border: 0;
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.1);
+  box-shadow: none;
+  font-weight: 650;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .playlist-category-chip--all {
+  padding-inline: 0 12px;
+  color: var(--pages-text);
+}
+
+/* Explicit controls only: never reset buttons or geometry inside song rows. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover-error button, .playlist-load-more button, .artist-load-more button, .album-scroll-sentinel button, .artist-tab-load-more button, .library-empty button, .playlist-action, .album-action, .album-stats button, .artist-play-all, .podcast-action, .podcast-load-more, .podcast-text-button, .podcast-autoload button, .podcast-showcase__head a, .podcast-rank-select select, .mv-section-head button, .mv-detail-action, .vip-claim-button, .login-modal__button, .login-send-button, .comment-modal__retry, .feature-modal__close, .playlist-category-modal__close, .playlist-category-modal__group button) {
+  min-width: 44px;
+  min-height: 44px;
+  height: auto;
+  touch-action: manipulation;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-action, .album-action, .artist-play-all, .podcast-action, .mv-detail-action, .login-modal__button, .login-send-button, .discover-error button, .playlist-load-more button, .artist-load-more button, .album-scroll-sentinel button, .artist-tab-load-more button, .podcast-load-more, .podcast-autoload button, .comment-modal__retry, .library-empty button, .feature-modal__close, .vip-claim-button) {
+  gap: 8px;
+  padding-inline: 16px;
+  border: 0;
+  border-radius: var(--pages-radius-sm);
+  color: var(--pages-text);
+  background: var(--pages-surface-soft);
+  box-shadow: none;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  transition: background-color 140ms var(--pages-ease), color 140ms var(--pages-ease), transform 160ms var(--pages-enter);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-action--primary, .album-action--primary, .artist-play-all, .podcast-action--primary, .login-modal__button--primary, .discover-error button, .library-empty button, .feature-modal__close, .vip-claim-button:not(.is-active)) {
+  min-height: 48px;
+  color: #fff;
+  background: var(--accent);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.podcast-text-button, .podcast-showcase__head a, .mv-section-head button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 4px;
+  border: 0;
+  color: var(--accent);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover, .playlist-detail, .album-detail, .artist-detail, .podcast-view, .podcast-detail-view, .mv-view, .settings-view, .library-empty, .login-modal, .comment-modal, .feature-modal, .playlist-category-modal) :is(button, a, input, [role='button']):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover > .tabs, .artist-detail-tabs, .mv-tabs, .hero__slide, .playlist-card__cover-link, .region-chart-card__link) :focus-visible,
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.hero__slide, .playlist-card__cover-link, .region-chart-card__link):focus-visible {
+  outline-offset: -4px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-action, .album-action, .artist-play-all, .podcast-action, .mv-detail-action, .vip-claim-button, .login-modal__button, .login-send-button, .podcast-load-more, .podcast-text-button):disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  transform: none;
+}
+
+/* Discover: open cover grids and a single editorial banner on each phone slide. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.playlist-grid, .playlist-grid.playlist-grid--dense, .album-grid, .artist-grid.artist-grid--real, .region-chart-grid) {
+  grid-template-columns: repeat(var(--pages-card-columns), minmax(0, 1fr));
+  align-items: start;
+  gap: 24px var(--pages-card-gap);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.playlist-card, .album-card, .artist-rank-row, .album-rank-row, .mv-card, .radio-card) {
+  min-width: 0;
+  max-width: 100%;
+  gap: 8px;
+  color: var(--pages-text);
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+  transition: opacity 140ms var(--pages-ease);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.playlist-card__cover-wrap, .cover, .album-card__cover, .album-rank-cover, .region-chart-card, .mv-cover, .radio-cover) {
+  border-radius: var(--pages-radius-sm);
+  box-shadow: none;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.playlist-card strong, .album-card > strong, .mv-card > strong, .radio-card > strong, .album-rank-row > strong, .artist-rank-row > strong) {
+  display: -webkit-box;
+  min-width: 0;
+  min-height: 20px;
+  margin: 0;
+  overflow: hidden;
+  color: var(--pages-text);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.playlist-card small, .album-card small, .mv-card small, .radio-card small, .album-rank-row small) {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--pages-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.cover-hover-bg, .mv-hover-bg, .radio-hover-bg),
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.chart-summary-card__cover, .region-chart-card)::after {
+  opacity: 0;
+  background: transparent;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.listeners, .region-chart-card em, .chart-summary-card__cover em) {
+  top: 8px;
+  right: 8px;
+  bottom: auto;
+  max-width: calc(100% - 16px);
+  height: 20px;
+  padding-inline: 6px;
+  border-radius: 6px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.48);
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 1;
+  transform: none;
+}
+
+/* A genuine play action stays reachable, but occupies a corner, not the art. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.playlist-play-button, .region-chart-card__play, .chart-summary-card__play) {
+  top: auto;
+  right: 4px;
+  bottom: 4px;
+  left: auto;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  border: 0;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.52);
+  box-shadow: none;
+  opacity: 1;
+  transform: none;
+  touch-action: manipulation;
+  transition: background-color 140ms var(--pages-ease), opacity 140ms var(--pages-ease);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.playlist-play-button, .region-chart-card__play, .chart-summary-card__play) svg {
+  width: 14px;
+  height: 14px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.playlist-play-button, .region-chart-card__play, .chart-summary-card__play):disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page .hero {
+  margin: 4px 0 28px;
+  padding: 4px 0 0;
+}
+
+html[data-layout='mobile-2d'] .discover .recommend-page .hero__page {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page .hero__slide {
+  aspect-ratio: 2.5 / 1;
+  border-radius: var(--pages-radius);
+  box-shadow: none;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page .hero__slide:has(.hero__image)::after {
+  background: linear-gradient(180deg, transparent 65%, rgba(0, 0, 0, 0.16));
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page .hero__content .tag {
+  height: 20px;
+  padding-inline: 6px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.54);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page .hero__arrow {
+  top: auto;
+  bottom: 0;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  color: var(--pages-muted);
+  background: transparent;
+  opacity: 1;
+  transform: none;
+  transition: color 140ms var(--pages-ease), background-color 140ms var(--pages-ease);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page .hero__arrow--prev { left: 0; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page .hero__arrow--next { right: 0; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page .hero__dots {
+  overflow-x: auto;
+  scrollbar-width: none;
+  position: static;
+  width: fit-content;
+  max-width: calc(100% - 96px);
+  margin: 4px auto 0;
+  padding: 0;
+  gap: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page :is(.hero__arrow, .hero__dots button):focus-visible { outline-offset: -4px; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page .hero__dots button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  place-items: center;
+  background: transparent;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page .hero__dots button::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 8px;
+  background: var(--pages-muted);
+  content: '';
+  transition: width 220ms var(--pages-enter), background-color 140ms var(--pages-ease);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page .hero__dots button.active::before {
+  width: 16px;
+  background: var(--accent);
+}
+
+/* Phone banners use swipe + an overlaid pager inside the artwork. */
+html[data-layout='mobile-2d'] .discover .recommend-page .hero { margin: 8px 0 24px; padding: 0; }
+html[data-layout='mobile-2d'] .discover .recommend-page .hero__track { touch-action: pan-y pinch-zoom; }
+html[data-layout='mobile-2d'] .discover .recommend-page .hero--swiping .hero__track { transition: none; }
+html[data-layout='mobile-2d'] .discover .recommend-page .hero__slide { aspect-ratio: 2.4 / 1; user-select: none; }
+html[data-layout='mobile-2d'] .discover .recommend-page .hero__image { pointer-events: none; }
+html[data-layout='mobile-2d'] .discover .recommend-page .hero__arrow { display: none; }
+html[data-layout='mobile-2d'] .discover .recommend-page .hero__dots { position: absolute; left: 50%; right: auto; bottom: 4px; z-index: 3; max-width: calc(100% - 24px); margin: 0; padding: 0; background: transparent; backdrop-filter: none; transform: translateX(-50%); }
+html[data-layout='mobile-2d'] .discover .recommend-page .hero__dots button { width: 18px; height: 32px; }
+html[data-layout='mobile-2d'] .discover .recommend-page .hero__content .tag { height: 22px; padding-inline: 8px; border-radius: 7px; font-size: 11px; font-weight: 500; backdrop-filter: blur(8px); }
+html[data-layout='mobile-2d'] .discover .recommend-page .hero__dots button:not(.active)::before { background: rgba(255, 255, 255, .68); }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page :is(.recommend-carousel, .radio-carousel, .recommended-single-carousel) {
+  min-width: 0;
+  overflow: visible;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page :is(.recommend-carousel__track, .recommend-carousel__skeleton-track, .radio-grid.radio-grid--carousel, .media-grid--recommend) {
+  display: grid;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  grid-auto-flow: column;
+  grid-auto-columns: calc((100% - 2 * var(--pages-card-gap)) / var(--pages-shelf-columns));
+  grid-template-columns: none;
+  grid-template-rows: auto;
+  gap: 24px var(--pages-card-gap);
+  padding: 4px 4px 8px;
+  margin-inline: -4px;
+  scroll-padding-inline: 4px;
+  scroll-snap-type: x proximity;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page :is(.playlist-card, .radio-card, .media-grid--recommend > *) {
+  scroll-snap-align: start;
+}
+
+/* Mobile uses native shelves; desktop's five/six-column pager math is retained. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page .recommend-carousel-actions {
+  display: none;
+}
+
+html[data-layout='mobile-2d'] .discover .recommend-page .song-list--recommend {
+  --recommended-single-column-width: calc(100% - 24px);
+  grid-template-columns: none;
+  grid-template-rows: repeat(4, 64px);
+  grid-auto-columns: var(--recommended-single-column-width);
+  grid-auto-flow: column;
+  gap: 8px 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px;
+  margin-inline: -4px;
+  scroll-padding-inline: 4px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+html[data-layout='mobile-2d'] .discover .recommend-page .song-list--recommend .song-list-row { scroll-snap-align: start; touch-action: pan-x pan-y pinch-zoom; }
+html[data-layout='mobile-2d'] .discover .recommend-page .song-list--recommend .skeleton-song-row { height: 64px; padding: 8px 6px; grid-template-columns: 40px minmax(0, 1fr) 38px; gap: 12px; }
+
+html[data-layout='compact-2d'] .discover .recommend-page .song-list--recommend {
+  --recommended-single-column-width: calc((100% - 16px) / 2);
+  column-gap: 16px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page .media-grid--recommend::-webkit-scrollbar { display: none; }
+html[data-layout='mobile-2d'] .discover .recommend-page .media-grid--recommend :is(.mv-cover, .skeleton-mv-cover) { aspect-ratio: 1; }
+html[data-layout='mobile-2d'] .discover .recommend-page .media-grid--recommend .mv-play { top: auto; left: auto; right: 4px; bottom: 4px; width: 44px; height: 44px; opacity: 1; transform: none; }
+html[data-layout='mobile-2d'] .discover .recommend-page .media-grid--recommend .mv-cover em { top: 8px; right: 8px; bottom: auto; padding: 2px 6px; border-radius: 6px; font-size: 10px; line-height: 16px; opacity: 1; transform: none; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.mv-play, .radio-play, .album-card__play) {
+  width: 32px;
+  height: 32px;
+  background: rgba(0, 0, 0, 0.48);
+  color: #fff;
+  box-shadow: none;
+}
+
+/* Artist names belong below circular portraits, never on a darkened face. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist-card {
+  display: grid;
+  width: 100%;
+  max-width: 216px;
+  aspect-ratio: auto;
+  align-content: start;
+  gap: 8px;
+  overflow: visible;
+  border-radius: 0;
+  color: var(--pages-text);
+  background: transparent;
+  box-shadow: none;
+  contain: none;
+  content-visibility: visible;
+  transform: none;
+  transition: opacity 140ms var(--pages-ease);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.artist-card, .album-rank-cover)::after { content: none; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .playlist-grid, .discover .artist-grid, .discover .album-grid, .discover .recommend-carousel__track, .podcast-view .podcast-card-grid) > :nth-child(-n+4) { animation: mobile-pages-enter 320ms var(--pages-enter) backwards; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .playlist-grid, .discover .artist-grid, .discover .album-grid, .discover .recommend-carousel__track, .podcast-view .podcast-card-grid) > :nth-child(2) { animation-delay: 24ms; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .playlist-grid, .discover .artist-grid, .discover .album-grid, .discover .recommend-carousel__track, .podcast-view .podcast-card-grid) > :nth-child(3) { animation-delay: 48ms; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .playlist-grid, .discover .artist-grid, .discover .album-grid, .discover .recommend-carousel__track, .podcast-view .podcast-card-grid) > :nth-child(4) { animation-delay: 72ms; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist-avatar {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  color: var(--pages-muted);
+  background: var(--pages-surface-soft);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist-card__summary {
+  position: static;
+  gap: 4px;
+  width: 100%;
+  opacity: 1;
+  transform: none;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist-card__details { display: none; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist-card strong {
+  color: var(--pages-text);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist-card em {
+  color: var(--pages-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.artist-rank-panel, .album-rank-panel) { margin-bottom: 32px; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.artist-rank-title.section-title, .album-rank-title.section-title) { margin-bottom: 12px; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.artist-rank-list, .album-rank-list) {
+  grid-auto-flow: column;
+  grid-auto-columns: 112px;
+  grid-template-columns: none;
+  align-items: start;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 4px 4px 8px;
+  margin-inline: -4px;
+  scroll-padding-inline: 4px;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.artist-rank-row, .album-rank-row) { scroll-snap-align: start; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.artist-rank-cover, .album-rank-cover) { width: 100%; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.artist-rank-cover img, .album-rank-cover img) { box-shadow: none; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist-rank-cover em {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  color: var(--pages-text);
+  background: var(--pages-surface);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+/* Charts combine a real cover with three readable tracks, on one quiet surface. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .chart-summary-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  margin: 4px 0 32px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .chart-summary-card {
+  --chart-cover-size: 112px;
+  padding: 12px;
+  overflow: visible;
+  border-radius: var(--pages-radius);
+  color: var(--pages-text);
+  background: var(--pages-surface);
+  box-shadow: none;
+  transform: none;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .chart-summary-card__link {
+  min-width: 0;
+  gap: 12px;
+  border-radius: var(--pages-radius-sm);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .chart-summary-card__cover { border-radius: var(--pages-radius-sm); }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .chart-summary-card__body {
+  min-width: 0;
+  align-content: center;
+  gap: 8px;
+  padding: 0;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .chart-summary-card__body > strong {
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 24px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .chart-summary-track {
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 6px;
+  color: var(--pages-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .chart-summary-card__play {
+  right: auto;
+  bottom: 16px;
+  left: calc(var(--chart-cover-size) - 36px);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .region-chart-grid { padding-bottom: 0; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .region-chart-card { transform: none; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .global-chart-grid {
+  grid-template-columns: repeat(var(--pages-media-columns), minmax(0, 1fr));
+  gap: 16px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .global-chart-card {
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 8px;
+  padding: 12px;
+  border: 0;
+  border-radius: var(--pages-radius-sm);
+  background: var(--pages-surface);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .global-chart-card > img { width: 48px; height: 48px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .global-chart-card > em { grid-column: 2; }
+
+/* Detail heroes: centered artwork on a phone, art/meta side by side on a tablet. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-hero, .album-hero, .artist-detail-hero, .podcast-detail-view .podcast-detail-hero, .playlist-detail-skeleton__hero, .artist-detail-skeleton__hero, .podcast-detail-skeleton__hero) {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+  margin-top: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-cover, .album-cover, .artist-detail-cover, .podcast-detail-view .podcast-detail-cover, .playlist-detail-skeleton__cover, .artist-detail-skeleton__cover, .podcast-detail-skeleton__cover) {
+  width: min(52vw, 208px);
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  justify-self: center;
+  border-radius: var(--pages-radius);
+  box-shadow: var(--pages-shadow);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.artist-detail-cover, .artist-detail-skeleton__cover) { border-radius: 50%; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-detail-cover::after { content: none; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-detail-view .podcast-detail-cover .podcast-detail-cover__badge { display: none; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-hero__content, .album-hero__content, .artist-detail-hero__content, .podcast-detail-content) {
+  min-width: 0;
+  padding-bottom: 0;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-hero h1, .album-hero h1, .artist-detail-hero h1, .podcast-detail-content h1, .settings-header h1, .mv-watch__title h1) {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  overflow: visible;
+  color: var(--pages-text);
+  font-size: 26px;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: unset;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-hero p, .album-description, .artist-detail-description, .podcast-detail-content p, .mv-watch__desc) {
+  display: -webkit-box;
+  max-width: 100%;
+  margin: 8px 0 0;
+  overflow: hidden;
+  color: var(--pages-muted);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.65;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-detail-content { display: block; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-meta, .album-meta, .artist-detail-meta, .podcast-detail-meta) {
+  min-width: 0;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 12px;
+  color: var(--pages-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-meta > strong, .playlist-meta > span:not(.playlist-avatar), .album-meta > span, .artist-detail-meta > span, .artist-detail-tags > span, .podcast-detail-meta > span) {
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--pages-muted);
+  background: transparent;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-meta > strong, .album-meta > span:first-child, .artist-detail-meta--profile > span:first-child) {
+  color: var(--pages-text);
+  background: transparent;
+  font-weight: 500;
+}
+
+html[data-layout='mobile-2d'] .playlist-meta > strong { flex-basis: calc(100% - 40px); }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .playlist-avatar {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.artist-detail-meta svg, .album-stats svg, .podcast-detail-meta svg) {
+  flex-shrink: 0;
+  color: var(--pages-muted);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-detail-aliases {
+  margin-top: 4px;
+  color: var(--pages-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-detail-description-wrap { margin-top: 8px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-detail-description { margin-top: 0; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-detail-tags {
+  gap: 12px;
+  margin-top: 8px;
+  padding-bottom: 4px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-detail-tags > span { flex-shrink: 0; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-actions, .album-actions, .podcast-detail-actions) {
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+html[data-layout='mobile-2d'] :is(.playlist-action--primary, .album-action--primary, .podcast-action--primary) { flex: 1 1 144px; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .album-stats {
+  min-width: 0;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+html[data-layout='mobile-2d'] .album-stats { flex-basis: 100%; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.album-stats > span, .album-stats > button) {
+  height: auto;
+  padding: 0;
+  border-radius: 0;
+  color: var(--pages-muted);
+  background: transparent;
+  font-size: 12px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-tab-bar { display: block; margin-top: 24px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-detail-tabs { margin-bottom: 0; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-sort-tabs { height: auto; border: 0; background: var(--pages-surface-soft); border-radius: 10px; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.artist-detail-section__head, .artist-detail-section__title-row, .artist-song-toolbar) {
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-play-all--compact { min-height: 44px; font-size: 13px; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-detail .artist-album-grid {
+  grid-template-columns: repeat(var(--pages-card-columns), minmax(0, 1fr));
+  gap: 24px var(--pages-card-gap);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-detail .artist-video-grid {
+  grid-template-columns: repeat(var(--pages-media-columns), minmax(0, 1fr));
+  gap: 24px var(--pages-card-gap);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-detail :is(.artist-album-card__cover, .artist-video-card__cover) { border-radius: var(--pages-radius-sm); box-shadow: none; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-detail :is(.artist-album-card > strong, .artist-video-card > strong) {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+/* Column labels disappear on phones; SongListRow owns every real row metric. */
+html[data-layout='mobile-2d'] :is(.playlist-detail, .album-detail, .artist-detail, .library-view) .playlist-table__head,
+html[data-layout='mobile-2d'] .podcast-detail-table__head { display: none; }
+
+html[data-layout='compact-2d'] :is(.playlist-detail, .album-detail, .artist-detail, .library-view) .playlist-table__head,
+html[data-layout='compact-2d'] .podcast-detail-table__head {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.65fr) 54px;
+  gap: 12px;
+  color: var(--pages-muted);
+  font-size: 12px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-table, .podcast-detail-table) { min-width: 0; max-width: 100%; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-detail > .playlist-table, .album-track-table, .podcast-detail-layout) { margin-top: 24px; }
+
+/* Library content only. Profile/header/quick-entry styling is elsewhere. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .library-view .library-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin-top: 24px;
+  padding-block: 12px;
+  border: 0;
+  border-radius: var(--pages-radius);
+  background: var(--pages-surface);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .library-stats article {
+  min-width: 0;
+  min-height: 48px;
+  gap: 4px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .library-stats article + article { border-left: 1px solid var(--pages-border); }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .library-stats strong { font-size: 22px; font-weight: 650; line-height: 1.2; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .library-stats span { color: var(--pages-muted); font-size: 12px; }
+
+/* Podcast: neutral editorial surfaces replace colored desktop dashboard tiles. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view > * { min-width: 0; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-category-strip { grid-template-columns: minmax(0, 1fr); }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-filter-row { min-width: 0; max-width: 100%; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  padding-top: 8px;
+  gap: 24px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view :is(.podcast-showcase, .podcast-dashboard, .podcast-rank-layout, .podcast-radio-layout, .podcast-sleep-layout) {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 28px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view :is(.podcast-showcase__panel, .podcast-hero, .podcast-panel, .podcast-section) {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--pages-text);
+  background: transparent;
+  box-shadow: none;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-showcase__panel--fm,
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-showcase--skeleton > .podcast-showcase__panel:first-child {
+  padding: 16px;
+  border-radius: var(--pages-radius);
+  background: var(--pages-surface);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view :is(.podcast-spotlight, .podcast-skeleton-spotlight) {
+  grid-template-columns: 96px minmax(0, 1fr);
+  min-height: 0;
+  gap: 16px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-spotlight__cover { border-radius: var(--pages-radius-sm); box-shadow: none; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-showcase__signal { display: none; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-spotlight__copy { gap: 8px; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-spotlight__copy small {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-spotlight__copy strong {
+  color: var(--pages-text);
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-spotlight__copy em {
+  color: var(--pages-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view :is(.podcast-top-list, .podcast-skeleton-top-list, .podcast-rank-podium) {
+  grid-auto-flow: column;
+  grid-auto-columns: calc((100% - 2 * var(--pages-card-gap)) / var(--pages-shelf-columns));
+  grid-template-columns: none;
+  align-items: start;
+  gap: var(--pages-card-gap);
+  overflow-x: auto;
+  padding: 4px 4px 8px;
+  margin-inline: -4px;
+  scroll-padding-inline: 4px;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view :is(.podcast-top-item, .podcast-rank-podium__item) {
+  min-width: 0;
+  gap: 8px;
+  color: var(--pages-text);
+  scroll-snap-align: start;
+  transform: none;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-rank-podium__item:first-child { grid-column: auto; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view :is(.podcast-top-item > span, .podcast-rank-podium__badge) {
+  top: 8px;
+  left: 8px;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view :is(.podcast-card-grid, .podcast-voice-grid, .podcast-mini-grid, .podcast-sleep-grid, .podcast-radio-channel-grid, .podcast-radio-broadcast-grid) {
+  grid-template-columns: repeat(var(--pages-card-columns), minmax(0, 1fr));
+  align-items: start;
+  gap: 24px var(--pages-card-gap);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view :is(.podcast-card, .podcast-voice-card, .podcast-mini-card, .podcast-radio-channel, .podcast-radio-broadcast-card) {
+  min-width: 0;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+  transition: opacity 140ms var(--pages-ease);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view :is(.podcast-card__cover, .podcast-voice-card img, .podcast-mini-card img, .podcast-top-item img, .podcast-rank-podium__item img, .podcast-radio-channel > span, .podcast-radio-broadcast-card > img, .podcast-radio-broadcast-card > span) {
+  border-radius: var(--pages-radius-sm);
+  box-shadow: none;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view :is(.podcast-top-item strong, .podcast-rank-podium__item strong, .podcast-card strong, .podcast-voice-card strong, .podcast-mini-card strong, .podcast-radio-channel strong, .podcast-radio-broadcast-card strong) {
+  display: -webkit-box;
+  min-height: 20px;
+  overflow: hidden;
+  color: var(--pages-text);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view :is(.podcast-card small, .podcast-voice-card small, .podcast-mini-card small, .podcast-radio-channel small, .podcast-radio-broadcast-card small) {
+  margin: 0;
+  color: var(--pages-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-card__count {
+  max-width: calc(100% - 16px);
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.48);
+  font-size: 10px;
+  font-weight: 500;
+  text-shadow: none;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-card__tag { font-size: 11px; font-weight: 500; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-rank-programs { gap: 0 16px; }
+html[data-layout='mobile-2d'] .podcast-view .podcast-rank-programs { grid-template-columns: minmax(0, 1fr); }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view :is(.podcast-section__head, .podcast-showcase__head) { flex-wrap: wrap; gap: 8px 12px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-filter-options { margin-bottom: 0; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-rank-select select {
+  padding-inline: 12px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--pages-text);
+  background: var(--pages-surface-soft);
+  font-size: 13px;
+}
+
+/* MV browse and virtual library. Titles have two fixed lines for stable rows. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view :is(.mv-grid, .mv-card-row, .mv-rank-grid) {
+  grid-template-columns: repeat(var(--mv-grid-columns), minmax(0, 1fr));
+  gap: var(--mv-grid-row-gap) var(--mv-grid-column-gap);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-grid.mv-grid--virtual-row { margin-bottom: var(--mv-grid-row-gap); }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-video-card { align-content: start; gap: 8px; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-video-card > strong {
+  display: -webkit-box;
+  height: 40px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--pages-text);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-video-card > small {
+  height: 18px;
+  margin-top: 0;
+  color: var(--pages-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view :is(.mv-video-card__cover, .mv-hero-card, .mv-skeleton__hero-card, .mv-skeleton__cover) {
+  border-radius: var(--pages-radius-sm);
+  box-shadow: none;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view :is(.mv-hero-carousel, .mv-skeleton__hero-row) {
+  grid-auto-flow: column;
+  grid-auto-columns: 86%;
+  grid-template-columns: none;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 4px 4px 8px;
+  margin: 0 -4px 24px;
+  scroll-padding-inline: 4px;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+html[data-layout='compact-2d'] .mv-view :is(.mv-hero-carousel, .mv-skeleton__hero-row) { grid-auto-columns: 62%; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view :is(.mv-hero-card, .mv-skeleton__hero-card) {
+  display: block;
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  border-radius: var(--pages-radius);
+  scroll-snap-align: start;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-empty {
+  display: grid;
+  min-height: 240px;
+  align-content: center;
+  justify-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 32px 16px;
+  border-radius: var(--pages-radius);
+  color: var(--pages-muted);
+  background: var(--pages-surface);
+  text-align: center;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-empty > svg { width: 64px; height: 64px; padding: 16px; border-radius: 20px; color: var(--pages-muted); background: var(--pages-surface-soft); }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-empty > strong { color: var(--pages-text); font-size: 18px; font-weight: 600; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-empty > :is(p, span) { max-width: 28em; margin: 0; font-size: 13px; line-height: 1.6; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-empty__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-state__retry {
+  min-width: 88px;
+  min-height: 44px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: var(--pages-radius-sm);
+  color: #fff;
+  background: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color 140ms var(--pages-ease), opacity 140ms var(--pages-ease);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-state__retry--secondary { color: var(--pages-text); background: var(--pages-surface-soft); }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-state__retry:disabled { cursor: not-allowed; opacity: 0.45; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-state--error { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-state--error > span { min-width: 0; flex: 1 1 160px; overflow-wrap: anywhere; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__empty { align-content: center; gap: 12px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__empty .mv-state__retry { color: #fff; background: rgba(255, 255, 255, 0.16); }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-page-head { padding-block: 0; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-browse-section { gap: 0; margin-top: 24px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-hero-card__caption { opacity: 1; transform: none; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-hero-card__caption strong { font-size: 18px; font-weight: 650; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-hero-card__caption small { font-size: 12px; font-weight: 400; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-hero-card__label {
+  top: 12px;
+  right: 12px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.48);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 22px;
+  opacity: 1;
+  transform: none;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view :is(.mv-video-card__count, .mv-video-card__cover em) {
+  max-width: calc(100% - 16px);
+  padding-inline: 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 1;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view :is(.mv-hero-card, .mv-video-card) img { transform: none; transition: none; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-video-card__play {
+  width: 32px;
+  height: 32px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.48);
+  box-shadow: none;
+}
+
+/* Video watch is 16:9, with a separate, always reachable phone control tray.
+   This keeps transport, mute/volume, danmaku, quality, PiP and fullscreen; no
+   action is removed to make a narrow overlay fit. The audio player is untouched. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch {
+  margin-inline: calc(-1 * var(--pages-inline));
+  background: transparent;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__stage {
+  min-height: 0;
+  aspect-ratio: 16 / 9;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view :is(.mv-watch__video, .mv-watch__poster, .mv-watch__empty) {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__video { position: absolute; inset: 0; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__info {
+  min-width: 0;
+  gap: 12px;
+  padding: 20px var(--pages-inline) 0;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__title p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  color: var(--pages-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__title p span { margin-left: 0; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__desc { margin: 0; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__actions { gap: 8px; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view :is(.mv-video-icon, .mv-video-pill, .mv-quality__menu button) {
+  min-width: 44px;
+  min-height: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  padding-inline: 8px;
+  border-radius: 10px;
+  font-weight: 500;
+  touch-action: manipulation;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__controls {
+  padding: 0 12px 8px;
+  opacity: 1;
+  transform: none;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-volume { min-width: 44px; height: 44px; touch-action: manipulation; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__control-row { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0 8px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__control-group { min-width: 0; gap: 0; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__control-group--right { flex: 1; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__progress {
+  height: 44px;
+  padding: 20px 0 21px;
+  touch-action: manipulation;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__progress span { background: var(--accent); }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__top { top: 4px; right: 8px; left: 8px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__top > .mv-video-icon { background: rgba(0, 0, 0, 0.42); color: #fff; }
+
+html[data-layout='mobile-2d'] .mv-view .mv-watch__stage {
+  overflow: visible;
+  margin-bottom: 140px;
+}
+
+html[data-layout='mobile-2d'] .mv-view .mv-watch__controls {
+  top: 100%;
+  bottom: auto;
+  padding: 0 12px 8px;
+  color: var(--pages-text);
+  background: var(--pages-surface);
+}
+
+html[data-layout='mobile-2d'] .mv-view .mv-watch__control-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
+html[data-layout='mobile-2d'] .mv-view .mv-watch__control-group { justify-content: flex-start; }
+html[data-layout='mobile-2d'] .mv-view .mv-watch__control-group--right { justify-content: space-between; }
+html[data-layout='mobile-2d'] .mv-view .mv-watch__time { margin-left: auto; color: var(--pages-muted); font-size: 11px; font-weight: 500; }
+html[data-layout='mobile-2d'] .mv-view .mv-watch__controls :is(.mv-video-icon, .mv-video-pill) { color: var(--pages-text); }
+html[data-layout='mobile-2d'] .mv-view .mv-watch__controls .mv-video-pill.active { color: var(--accent); background: rgba(var(--accent-rgb), 0.1); }
+html[data-layout='mobile-2d'] .mv-view .mv-watch__progress::before { background: var(--pages-surface-soft); }
+
+html[data-layout='mobile-2d'] .mv-view .mv-volume {
+  display: block;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  margin: 0;
+  padding-inline: 4px;
+}
+
+html[data-layout='mobile-2d'] .mv-view .mv-volume::-webkit-slider-runnable-track { background: var(--pages-muted); }
+html[data-layout='mobile-2d'] .mv-view .mv-volume::-moz-range-track { background: var(--pages-muted); }
+html[data-layout='mobile-2d'] .mv-view .mv-quality__menu { border: 0; border-radius: var(--pages-radius-sm); background: var(--pages-surface); box-shadow: var(--pages-shadow); }
+html[data-layout='mobile-2d'] .mv-view .mv-quality__menu button { color: var(--pages-text); }
+html[data-layout='mobile-2d'] .mv-view .mv-quality__menu button.active { color: var(--accent); background: rgba(var(--accent-rgb), 0.1); }
+html[data-layout='mobile-2d'] .mv-view .mv-watch__danmaku.soda-danmaku { inset: 48px 0 12px; }
+
+html[data-layout='mobile-2d'] .mv-view :is(.mv-watch__play, .mv-watch__poster > span) { width: 56px; height: 56px; }
+html[data-layout='mobile-2d'] .mv-view :is(.mv-watch__play, .mv-watch__poster > span) svg { width: 28px; height: 28px; }
+html[data-layout='mobile-2d'] .mv-view .mv-watch__poster small { right: 12px; bottom: 8px; left: 12px; font-size: 12px; text-align: center; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__recovery {
+  width: min(480px, calc(100% - 24px));
+  min-width: 0;
+  max-height: calc(100% - 16px);
+  gap: 8px;
+  overflow-y: auto;
+  padding: 12px;
+  border: 0;
+  border-radius: var(--pages-radius-sm);
+  overscroll-behavior-y: contain;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__recovery strong { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__recovery button { min-height: 44px; height: auto; border-radius: 10px; }
+
+/* Fullscreen uses an overlay again and keeps the same real controls. */
+html[data-layout='mobile-2d'] .mv-view .mv-watch__stage:fullscreen {
+  height: 100dvh;
+  margin-bottom: 0;
+  aspect-ratio: auto;
+  overflow: hidden;
+}
+
+html[data-layout='mobile-2d'] .mv-view .mv-watch__stage:fullscreen .mv-watch__controls {
+  top: auto;
+  bottom: 0;
+  padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+  color: #fff;
+  background: rgba(0, 0, 0, 0.78);
+}
+
+html[data-layout='mobile-2d'] .mv-view .mv-watch__stage:fullscreen .mv-watch__controls :is(.mv-video-icon, .mv-video-pill) { color: #fff; }
+html[data-layout='mobile-2d'] .mv-view .mv-watch__stage:fullscreen .mv-watch__time { color: rgba(255, 255, 255, 0.8); }
+
+/* Settings: compact grouped surfaces, a clear selected tint/check, not outlines. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .settings-header { margin-bottom: 24px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .settings-kicker { margin-bottom: 8px; font-size: 12px; font-weight: 500; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .settings-header p { margin-top: 8px; color: var(--pages-muted); font-size: 13px; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .settings-panel {
+  gap: 16px;
+  border: 0;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .setting-block {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px;
+  border: 0;
+  border-radius: var(--pages-radius);
+  background: var(--pages-surface);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .setting-block__head {
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 12px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .setting-block__head > svg {
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  color: var(--pages-muted);
+  background: transparent;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .setting-block__head h2 { font-size: 17px; font-weight: 650; line-height: 24px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .setting-block__head p { margin-top: 4px; color: var(--pages-muted); font-size: 12px; line-height: 1.5; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view :is(.theme-choice, .effect-list) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .color-choice {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view :is(.theme-choice button, .color-choice button, .effect-list button, .motion-toggle, .custom-color) {
+  min-width: 0;
+  min-height: 56px;
+  padding: 12px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--pages-text);
+  background: var(--pages-surface-soft);
+  box-shadow: none;
+  overflow-wrap: anywhere;
+  touch-action: manipulation;
+  transform: none;
+  transition: color 140ms var(--pages-ease), background-color 140ms var(--pages-ease);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .theme-choice button {
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 12px 10px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .theme-choice button > svg {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  color: var(--pages-muted);
+  background: transparent;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view :is(.theme-choice button.active, .color-choice button.active, .effect-list button.active) {
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.1);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view :is(.theme-choice button.active, .color-choice button.active, .effect-list button.active)::after {
+  top: 6px;
+  right: 6px;
+  width: 10px;
+  height: 6px;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  border-radius: 0;
+  background: transparent;
+  transform: rotate(45deg);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .theme-choice button.active > svg { color: var(--accent); }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view :is(.theme-choice strong, .color-choice strong, .effect-list strong, .motion-toggle__text strong) {
+  color: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view :is(.theme-choice small, .color-choice small, .effect-list small, .motion-toggle__text small) {
+  margin-top: 2px;
+  color: var(--pages-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .color-choice button {
+  grid-template-columns: 20px minmax(0, 1fr);
+  column-gap: 6px;
+  padding: 10px 8px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .color-swatch {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  box-shadow: 0 0 0 1px var(--pages-border) inset;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .custom-color { grid-column: 1 / -1; gap: 12px; padding: 6px 12px; font-size: 14px; font-weight: 500; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .custom-color input { width: 44px; height: 44px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .effect-list button { padding: 12px; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .motion-toggle { flex-direction: row-reverse; justify-content: space-between; gap: 12px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .motion-toggle__text { flex: 1; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .motion-toggle__switch {
+  width: 48px;
+  height: 28px;
+  border: 0;
+  background: color-mix(in srgb, var(--pages-muted) 30%, var(--pages-surface-soft));
+  transition: background-color 160ms var(--pages-ease);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .motion-toggle__switch::after {
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  transition: transform 240ms var(--pages-enter);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .motion-toggle.active .motion-toggle__switch { background: var(--accent); }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .motion-toggle.active .motion-toggle__switch::after { background: #fff; transform: translateX(20px); }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .motion-toggle:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .vip-claim-panel { gap: 12px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .vip-status-line { font-size: 13px; font-weight: 500; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view .vip-claim-button.is-active { color: var(--pages-muted); background: var(--pages-surface-soft); }
+
+/* Teleported dialogs are scoped from html, not from the page that opened them. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.login-modal.n-card, .comment-modal.n-card, .feature-modal.n-card) {
+  --n-color: var(--pages-surface) !important;
+  --n-text-color: var(--pages-text) !important;
+  --n-title-text-color: var(--pages-text) !important;
+  min-width: 0;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  margin-block: 16px;
+  border: 0;
+  border-radius: 20px;
+  color: var(--pages-text);
+  background: var(--pages-surface);
+  box-shadow: var(--pages-shadow);
+}
+
+html[data-layout='mobile-2d'] :is(.login-modal.n-card, .comment-modal.n-card, .feature-modal.n-card) { width: calc(100vw - 32px); }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.login-modal.n-card, .feature-modal.n-card)::before { content: none; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-modal.n-card { overflow-y: auto; overscroll-behavior-y: contain; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.login-modal.n-card, .comment-modal.n-card, .feature-modal.n-card) > .n-card-header {
+  min-width: 0;
+  padding: 20px 20px 16px;
+  border: 0;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.login-modal.n-card, .comment-modal.n-card, .feature-modal.n-card) > :is(.n-card__content, .n-card-content),
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.login-modal.n-card, .comment-modal.n-card, .feature-modal.n-card) > .n-card__content-wrapper > .n-card__content {
+  min-width: 0;
+  padding: 0 20px 20px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.login-modal, .comment-modal, .feature-modal) .n-card-header__close {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  margin-top: -8px;
+  margin-right: -8px;
+  color: var(--pages-muted);
+  border-radius: 50%;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.login-modal__title, .feature-modal__title, .comment-modal__title) { min-width: 0; gap: 8px; text-align: left; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.login-modal__title span, .feature-modal__title span, .comment-modal__title span) {
+  min-width: 0;
+  color: var(--pages-text);
+  font-size: 22px;
+  font-weight: 650;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.login-modal__title small, .feature-modal__title small, .comment-modal__title small) { color: var(--pages-muted); font-size: 12px; font-weight: 400; line-height: 1.5; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-panel { gap: 16px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-methods { border: 0; border-radius: 12px; background: var(--pages-surface-soft); }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-methods::before { border-radius: 9px; background: var(--pages-surface); box-shadow: var(--pages-shadow); }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-methods button { min-height: 44px; height: auto; font-size: 13px; font-weight: 500; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-methods button.active { color: var(--accent); background: transparent; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-modal .login-method-stage {
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  overflow: visible;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-modal .login-method-stage > :is(.login-qr, .login-form) {
+  position: relative;
+  inset: auto;
+  grid-area: 1 / 1;
+  align-self: start;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-modal :is(.login-qr__box, .login-qr__loading) { border-radius: 12px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-modal .login-qr__box { width: 208px; height: 208px; background: #fff; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-modal .login-qr__loading { color: #737580; background: #f7f7f9; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-modal .login-qr__status { max-width: 100%; font-size: 14px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-modal .login-qr__status--confirm { color: var(--pages-success); }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-modal .login-qr__status--expired { color: var(--pages-danger); }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-modal .login-form { gap: 16px; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-modal .login-field .n-input {
+  --n-height: 44px !important;
+  --n-font-size: 16px !important;
+  --n-border-radius: 10px !important;
+  --n-color: var(--pages-surface-soft) !important;
+  --n-color-focus: var(--pages-surface-soft) !important;
+  --n-text-color: var(--pages-text) !important;
+  --n-border: 1px solid transparent !important;
+  --n-border-hover: 1px solid var(--pages-border) !important;
+  --n-border-focus: 1px solid var(--accent) !important;
+  min-width: 0;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-modal .login-field .n-input__input-el { font-size: 16px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-modal .login-send-button { min-width: 104px; padding-inline: 10px; border-radius: 0 10px 10px 0; color: var(--accent); font-size: 12px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-feedback { padding: 12px; border-radius: 10px; color: var(--pages-success); background: var(--pages-surface-soft); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .login-feedback.error { color: var(--pages-danger); }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .comment-modal.n-card {
+  height: min(720px, calc(100vh - 32px));
+  height: min(720px, calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)));
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .comment-modal.n-card > :is(.n-card-content, .n-card__content) {
+  display: flex;
+  min-height: 0;
+  height: auto;
+  flex: 1 1 0;
+  flex-direction: column;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .comment-modal .comment-modal__scroll {
+  height: auto;
+  min-height: 0;
+  flex: 1 1 0;
+  padding-right: 4px;
+  overscroll-behavior-y: contain;
+}
+
+html[data-layout='mobile-2d'] .comment-modal .comment-modal__title { flex-wrap: wrap; gap: 4px 12px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .comment-modal .comment-modal__title strong { color: var(--pages-muted); font-size: 12px; font-weight: 400; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .comment-modal .comment-modal__block h3 { font-size: 17px; font-weight: 650; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .comment-modal :is(.comment-modal-comment, .comment-modal-skeleton) { grid-template-columns: 36px minmax(0, 1fr); gap: 12px; padding-block: 16px; border-color: var(--pages-border); }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .comment-modal :is(.comment-modal-comment__avatar, .comment-modal-skeleton__avatar) { width: 36px; height: 36px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .comment-modal .comment-modal-comment__body strong { max-width: 100%; font-weight: 600; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .comment-modal .comment-modal-comment__body p { font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .comment-modal .comment-modal__state { gap: 12px; text-align: center; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .comment-modal .comment-modal__state--error { color: var(--pages-danger); }
+
+html[data-layout='mobile-2d'] .feature-modal .feature-modal__grid { grid-template-columns: minmax(0, 1fr); }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .feature-modal .feature-modal__intro { padding: 16px; border: 0; border-radius: var(--pages-radius-sm); background: var(--pages-surface-soft); }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .feature-modal .feature-modal__section { padding: 16px 0; border: 0; border-bottom: 1px solid var(--pages-border); border-radius: 0; background: transparent; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .feature-modal .feature-modal__section strong { font-size: 15px; font-weight: 600; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .feature-modal :is(.feature-modal__intro p, .feature-modal__section li) { color: var(--pages-muted); overflow-wrap: anywhere; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .feature-modal.n-card > .n-card__footer { padding: 0 20px 20px; }
+html[data-layout='mobile-2d'] .feature-modal .feature-modal__footer { align-items: stretch; flex-direction: column; gap: 12px; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .playlist-category-modal__overlay { padding: 16px; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .playlist-category-modal {
+  display: flex;
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  flex-direction: column;
+  border: 0;
+  border-radius: 20px;
+  color: var(--pages-text);
+  background: var(--pages-surface);
+  box-shadow: var(--pages-shadow);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .playlist-category-modal::before { content: none; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .playlist-category-modal__head { flex-shrink: 0; gap: 12px; padding: 16px 20px; border-color: var(--pages-border); }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .playlist-category-modal__head strong { font-size: 22px; font-weight: 650; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .playlist-category-modal__head span { color: var(--pages-muted); font-size: 12px; font-weight: 400; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .playlist-category-modal__body { min-height: 0; max-height: none; padding: 20px; gap: 24px; overscroll-behavior-y: contain; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .playlist-category-modal__group button { padding-inline: 12px; border: 0; border-radius: 10px; color: var(--pages-muted); background: var(--pages-surface-soft); font-size: 13px; font-weight: 500; box-shadow: none; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .playlist-category-modal__group button.active { color: var(--accent); background: rgba(var(--accent-rgb), 0.1); }
+
+/* Honest states and matching neutral skeletons; no fixture data added. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover-error, .discover-loading, .album-empty, .library-empty, .artist-tab-empty) {
+  min-height: 220px;
+  padding: 32px 16px;
+  gap: 12px;
+  color: var(--pages-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .library-empty { min-height: 240px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .library-empty > svg { width: 64px; height: 64px; padding: 16px; border-radius: 20px; color: var(--pages-muted); background: var(--pages-surface-soft); }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover-error strong, .library-empty strong) { color: var(--pages-text); font-size: 18px; font-weight: 600; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .library-empty p { max-width: 28em; margin: 0; font-size: 13px; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-state, .album-state, .artist-detail-state, .podcast-state, .mv-state) {
+  min-width: 0;
+  margin-top: 20px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: var(--pages-radius-sm);
+  color: var(--pages-muted);
+  background: var(--pages-surface-soft);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-state--error, .album-state--error, .artist-detail-state--error, .podcast-state--error, .mv-state--error) {
+  color: var(--pages-danger);
+  background: color-mix(in srgb, var(--pages-danger) 8%, var(--pages-surface));
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-load-more, .artist-load-more, .album-scroll-sentinel, .artist-tab-load-more, .podcast-autoload) { color: var(--pages-muted); font-size: 12px; }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .home-skeleton, .discover .charts-skeleton, .discover .artists-skeleton, .discover .albums-skeleton, .discover .playlists-skeleton, .mv-skeleton) {
+  --skeleton-base: var(--pages-surface-soft);
+  --skeleton-glint: color-mix(in srgb, var(--pages-text) 5%, transparent);
+  --skeleton-outline: transparent;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .playlist-detail-skeleton {
+  --playlist-skeleton-base: var(--pages-surface-soft);
+  --playlist-skeleton-glint: color-mix(in srgb, var(--pages-text) 5%, transparent);
+  --playlist-skeleton-outline: transparent;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-detail-skeleton {
+  --artist-skeleton-base: var(--pages-surface-soft);
+  --artist-skeleton-glint: color-mix(in srgb, var(--pages-text) 5%, transparent);
+  --artist-skeleton-outline: transparent;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-detail-skeleton {
+  --podcast-detail-skeleton-base: var(--pages-surface-soft);
+  --podcast-detail-skeleton-glint: color-mix(in srgb, var(--pages-text) 5%, transparent);
+  --podcast-detail-skeleton-outline: transparent;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .comment-modal :is(.comment-modal__skeleton, .comment-modal__loading-more) {
+  --comment-skeleton-base: var(--pages-surface-soft);
+  --comment-skeleton-glint: color-mix(in srgb, var(--pages-text) 5%, transparent);
+  --comment-skeleton-outline: transparent;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-skeleton { border: 0; background: var(--pages-surface-soft); }
+
+html[data-layout='mobile-2d'] .discover .recommend-page .skeleton-hero { grid-template-columns: minmax(0, 1fr); margin: 8px 0 28px; }
+html[data-layout='mobile-2d'] .discover .recommend-page .skeleton-hero-card { aspect-ratio: 2.5 / 1; border-radius: var(--pages-radius); box-shadow: none; }
+html[data-layout='mobile-2d'] .discover .recommend-page .skeleton-hero-card + .skeleton-hero-card { display: none; }
+
+html[data-layout='mobile-2d'] :is(.playlist-detail-skeleton__row, .podcast-detail-skeleton__row) { grid-template-columns: minmax(0, 1fr) 44px; gap: 12px; }
+html[data-layout='mobile-2d'] :is(.playlist-detail-skeleton__line--album, .podcast-detail-skeleton__line--album) { display: none; }
+
+/* State feedback is immediate and calm; entrances settle instead of floating. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-action, .album-action, .artist-play-all, .podcast-action, .mv-detail-action, .login-modal__button, .feature-modal__close, .vip-claim-button):active:not(:disabled) { transform: scale(0.98); }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .playlist-card, .discover .album-card, .discover .artist-card, .podcast-view .podcast-card, .mv-view .mv-video-card):active { opacity: 0.72; }
+
+@media (hover: hover) {
+  html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-state__retry:hover:not(:disabled) { background: var(--accent-hover); }
+  html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-state__retry--secondary:hover { background: var(--pages-surface); }
+  html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .mv-view .mv-watch__empty .mv-state__retry:hover { background: rgba(255, 255, 255, 0.24); }
+  html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .filter-row button, .artist-filter-panel button, .playlist-category-chip, .podcast-filter-options button, .podcast-chip-row button, .mv-filter-group button, .hero__arrow):hover:not(.active) {
+    color: var(--pages-text);
+    background: var(--pages-surface-soft);
+    box-shadow: none;
+  }
+
+  html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-action, .album-action, .podcast-action, .mv-detail-action, .login-modal__button):hover:not(:disabled) { color: var(--pages-text); background: var(--pages-surface); transform: none; }
+
+  html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.playlist-action--primary, .album-action--primary, .artist-play-all, .podcast-action--primary, .login-modal__button--primary, .feature-modal__close, .vip-claim-button:not(.is-active)):hover:not(:disabled) { color: #fff; background: var(--accent-hover); }
+
+  html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.playlist-play-button, .region-chart-card__play, .chart-summary-card__play):hover:not(:disabled) { color: #fff; background: var(--accent); transform: none; }
+
+  html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .settings-view :is(.theme-choice button, .color-choice button, .effect-list button):hover:not(.active) { background: color-mix(in srgb, var(--pages-text) 4%, var(--pages-surface-soft)); transform: none; }
+}
+
+@media (hover: none) {
+  html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-detail-description-wrap:hover::after { display: none; }
+}
+
+@media (max-width: 359px) {
+  html[data-layout='mobile-2d'] { --pages-inline: var(--mobile-inline, 16px); --pages-card-gap: 12px; --mv-grid-column-gap: 12px; }
+  html[data-layout='mobile-2d'] .discover .chart-summary-card { --chart-cover-size: 96px; }
+  html[data-layout='mobile-2d'] .settings-view .color-choice { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  html[data-layout='mobile-2d'] .podcast-view :is(.podcast-spotlight, .podcast-skeleton-spotlight) { grid-template-columns: 80px minmax(0, 1fr); gap: 12px; }
+}
+
+@media (min-width: 600px) {
+  html[data-layout='mobile-2d'] { --pages-card-columns: 3; --pages-shelf-columns: 3.15; --mv-grid-columns: 3; }
+}
+
+html[data-layout='compact-2d'] :is(.playlist-hero, .album-hero, .artist-detail-hero, .podcast-detail-view .podcast-detail-hero, .playlist-detail-skeleton__hero, .artist-detail-skeleton__hero, .podcast-detail-skeleton__hero) { grid-template-columns: 176px minmax(0, 1fr); gap: 24px; }
+html[data-layout='compact-2d'] :is(.playlist-cover, .album-cover, .artist-detail-cover, .podcast-detail-view .podcast-detail-cover, .playlist-detail-skeleton__cover, .artist-detail-skeleton__cover, .podcast-detail-skeleton__cover) { width: 176px; }
+html[data-layout='compact-2d'] :is(.playlist-hero h1, .album-hero h1, .artist-detail-hero h1, .podcast-detail-content h1, .settings-header h1) { font-size: 28px; }
+html[data-layout='compact-2d'] .settings-view .setting-block { grid-template-columns: minmax(176px, 0.36fr) minmax(0, 1fr); gap: 24px; padding: 20px; }
+
+@media (min-width: 960px) {
+  html[data-layout='compact-2d'] { --pages-card-columns: 4; --pages-shelf-columns: 4.15; --mv-grid-columns: 4; }
+  html[data-layout='compact-2d'] .discover .chart-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@keyframes mobile-pages-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-layout='mobile-2d'] .discover .recommend-page .hero__track { transition: none; }
+  html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover, .playlist-detail, .album-detail, .artist-detail, .podcast-view, .podcast-detail-view, .mv-view, .settings-view, .login-modal, .comment-modal, .feature-modal, .playlist-category-modal),
+  html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover, .playlist-detail, .album-detail, .artist-detail, .podcast-view, .podcast-detail-view, .mv-view, .settings-view, .login-modal, .comment-modal, .feature-modal, .playlist-category-modal) *,
+  html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover, .playlist-detail, .album-detail, .artist-detail, .podcast-view, .podcast-detail-view, .mv-view, .settings-view, .login-modal, .comment-modal, .feature-modal, .playlist-category-modal) *::before,
+  html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover, .playlist-detail, .album-detail, .artist-detail, .podcast-view, .podcast-detail-view, .mv-view, .settings-view, .login-modal, .comment-modal, .feature-modal, .playlist-category-modal) *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d'])[data-reduced-motion='true'] :is(.discover, .playlist-detail, .album-detail, .artist-detail, .podcast-view, .podcast-detail-view, .mv-view, .settings-view, .login-modal, .comment-modal, .feature-modal, .playlist-category-modal),
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d'])[data-reduced-motion='true'] :is(.discover, .playlist-detail, .album-detail, .artist-detail, .podcast-view, .podcast-detail-view, .mv-view, .settings-view, .login-modal, .comment-modal, .feature-modal, .playlist-category-modal) *,
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d'])[data-reduced-motion='true'] :is(.discover, .playlist-detail, .album-detail, .artist-detail, .podcast-view, .podcast-detail-view, .mv-view, .settings-view, .login-modal, .comment-modal, .feature-modal, .playlist-category-modal) *::before,
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d'])[data-reduced-motion='true'] :is(.discover, .playlist-detail, .album-detail, .artist-detail, .podcast-view, .podcast-detail-view, .mv-view, .settings-view, .login-modal, .comment-modal, .feature-modal, .playlist-category-modal) *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}

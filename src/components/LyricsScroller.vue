@@ -31,11 +31,12 @@
       @wheel.prevent="handleWheel"
     >
       <button
-        v-for="line in normalizedLines"
+        v-for="line in visibleLines"
         :key="`${line.index}-${line.time}-${line.text}`"
         type="button"
         :class="getLineClass(line)"
-        :aria-disabled="line.placeholder || !seekable || undefined"
+        :aria-disabled="singleLine || previewLines > 0 || line.placeholder || !seekable || undefined"
+        :tabindex="singleLine || previewLines > 0 ? -1 : undefined"
         :data-lyric-index="line.index"
         @click="selectLyric(line.index)"
       >
@@ -110,7 +111,12 @@ const props = defineProps({
   layoutDelay: {
     type: Number,
     default: 0
-  }
+  },
+  singleLine: {
+    type: Boolean,
+    default: false
+  },
+  previewLines: { type: Number, default: 0 }
 })
 
 const emit = defineEmits(['seek'])
@@ -138,6 +144,18 @@ const normalizedLines = computed(() =>
     index: Number.isInteger(line.index) ? line.index : index
   }))
 )
+const visibleLines = computed(() => {
+  const lines = normalizedLines.value
+  if (props.previewLines > 0) {
+    const size = Math.max(1, Math.floor(props.previewLines))
+    const focus = Math.max(0, lines.findIndex((line) => line.index === props.activeIndex))
+    const start = Math.max(0, Math.min(focus - Math.floor(size / 2), lines.length - size))
+    return lines.slice(start, start + size)
+  }
+  if (!props.singleLine) return lines
+  const currentLine = lines.find((line) => line.index === props.activeIndex) ?? lines[0]
+  return currentLine ? [currentLine] : []
+})
 const hasSeekableLines = computed(() => normalizedLines.value.some((line) => !line.placeholder))
 const previewLyric = computed(() => {
   const index = previewIndex.value ?? props.activeIndex
@@ -154,6 +172,8 @@ const showGuide = computed(() =>
 const rootClass = computed(() => props.variant === 'home'
   ? {
       'soda-lyrics-panel': true,
+      'soda-lyrics-panel--single-line': props.singleLine,
+      'soda-lyrics-panel--preview-lines': props.previewLines > 0,
       'soda-lyrics-panel--dragging': dragging.value,
       'soda-lyrics-panel--wheeling': wheeling.value,
       'soda-lyrics-panel--previewing': interactionActive.value
@@ -191,6 +211,7 @@ watch(
   () => props.lines,
   async () => {
     resetInteraction()
+    await nextTick()
     scheduleLayoutRefresh('auto')
   }
 )
@@ -207,7 +228,7 @@ onBeforeUnmount(() => {
 
 function getLineClass(line) {
   const stateClass = {
-    active: line.index === props.activeIndex,
+    active: props.singleLine || line.index === props.activeIndex,
     preview: interactionActive.value && previewIndex.value === line.index,
     past: line.index < props.activeIndex,
     future: line.index > props.activeIndex,
@@ -512,7 +533,7 @@ function clearWheelTimer() {
 }
 
 function canInteract() {
-  return props.seekable && (!props.requireSeekable || hasSeekableLines.value)
+  return !props.singleLine && props.previewLines <= 0 && props.seekable && (!props.requireSeekable || hasSeekableLines.value)
 }
 
 function edgePaddingVar() {

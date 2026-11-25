@@ -11,11 +11,14 @@
           'app-shell--immersive': isImmersiveRoute,
           'app-shell--desktop': isDesktopApp,
           'app-shell--world': isWorld,
+          'app-shell--player-expanded': fullPlayerVisible,
+          'app-shell--home-player': isMobileHomeMusic,
+          'app-shell--playlist-detail': isMobilePlaylist,
         }"
       >
         <MusicWorld v-if="isWorld" :suspended="fullPlayerVisible || auth.state.loginModalVisible" />
-        <EnvironmentSwitch v-if="!isWorld && !fullPlayerVisible" />
-        <SidebarNav v-if="!isWorld" :compact="isImmersiveRoute" />
+        <EnvironmentSwitch v-if="!isWorld && !fullPlayerVisible && !isNarrowHome && !isMobilePlaylist" />
+        <SidebarNav v-if="!isWorld && !isNarrowHome" :compact="isImmersiveRoute || isNarrow" />
         <div
           v-if="isDesktopApp && (isImmersiveRoute || isWorld)"
           class="app-window-drag-strip"
@@ -27,8 +30,8 @@
           class="app-window-controls"
         />
         <button v-if="showWorldRoutePanel" type="button" class="world-route-close" @click="router.push('/space')">返回音乐馆 ↗</button>
-        <section class="main-panel" :class="{ 'main-panel--world-hidden': isWorld && !showWorldRoutePanel }">
-          <TopBar :inert="isImmersiveRoute" :aria-hidden="isImmersiveRoute" />
+        <section class="main-panel" :class="{ 'main-panel--world-hidden': isWorld && !showWorldRoutePanel }" :inert="isMobile && fullPlayerVisible">
+          <TopBar :inert="isImmersiveRoute" :aria-hidden="isImmersiveRoute" :playlist-header="playlistHeader" />
           <div class="route-stage">
             <router-view v-slot="{ Component, route: viewRoute }">
               <Transition :name="routeTransitionName" appear>
@@ -36,14 +39,22 @@
                   <component
                     :is="Component"
                     :key="getRouteViewKey(viewRoute)"
+                    v-bind="isHomeRoute(viewRoute.name) ? { mobilePlayerSection: homeSection } : {}"
                     @home-ready="markHomeBootReady"
+                    @home-page-change="homeMusicPage = $event"
+                    @home-section-change="homeSection = $event"
+                    @playlist-header-change="playlistHeader = $event"
                   />
                 </KeepAlive>
                 <component
                   v-else-if="Component"
                   :is="Component"
                   :key="getRouteViewKey(viewRoute)"
+                  v-bind="isHomeRoute(viewRoute.name) ? { mobilePlayerSection: homeSection } : {}"
                   @home-ready="markHomeBootReady"
+                  @home-page-change="homeMusicPage = $event"
+                  @home-section-change="homeSection = $event"
+                  @playlist-header-change="playlistHeader = $event"
                 />
                 <div
                   v-else
@@ -70,7 +81,19 @@
             </section>
           </div>
         </Transition>
-        <PlayerBar :hidden="isWorld" @full-player-change="fullPlayerVisible = $event" />
+        <PlayerBar
+          :home-player="isMobileHomeMusic"
+          :hidden="isWorld || (isNarrowHome && !isMobileHomeMusic)"
+          @full-player-change="fullPlayerVisible = $event"
+          @home-section-change="homeSection = $event"
+          @home-navigation="mobileNavigation?.openNavigation()"
+        />
+        <MobileTabBar
+          ref="mobileNavigation"
+          v-if="!isWorld && (isMobile || isNarrowHome) && !isMobileHomeLyrics && !isMobilePlaylist"
+          v-show="!fullPlayerVisible || isMobileHomeMusic"
+          :collapsible="isNarrowHome"
+        />
         <ThemeTransitionOverlay />
         <div
           v-if="appUpdateAvailable"
@@ -98,6 +121,8 @@ import { darkTheme } from 'naive-ui';
 import SidebarNav from './components/SidebarNav.vue';
 import HomeBootSkeleton from './components/HomeBootSkeleton.vue';
 import TopBar from './components/TopBar.vue';
+import MobileTabBar from './components/MobileTabBar.vue';
+import { useResponsiveLayout } from './composables/useResponsiveLayout';
 import ThemeTransitionOverlay from './components/ThemeTransitionOverlay.vue';
 import WindowControls from './components/WindowControls.vue';
 import { useAuthStore } from './stores/auth';
@@ -128,9 +153,15 @@ const auth = useAuthStore();
 const theme = useThemeStore();
 const route = useRoute();
 const fullPlayerVisible = ref(false);
+const playlistHeader = ref({ title: '', visible: false, collapsed: false });
+const homeMusicPage = ref(1);
+const homeSection = ref('music');
+const mobileNavigation = ref(null);
 const router = useRouter();
 const environment = useEnvironmentStore();
+const { isMobile, isCompact, isNarrow, isTabletPortrait, isHomeTouch2D } = useResponsiveLayout();
 const isWorld = computed(() => environment.state.mode === '3d' && !isDesktopLyricsRoute.value);
+const isMobilePlaylist = computed(() => isMobile.value && !isWorld.value && route.name === 'playlist');
 const initialRoutePath = getInitialRoutePath();
 const initialRoute = router.resolve(initialRoutePath);
 const isSpaceRoute = computed(() => route.name === 'space' || (!route.name && initialRoute.name === 'space'));
@@ -148,6 +179,9 @@ const isDesktopLyricsRoute = computed(() =>
 const isImmersiveRoute = computed(() =>
   !isWorld.value && (route.name === 'home' || (!route.name && isHomePath(initialRoutePath))),
 );
+const isNarrowHome = computed(() => isImmersiveRoute.value && (isNarrow.value || isHomeTouch2D.value));
+const isMobileHomeMusic = computed(() => isImmersiveRoute.value && isMobile.value && homeSection.value === 'music');
+const isMobileHomeLyrics = computed(() => !isMobileHomeMusic.value && isImmersiveRoute.value && isHomeTouch2D.value && homeMusicPage.value === 2);
 const isDesktopApp = computed(() =>
   typeof window !== 'undefined' && Boolean(window.mappicDesktop?.windowControls),
 );
@@ -222,6 +256,21 @@ onMounted(() => {
     if (environment.state.mode === '3d' && !isDesktopLyricsRoute.value && route.name === 'home') router.replace('/space');
   });
 });
+
+watch([isWorld, isDesktopLyricsRoute, isMobile, isCompact, fullPlayerVisible], () => {
+  document.documentElement.dataset.layout = isDesktopLyricsRoute.value
+    ? 'desktop-lyrics'
+    : isWorld.value
+      ? 'world'
+      : isMobile.value
+        ? 'mobile-2d'
+        : isCompact.value ? 'compact-2d' : 'desktop-2d';
+  document.documentElement.dataset.playerExpanded = String(fullPlayerVisible.value);
+}, { immediate: true });
+
+watch([isImmersiveRoute, isTabletPortrait], () => {
+  document.documentElement.dataset.homeLayout = isImmersiveRoute.value && isTabletPortrait.value ? 'tablet' : '';
+}, { immediate: true });
 
 watch(() => environment.state.mode, (mode) => {
   document.documentElement.dataset.environment = mode;

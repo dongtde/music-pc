@@ -1,5 +1,6 @@
 import { nextTick, reactive } from 'vue'
 import {
+  FULL_PLAYER_TRANSITION_EFFECTS,
   QUEUE_TRANSITION_EFFECTS,
   SETTINGS_DEFAULTS,
   STORAGE_KEYS,
@@ -13,6 +14,7 @@ export const defaultThemeColor = SETTINGS_DEFAULTS.theme.primaryColor
 export const themeColorPresets = THEME_COLOR_PRESETS
 export const transitionEffects = THEME_TRANSITION_EFFECTS
 export const queueTransitionEffects = QUEUE_TRANSITION_EFFECTS
+export const fullPlayerTransitionEffects = FULL_PLAYER_TRANSITION_EFFECTS
 
 function readPreferences() {
   return readJsonStorage(STORAGE_KEYS.themePreferences, {})
@@ -62,6 +64,7 @@ const state = reactive({
   mode: normalizeChoice(saved.mode, THEME_MODE_OPTIONS, themeDefaults.mode),
   transition: normalizeChoice(saved.transition, transitionEffects, themeDefaults.transition),
   queueTransition: normalizeChoice(saved.queueTransition, queueTransitionEffects, themeDefaults.queueTransition),
+  fullPlayerTransition: normalizeChoice(saved.fullPlayerTransition, fullPlayerTransitionEffects, themeDefaults.fullPlayerTransition),
   primaryColor: normalizeHex(saved.primaryColor || themeDefaults.primaryColor),
   reducedMotion: Boolean(saved.reducedMotion ?? themeDefaults.reducedMotion),
   animating: false,
@@ -76,6 +79,7 @@ function persistPreferences() {
     mode: state.mode,
     transition: state.transition,
     queueTransition: state.queueTransition,
+    fullPlayerTransition: state.fullPlayerTransition,
     primaryColor: state.primaryColor,
     reducedMotion: state.reducedMotion
   })
@@ -231,6 +235,11 @@ export function useThemeStore() {
     persistPreferences()
   }
 
+  function setFullPlayerTransition(effect) {
+    state.fullPlayerTransition = normalizeChoice(effect, fullPlayerTransitionEffects, themeDefaults.fullPlayerTransition)
+    persistPreferences()
+  }
+
   function setReducedMotion(enabled) {
     const nextValue = Boolean(enabled)
 
@@ -261,12 +270,14 @@ export function useThemeStore() {
     colors: themeColorPresets,
     effects: transitionEffects,
     queueEffects: queueTransitionEffects,
+    fullPlayerEffects: fullPlayerTransitionEffects,
     initTheme,
     setTheme,
     toggleTheme,
     setThemeColor,
     setTransition,
     setQueueTransition,
+    setFullPlayerTransition,
     setReducedMotion,
     previewTransition
   }

@@ -1,16 +1,28 @@
 <template>
-  <Transition name="full-player">
+  <Transition
+    :name="playerTransitionName"
+    :appear="isMobile && !homeMode"
+    @before-enter="startPlayerTransition('enter')"
+    @after-enter="finishPlayerTransition('enter')"
+    @enter-cancelled="finishPlayerTransition('enter')"
+    @before-leave="startPlayerTransition('leave')"
+    @after-leave="finishPlayerTransition('leave')"
+    @leave-cancelled="finishPlayerTransition('leave')"
+  >
     <section
       v-show="open"
       class="full-player-page"
-      :class="{ 'full-player-page--3d': is3DView }"
+      :class="{ 'full-player-page--3d': is3DView, 'full-player-page--mobile': isMobile && !is3DView }"
       :style="coverStyle"
-      aria-label="全屏播放器"
+      :data-expansion-effect="isMobile ? theme.state.fullPlayerTransition : undefined"
+      :inert="!open"
+      :id="homeMode ? 'home-music-feed' : undefined"
+      :aria-label="homeMode ? '首页播放器' : '全屏播放器'"
     >
       <button
         class="full-player__close"
         type="button"
-        aria-label="收起全屏播放器"
+        :aria-label="homeMode ? '打开首页导航' : '收起全屏播放器'"
         @click="$emit('close')"
       >
         <ChevronDown :size="30" />
@@ -20,11 +32,17 @@
         class="full-player__view-switch"
         type="button"
         :aria-pressed="is3DView"
+        :aria-label="is3DView ? '返回歌词播放器' : '切换到 3D 播放器'"
         @click="togglePlayerView"
       >
-        <component :is="is3DView ? AlignLeft : Box" :size="17" />
-        {{ is3DView ? '歌词页面' : '3D 播放器' }}
+        <component :is="isMobile && !is3DView ? Grid2X2 : is3DView ? AlignLeft : Box" :size="isMobile ? 23 : 17" />
+        <span v-if="!isMobile">{{ is3DView ? '歌词页面' : '3D 播放器' }}</span>
       </button>
+      <nav v-if="homeMode && isMobile && !is3DView" class="full-player__home-sections" aria-label="首页分类">
+        <button class="active" type="button" aria-pressed="true" @click="$emit('home-section', 'music')">音乐</button>
+        <button type="button" aria-pressed="false" @click="$emit('home-section', 'video')">MV</button>
+      </nav>
+
 
       <ThreeMusicRoom
         v-if="is3DView"
@@ -42,9 +60,39 @@
         @previous="$emit('previous')"
         @next="$emit('next')"
       />
+      <MobilePlayerPages
+        v-if="mobileContentVisible && isMobile && !is3DView"
+        :page="mobilePage"
+        :track="track"
+        :previous-track="adjacentTracks.previous"
+        :next-track="adjacentTracks.next"
+        :transport-element="transportElement"
+        :liked="liked"
+        :lines="lyricLines"
+        :active-index="playbackLyricIndex"
+        :current-time="player.state.currentTime"
+        :playing="player.state.isPlaying"
+        :can-change-track="player.state.queue.length > 1"
+        :track-loading="player.state.isLoading"
+        :danmaku-enabled="danmakuEnabled"
+        :danmaku-active="danmakuActive"
+        :hot-comments="danmakuHotComments"
+        :comments="danmakuComments"
+        :has-more="danmakuHasMore"
+        :loading="danmakuLoading"
+        :error="danmakuError"
+        @update:page="$emit('update:mobilePage', $event)"
+        @toggle-like="$emit('toggle-like')"
+        @seek="seekToLyric"
+        @need-more="$emit('danmaku-need-more')"
+        @toggle-danmaku="$emit('toggle-danmaku')"
+        @retry-danmaku="$emit('retry-danmaku')"
+        @swipe-next="$emit('swipe-next', $event)"
+        @swipe-previous="$emit('swipe-previous', $event)"
+      />
 
       <div
-        v-if="!is3DView && visualizerActive && visualizerMode === 'particles'"
+        v-if="!isMobile && !is3DView && visualizerActive && visualizerMode === 'particles'"
         class="full-player__visualizer full-player__visualizer--particles"
         :class="{ 'is-playing': visualizerActive && player.state.isPlaying }"
         aria-hidden="true"
@@ -57,12 +105,12 @@
       </div>
 
       <FullPlayerSpectrumVisualizer
-        v-if="!is3DView && visualizerActive && visualizerMode === 'spectrum'"
+        v-if="!isMobile && !is3DView && visualizerActive && visualizerMode === 'spectrum'"
         :active="visualizerActive && visualizerMode === 'spectrum'"
         :playing="player.state.isPlaying"
       />
 
-      <div v-show="!is3DView" class="full-player__shell">
+      <div v-show="!is3DView && !isMobile" class="full-player__shell">
         <section class="full-player__turntable" aria-label="唱片封面">
           <div class="full-player__deck">
             <div class="full-player__platter">
@@ -90,6 +138,7 @@
           </header>
 
           <LyricsScroller
+            v-if="!isMobile"
             ref="lyricsScroller"
             variant="full"
             :lines="lyricLines"
@@ -104,7 +153,7 @@
       </div>
 
       <DanmakuLayer
-        v-if="danmakuMounted && !is3DView"
+        v-if="danmakuMounted && !is3DView && !isMobile"
         class="full-player__danmaku"
         :enabled="danmakuActive"
         :song="track"
@@ -141,9 +190,11 @@ import {
   ref,
   watch,
 } from 'vue';
-import { AlignLeft, Box, ChevronDown } from 'lucide-vue-next';
+import { AlignLeft, Box, ChevronDown, Grid2X2 } from 'lucide-vue-next';
 import { getCachedTrackLyrics } from '../services/lyrics';
 import { usePlayerStore } from '../stores/player';
+import { useThemeStore } from '../stores/theme';
+import { useResponsiveLayout } from '../composables/useResponsiveLayout';
 import {
   createLyricPlaceholder,
   getLyricFrame,
@@ -151,7 +202,9 @@ import {
 } from '../utils/lyrics';
 import FullPlayerSpectrumVisualizer from './FullPlayerSpectrumVisualizer.vue';
 import LyricsScroller from './LyricsScroller.vue';
+import MobilePlayerPages from './MobilePlayerPages.vue';
 import '../styles/full-player.css';
+import '../styles/mobile-player-transition.css';
 
 const DanmakuLayer = defineAsyncComponent({
   loader: () => import('./DanmakuLayer.vue'),
@@ -168,6 +221,10 @@ const props = defineProps({
     type: Object,
     required: true,
   },
+  mobilePage: { type: String, default: 'cover', validator: value => ['cover', 'lyrics', 'danmaku'].includes(value) },
+  liked: { type: Boolean, default: false },
+  homeMode: { type: Boolean, default: false },
+  danmakuError: { type: String, default: '' },
   sourceRect: {
     type: Object,
     default: null,
@@ -212,11 +269,40 @@ const props = defineProps({
     type: Number,
     default: 92,
   },
+  transportElement: { type: Object, default: null },
 });
 
-const emit = defineEmits(['close', 'cover-flight-end', 'danmaku-need-more', 'toggle-play', 'previous', 'next']);
+const emit = defineEmits(['close', 'cover-flight-end', 'transition-start', 'transition-end', 'danmaku-need-more', 'toggle-play', 'previous', 'next', 'update:mobilePage', 'toggle-like', 'toggle-danmaku', 'retry-danmaku', 'swipe-next', 'swipe-previous', 'home-section']);
 const player = usePlayerStore();
+const theme = useThemeStore();
+const adjacentTracks = computed(() => {
+  const queue = player.state.queue;
+  if (queue.length < 2) return { previous: null, next: null };
+  const index = queue.findIndex(track => String(track.id) === String(props.track.id));
+  return {
+    previous: queue[index < 0 ? queue.length - 1 : (index - 1 + queue.length) % queue.length],
+    next: queue[index < 0 ? 0 : (index + 1) % queue.length],
+  };
+});
 const is3DView = ref(false);
+const { isMobile2D: isMobile } = useResponsiveLayout();
+const mobileContentVisible = ref(props.open);
+const playerTransitionName = computed(() => isMobile.value
+  ? `mobile-player-${theme.state.reducedMotion ? 'none' : theme.state.fullPlayerTransition}`
+  : 'full-player');
+
+watch(() => props.open, (open) => {
+  if (open) mobileContentVisible.value = true;
+}, { flush: 'sync' });
+
+function startPlayerTransition(phase) {
+  if (isMobile.value) emit('transition-start', phase);
+}
+
+function finishPlayerTransition(phase) {
+  if (phase === 'leave' && !props.open) mobileContentVisible.value = false;
+  emit('transition-end', phase);
+}
 
 const coverLabel = ref(null);
 const coverFlyer = ref(null);
@@ -290,6 +376,14 @@ watch(
   },
   { immediate: true },
 );
+watch(isMobile, (mobile) => {
+  if (mobile) deactivateVisualizer();
+  else if (props.open) scheduleVisualizerActivation(visualizerModeSwitchDelay);
+  nextTick(() => requestLyricsLayoutRefresh('auto'));
+});
+watch(is3DView, (world) => {
+  if (world && isMobile.value) emit('update:mobilePage', 'cover');
+});
 
 watch(
   () => props.open,
@@ -317,6 +411,12 @@ watch(
   () => props.open,
   async (open, previousOpen) => {
     if (!open && previousOpen === undefined) {
+      return;
+    }
+    if (isMobile.value) {
+      coverFlightAnimation?.cancel();
+      coverFlightActive.value = false;
+      emit('cover-flight-end', open ? 'enter' : 'leave');
       return;
     }
 
@@ -428,7 +528,7 @@ function scheduleVisualizerActivation(delay = visualizerActivationDelay) {
   clearVisualizerActivation();
   visualizerActive.value = false;
 
-  if (!props.open || is3DView.value) {
+  if (!props.open || is3DView.value || isMobile.value) {
     return;
   }
 
@@ -438,7 +538,7 @@ function scheduleVisualizerActivation(delay = visualizerActivationDelay) {
     visualizerActivationTimer = null;
     visualizerActivationFrame = window.requestAnimationFrame(() => {
       visualizerActivationFrame = 0;
-      visualizerActive.value = Boolean(props.open && !is3DView.value);
+      visualizerActive.value = Boolean(props.open && !is3DView.value && !isMobile.value);
     });
   }, timeout);
 }
@@ -568,8 +668,10 @@ function playCoverFlight(direction, options = {}) {
 
   const fromRect = direction === 'enter' ? sourceRect : targetRect;
   const toRect = direction === 'enter' ? targetRect : sourceRect;
-  const fromRadius = direction === 'enter' ? '8px' : '50%';
-  const toRadius = direction === 'enter' ? '50%' : '8px';
+  const miniRadius = isMobile.value ? '9px' : '8px';
+  const fullRadius = isMobile.value ? '16px' : '50%';
+  const fromRadius = direction === 'enter' ? miniRadius : fullRadius;
+  const toRadius = direction === 'enter' ? fullRadius : miniRadius;
   const fromTransform = createFlightTransform(fromRect, toRect);
   const toTransform = 'translate3d(0, 0, 0) scale(1, 1)';
 

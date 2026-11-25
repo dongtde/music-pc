@@ -1,0 +1,270 @@
+/* Existing player state and transport are shared across all layouts. */
+.queue-popover__head .queue-popover__actions { flex-direction: row; align-items: center; }
+.mobile-queue-empty { display: none; }
+
+html[data-layout='compact-2d'] .app-shell > .player {
+  position: fixed;
+  inset: auto 0 0;
+  --player-bar-height: var(--compact-player-height);
+  height: var(--compact-player-height);
+  min-height: var(--compact-player-height);
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-rows: 56px 24px;
+  grid-template-areas: 'track controls tools' 'progress progress progress';
+  gap: 4px 16px;
+  padding: 10px var(--mobile-inline) calc(10px + var(--mobile-bottom-inset));
+  overflow: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+  background: var(--mobile-surface);
+}
+html[data-layout='compact-2d'] .player > .track-summary { grid-area: track; width: 100%; gap: 12px; }
+html[data-layout='compact-2d'] .player .album-art-button { width: 52px; height: 52px; border-radius: 10px; box-shadow: none; }
+html[data-layout='compact-2d'] .player .track-summary__body { display: block; flex: 1; min-width: 0; }
+html[data-layout='compact-2d'] .player .mobile-track-open { display: flex; flex-direction: column; justify-content: center; gap: 4px; width: 100%; min-width: 0; min-height: 44px; padding: 0; border: 0; text-align: left; color: var(--text-strong); background: transparent; cursor: pointer; }
+html[data-layout='compact-2d'] .player .mobile-track-open :is(strong, small) { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.3; }
+html[data-layout='compact-2d'] .player .mobile-track-open strong { font-size: 14px; font-weight: 600; }
+html[data-layout='compact-2d'] .player .mobile-track-open small { color: var(--text-muted); font-size: 12px; }
+html[data-layout='compact-2d'] .player .track-summary__actions { display: none; }
+html[data-layout='compact-2d'] .player > .player-center { display: contents; }
+html[data-layout='compact-2d'] .player .play-controls { position: relative; z-index: 1; grid-area: controls; gap: 6px; }
+html[data-layout='compact-2d'] .player :is(.play-controls > button, .control-popover-wrap > button) { width: 44px; height: 44px; }
+html[data-layout='compact-2d'] .player .play-controls > .play-button,
+html[data-layout='compact-2d'] .player.player--full-screen .play-controls > .play-button { width: 52px; height: 52px; }
+html[data-layout='compact-2d'] .player .progress-row { position: relative; z-index: 1; grid-area: progress; grid-template-columns: 36px minmax(0, 1fr) 36px; gap: 10px; font-size: 11px; font-variant-numeric: tabular-nums; }
+html[data-layout='compact-2d'] .player .player-progress { height: 24px; }
+html[data-layout='compact-2d'] .player .player-progress__rail { height: 4px; }
+html[data-layout='compact-2d'] .player .player-tools { grid-area: tools; justify-content: flex-end; gap: 4px; }
+html[data-layout='compact-2d'] .player .player-tools > .desktop-lyrics-button { display: none; }
+html[data-layout='compact-2d'] .player .quality-popover { left: auto; right: 0; transform: none; }
+html[data-layout='compact-2d'] .player .quality-popover::after { left: auto; right: 15px; }
+html[data-layout='compact-2d'] .full-player__shell { --full-player-cover-size: min(31vw, 320px); --full-player-lyrics-width: min(42vw, 440px); --full-player-grid-gap: 30px; }
+html[data-layout='compact-2d'] .full-player-page { padding-bottom: var(--compact-player-height); }
+html[data-layout='compact-2d'] .full-player__shell { height: calc(100dvh - var(--compact-player-height)); }
+
+/* A compact artwork-led card above the quiet navigation rail. */
+html[data-layout='mobile-2d'] .app-shell > .player {
+  position: fixed;
+  inset: auto 12px calc(var(--mobile-nav-height) + var(--mobile-bottom-inset));
+  z-index: 40;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px 44px;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: center;
+  gap: 2px;
+  width: calc(100% - 24px);
+  height: var(--mobile-mini-height);
+  min-height: var(--mobile-mini-height);
+  padding: 11px 10px;
+  overflow: visible;
+  border: 1px solid var(--mobile-border);
+  border-radius: 16px;
+  background: var(--mobile-surface);
+  box-shadow: var(--mobile-shadow);
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+  will-change: auto;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html[data-layout='mobile-2d'] .player > .track-summary { grid-column: 1; grid-row: 1; gap: 10px; width: 100%; min-width: 0; }
+html[data-layout='mobile-2d'] .player .album-art-button { width: 44px; height: 44px; min-width: 44px; border-radius: 9px; box-shadow: none; }
+html[data-layout='mobile-2d'] .player .album-art-button > span { display: none; }
+html[data-layout='mobile-2d'] .player .track-summary__body { display: block; flex: 1; min-width: 0; }
+html[data-layout='mobile-2d'] .mobile-track-open { display: flex; flex-direction: column; justify-content: center; gap: 4px; width: 100%; min-width: 0; min-height: 44px; padding: 0; border: 0; text-align: left; background: transparent; color: var(--mobile-text); }
+html[data-layout='mobile-2d'] .mobile-track-open :is(strong, small) { display: block; width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+html[data-layout='mobile-2d'] .mobile-track-open strong { font-size: 14px; font-weight: 600; line-height: 1.3; }
+html[data-layout='mobile-2d'] .mobile-track-open small { color: var(--mobile-muted); font-size: 12px; line-height: 1.3; }
+html[data-layout='mobile-2d'] .player:not(.player--full-screen) { touch-action: pan-y pinch-zoom; }
+html[data-layout='mobile-2d'] .player:not(.player--full-screen) .mobile-track-open { user-select: none; -webkit-user-select: none; }
+html[data-layout='mobile-2d'] .mobile-track-open--lyrics .overflow-marquee { width: 100%; }
+html[data-layout='mobile-2d'] .player:not(.player--full-screen) .track-summary__actions { display: none; }
+html[data-layout='mobile-2d'] .player:not(.player--full-screen) :is(.player-center, .play-controls, .player-tools) { display: contents; }
+html[data-layout='mobile-2d'] .player:not(.player--full-screen) .play-controls > :not(.play-button),
+html[data-layout='mobile-2d'] .player:not(.player--full-screen) .player-tools > :not(.queue-popover-wrap),
+html[data-layout='mobile-2d'] .player:not(.player--full-screen) .progress-row { display: none; }
+html[data-layout='mobile-2d'] .player:not(.player--full-screen) .play-button { grid-column: 2; grid-row: 1; width: 44px; height: 44px; border-radius: 12px; color: var(--mobile-text); background: transparent; box-shadow: none; }
+html[data-layout='mobile-2d'] .player:not(.player--full-screen) .play-button { touch-action: pan-y pinch-zoom; }
+html[data-layout='mobile-2d'] .player .queue-popover-wrap { grid-column: 3; grid-row: 1; }
+html[data-layout='mobile-2d'] .player .control-popover-wrap > button { width: 44px; height: 44px; border-radius: 12px; color: var(--mobile-text-soft); }
+html[data-layout='mobile-2d'] .player .with-dot::after { display: none; }
+html[data-layout='mobile-2d'] .mobile-mini-progress { position: absolute; inset: auto 14px 0; height: 2px; overflow: hidden; border-radius: 2px; background: var(--mobile-border); }
+html[data-layout='mobile-2d'] .mobile-mini-progress > span { display: block; height: 100%; background: var(--accent); transition: width 200ms linear; }
+
+/* Full view retains one transport, with progress above and utilities below. */
+html[data-layout='mobile-2d'] .app-shell > .player.player--full-screen {
+  inset: auto 0 0;
+  width: 100%;
+  grid-template-columns: 88px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) 44px;
+  gap: 10px 4px;
+  height: calc(var(--mobile-expanded-height) + var(--mobile-bottom-inset));
+  min-height: calc(var(--mobile-expanded-height) + var(--mobile-bottom-inset));
+  padding: 8px var(--mobile-inline) calc(12px + var(--mobile-bottom-inset));
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+html[data-layout='mobile-2d'] .player.player--full-screen::before { background: linear-gradient(0deg, var(--mobile-bg), transparent); }
+html[data-layout='mobile-2d'] .player--full-screen > .player-center { display: flex; grid-column: 1 / -1; grid-row: 1; width: 100%; flex-direction: column-reverse; justify-content: center; gap: 8px; }
+html[data-layout='mobile-2d'] .player.player--full-screen > .player-center .progress-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) 34px; align-items: center; width: 100%; gap: 8px; color: var(--mobile-muted); }
+html[data-layout='mobile-2d'] .player--full-screen .progress-row > span { font-size: 11px; }
+html[data-layout='mobile-2d'] .player--full-screen .player-progress { height: 44px; touch-action: none; }
+html[data-layout='mobile-2d'] .player--full-screen .player-progress__rail { height: 3px; background: var(--mobile-border-strong); }
+html[data-layout='mobile-2d'] .player--full-screen .player-progress__fill { background: var(--accent); }
+html[data-layout='mobile-2d'] .player--full-screen .player-progress__thumb { opacity: 1; transform: translate(-50%, -50%); }
+html[data-layout='mobile-2d'] .player--full-screen .play-controls { display: flex; justify-content: space-between; gap: 6px; }
+html[data-layout='mobile-2d'] .player.player--full-screen > .player-center .play-controls > button:not(.play-button) { width: 44px; height: 52px; color: var(--mobile-text); background: transparent; }
+html[data-layout='mobile-2d'] .player--full-screen .play-controls > .play-button { width: 64px; height: 64px; border-radius: 50%; color: #fff; background: var(--accent); box-shadow: none; }
+html[data-layout='mobile-2d'] .player--full-screen .play-controls > .play-button svg { width: 29px; height: 29px; }
+html[data-layout='mobile-2d'] .player--full-screen .play-controls > .control-popover-wrap:last-child { display: none; }
+html[data-layout='mobile-2d'] .player--full-screen > .track-summary { display: block; grid-column: 1; grid-row: 2; }
+html[data-layout='mobile-2d'] .player--full-screen .track-summary :is(.album-art-button, .mobile-track-open, .track-summary__text) { display: none; }
+html[data-layout='mobile-2d'] .player--full-screen .track-summary__actions { display: flex; gap: 0; width: 88px; }
+html[data-layout='mobile-2d'] .player--full-screen .track-action-button { width: 44px; height: 44px; color: var(--mobile-muted); }
+html[data-layout='mobile-2d'] .player--full-screen .track-action-button.active { color: var(--accent); }
+html[data-layout='mobile-2d'] .player--full-screen .track-action-button:last-child { display: none; }
+html[data-layout='mobile-2d'] .player--full-screen > .player-tools { display: flex; grid-column: 2; grid-row: 2; justify-content: flex-end; gap: 0; }
+html[data-layout='mobile-2d'] .player--full-screen .player-tools > .desktop-lyrics-button { display: none; }
+html[data-layout='mobile-2d'] .player--full-screen .player-tools .quality-button { min-width: 44px; padding-inline: 4px; }
+html[data-layout='mobile-2d'] .player.player--full-screen > .player-center .control-popover-wrap > button,
+html[data-layout='mobile-2d'] .player.player--full-screen > .player-tools > .control-popover-wrap > button,
+html[data-layout='mobile-2d'] .player.player--full-screen > .player-tools > .icon-button { color: var(--mobile-muted); }
+html[data-layout='mobile-2d'] .player.player--full-screen > .player-center .control-popover-wrap > button.active,
+html[data-layout='mobile-2d'] .player.player--full-screen > .player-tools > .control-popover-wrap > button.active,
+html[data-layout='mobile-2d'] .player.player--full-screen > .player-tools > .icon-button.active { color: var(--accent); }
+html[data-layout='mobile-2d'] .player :is(.play-button, .track-action-button, .control-popover-wrap > button):active { opacity: .65; }
+
+/* Settings retain their popovers; the queue opens as a viewport-level drawer. */
+html[data-layout='mobile-2d'] .mobile-player-backdrop { position: fixed; inset: 0; z-index: 38; width: 100%; height: 100%; padding: 0; border: 0; background: rgba(8, 9, 12, .5); }
+html[data-layout='mobile-2d'] .player .player-popover { position: fixed; inset: auto 12px calc(var(--mobile-nav-height) + var(--mobile-mini-height) + var(--mobile-bottom-inset) + 8px); z-index: 10; width: auto; height: auto; max-height: min(65vh, 560px); max-height: min(65dvh, 560px); overflow-x: hidden; overflow-y: auto; padding: 12px; border: 1px solid var(--mobile-border); border-radius: 20px; background: var(--mobile-surface); color: var(--mobile-text); box-shadow: var(--mobile-shadow); transform: none; }
+html[data-layout='mobile-2d'] .player--full-screen .player-popover { bottom: calc(var(--mobile-expanded-height) + var(--mobile-bottom-inset) + 8px); }
+html[data-layout='mobile-2d'] .player .player-popover::after { display: none; }
+html[data-layout='mobile-2d'] .mobile-queue-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: rgba(5, 10, 14, .46);
+  touch-action: none;
+}
+html[data-layout='mobile-2d'] .queue-popover--drawer {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 101;
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  height: min(72vh, 640px);
+  height: min(72dvh, 640px);
+  min-height: 0;
+  max-height: calc(100dvh - var(--mobile-top-inset) - 24px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--mobile-border);
+  border-bottom: 0;
+  border-radius: 24px 24px 0 0;
+  color: var(--mobile-text);
+  background: var(--mobile-surface);
+  box-shadow: 0 -16px 48px rgba(0, 0, 0, .18);
+  outline: none;
+  transform: translate3d(0, var(--queue-drag-offset, 0px), 0);
+  transition: transform 320ms cubic-bezier(.22, 1, .36, 1);
+}
+html[data-layout='mobile-2d'] .queue-popover--immersive {
+  --mobile-surface: color-mix(in srgb, var(--cover-primary, #213245) 48%, #11191d);
+  --mobile-surface-soft: rgba(255, 255, 255, .06);
+  --mobile-text: #f7f8fa;
+  --mobile-text-soft: rgba(255, 255, 255, .86);
+  --mobile-muted: rgba(255, 255, 255, .58);
+  --mobile-border: rgba(255, 255, 255, .08);
+  --mobile-border-strong: rgba(255, 255, 255, .14);
+  --text-main: var(--mobile-text);
+  --text-strong: var(--mobile-text);
+  --text-muted: var(--mobile-muted);
+  --text-soft: var(--mobile-text-soft);
+  --border-subtle: var(--mobile-border);
+  --border-strong: var(--mobile-border-strong);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--cover-primary, #213245) 62%, #1a252b), var(--mobile-surface));
+}
+html[data-layout='mobile-2d'] .queue-popover__drag { display: grid; flex: 0 0 28px; place-items: center; cursor: grab; touch-action: none; }
+html[data-layout='mobile-2d'] .queue-popover__drag span { width: 36px; height: 4px; border-radius: 4px; background: var(--mobile-muted); opacity: .45; }
+html[data-layout='mobile-2d'] .queue-popover--dragging { transition: none; }
+html[data-layout='mobile-2d'] .queue-popover--dragging .queue-popover__drag { cursor: grabbing; }
+html[data-layout='mobile-2d'] .queue-popover--drawer.queue-drawer-enter-active { transition-duration: 360ms; }
+html[data-layout='mobile-2d'] .queue-popover--drawer.queue-drawer-leave-active { transition: transform 260ms cubic-bezier(.4, 0, 1, 1); }
+html[data-layout='mobile-2d'] .queue-popover--drawer:is(.queue-drawer-enter-from, .queue-drawer-leave-to) { transform: translate3d(0, 100%, 0); }
+html[data-layout='mobile-2d'] .mobile-queue-backdrop:is(.queue-backdrop-enter-active, .queue-backdrop-leave-active) { transition: opacity 280ms ease; }
+html[data-layout='mobile-2d'] .mobile-queue-backdrop:is(.queue-backdrop-enter-from, .queue-backdrop-leave-to) { opacity: 0; }
+html[data-layout='mobile-2d'] .queue-popover__head { flex: 0 0 auto; padding: 2px 20px 16px; gap: 8px; border-bottom: 1px solid var(--mobile-border); }
+html[data-layout='mobile-2d'] .queue-popover__head .queue-popover__title { flex-direction: row; align-items: baseline; gap: 10px; white-space: nowrap; }
+html[data-layout='mobile-2d'] .queue-popover__head strong { color: var(--mobile-text); font-size: 19px; font-weight: 650; }
+html[data-layout='mobile-2d'] .queue-popover__head small { color: var(--mobile-muted); font-size: 12px; }
+html[data-layout='mobile-2d'] .queue-popover__head .queue-popover__actions { flex: 0 0 auto; gap: 4px; }
+html[data-layout='mobile-2d'] .queue-popover__head button { min-width: 44px; min-height: 44px; color: var(--mobile-muted); font-size: 13px; }
+html[data-layout='mobile-2d'] .queue-popover__list { padding: 6px 14px calc(16px + var(--mobile-bottom-inset)); scrollbar-gutter: auto; -webkit-overflow-scrolling: touch; }
+html[data-layout='mobile-2d'] .mobile-queue-empty { display: block; margin: 70px 12px; color: var(--mobile-text); font-size: 16px; text-align: center; line-height: 1.8; }
+html[data-layout='mobile-2d'] .mobile-queue-empty span { color: var(--mobile-muted); font-size: 13px; }
+html[data-layout='mobile-2d'] .player :is(.mode-option, .quality-option, .visualizer-option) { min-height: 48px; height: auto; border-radius: 10px; color: var(--mobile-text); }
+html[data-layout='mobile-2d'] .player :is(.mode-option, .quality-option, .visualizer-option).active { color: var(--accent); background: rgba(var(--accent-rgb), .075); }
+
+/* Calm ambient artwork color, not the desktop turntable or neon spectrum. */
+html[data-layout='mobile-2d'] .full-player-page {
+  height: 100vh;
+  height: 100dvh;
+  padding: 0;
+  color: var(--mobile-text);
+  background: radial-gradient(ellipse at 45% 26%, color-mix(in srgb, var(--cover-primary, #213245) 20%, transparent), transparent 58%), var(--mobile-bg);
+  --full-player-lyric-font-size: 17px;
+  --full-player-lyric-active-font-size: 24px;
+  --full-player-lyric-line-min-height: 64px;
+}
+html[data-layout='mobile-2d'] .full-player__close { top: calc(12px + var(--mobile-top-inset)); left: 12px; width: 44px; height: 44px; color: var(--mobile-text-soft); }
+html[data-layout='mobile-2d'] .full-player__view-switch { top: calc(12px + var(--mobile-top-inset)); right: 12px; min-height: 44px; padding: 0 10px; border: 0; border-radius: 12px; color: var(--mobile-muted); background: transparent; font-size: 11px; }
+html[data-layout='mobile-2d'] .full-player__lyrics-toggle { position: absolute; top: calc(12px + var(--mobile-top-inset)); left: 50%; z-index: 3; min-height: 44px; transform: translateX(-50%); padding: 0 12px; border: 0; border-radius: 12px; color: var(--mobile-text-soft); background: transparent; font-size: 13px; font-weight: 500; white-space: nowrap; }
+html[data-layout='mobile-2d'] .full-player__lyrics-toggle[aria-pressed='true'] { color: var(--accent); }
+html[data-layout='mobile-2d'] .full-player__shell { position: absolute; inset: calc(76px + var(--mobile-top-inset)) 28px calc(var(--mobile-expanded-height) + var(--mobile-bottom-inset)); display: flex; width: auto; height: auto; min-height: 0; flex-direction: column; justify-content: center; gap: 24px; margin: 0; padding: 8px 0; --full-player-cover-size: min(76vw, 40vh, 340px, max(80px, calc(100vh - var(--mobile-top-inset) - var(--mobile-bottom-inset) - var(--mobile-expanded-height) - 228px))); --full-player-cover-size: min(76vw, 40dvh, 340px, max(80px, calc(100dvh - var(--mobile-top-inset) - var(--mobile-bottom-inset) - var(--mobile-expanded-height) - 228px))); }
+html[data-layout='mobile-2d'] .full-player__turntable { flex: 0 1 auto; }
+html[data-layout='mobile-2d'] .full-player__deck { border-radius: 16px; background: transparent; box-shadow: var(--mobile-cover-shadow); }
+html[data-layout='mobile-2d'] .full-player__platter { inset: 0; border-radius: 16px; background: transparent; box-shadow: none; }
+html[data-layout='mobile-2d'] .full-player__record { width: 100%; height: 100%; border-radius: 16px; background: transparent; animation: none; }
+html[data-layout='mobile-2d'] .full-player__label.album-art--mini { inset: 0; width: 100%; height: 100%; border-radius: 16px; box-shadow: none; transform: none; }
+html[data-layout='mobile-2d'] .full-player__label > span,
+html[data-layout='mobile-2d'] .full-player__deck-mark { display: none; }
+html[data-layout='mobile-2d'] .full-player__cover-flyer.album-art--mini { box-shadow: var(--mobile-cover-shadow); }
+html[data-layout='mobile-2d'] .full-player__lyrics-panel { flex: 0 0 auto; width: 100%; height: auto; min-height: 0; }
+html[data-layout='mobile-2d'] .full-player__lyrics-head { margin: 0; text-align: left; }
+html[data-layout='mobile-2d'] .full-player__lyrics-head h1 { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; margin: 0; color: var(--mobile-text); font-size: 26px; font-weight: 650; line-height: 1.25; letter-spacing: -.4px; overflow-wrap: anywhere; }
+html[data-layout='mobile-2d'] .full-player__lyrics-head p { margin-top: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--mobile-muted); font-size: 15px; font-weight: 400; }
+html[data-layout='mobile-2d'] .full-player__shell:not(.full-player__shell--mobile-lyrics) .full-player__qq-lyrics { display: none; }
+html[data-layout='mobile-2d'] .full-player__shell--mobile-lyrics .full-player__turntable { display: none; }
+html[data-layout='mobile-2d'] .full-player__shell--mobile-lyrics .full-player__lyrics-panel { flex: 1; height: 100%; }
+html[data-layout='mobile-2d'] .full-player__shell--mobile-lyrics .full-player__lyrics-head { margin-bottom: 20px; }
+html[data-layout='mobile-2d'] .full-player__shell--mobile-lyrics .full-player__qq-lyrics { width: 100%; min-height: 0; flex: 1; }
+html[data-layout='mobile-2d'] .full-player-page .full-player__qq-lyrics::before { display: none; }
+html[data-layout='mobile-2d'] .full-player-page :is(.full-player__lyric-line, .full-player__lyric-text .lyric-word) { color: var(--mobile-muted); text-shadow: none; }
+html[data-layout='mobile-2d'] .full-player-page :is(.full-player__lyric-line.active, .full-player__lyric-line.active .lyric-word, .full-player__lyric-text .lyric-word.sung) { color: var(--mobile-text); text-shadow: none; }
+html[data-layout='mobile-2d'] .full-player-page .lyric-word::after { color: var(--accent); text-shadow: none; }
+html[data-layout='mobile-2d'] .full-player-page :is(.full-player__lyric-guide, .full-player__lyric-guide-time) { color: var(--mobile-muted); }
+html[data-layout='mobile-2d'] .full-player-page .full-player__danmaku.soda-danmaku { inset: calc(60px + var(--mobile-top-inset)) 12px auto; height: 32px; overflow: hidden; opacity: .35; }
+html[data-layout='mobile-2d'] .full-player-page .full-player__danmaku .soda-danmaku__item { max-width: 75vw; font-size: 11px; }
+html[data-layout='mobile-2d'] .full-player__mirror-spectrum-box { width: 100%; height: 64px; bottom: calc(var(--mobile-expanded-height) + var(--mobile-bottom-inset)); opacity: .1; }
+
+@media (max-height: 560px) {
+  html[data-layout='mobile-2d'][data-player-expanded='true'] { --mobile-expanded-height: 168px; }
+  html[data-layout='mobile-2d'] .full-player__shell { inset: calc(64px + var(--mobile-top-inset)) 24px calc(var(--mobile-expanded-height) + var(--mobile-bottom-inset)); flex-direction: row; align-items: center; gap: 24px; --full-player-cover-size: min(28vw, 31dvh); }
+  html[data-layout='mobile-2d'] .full-player__lyrics-panel { flex: 1; }
+  html[data-layout='mobile-2d'] .full-player__shell--mobile-lyrics { flex-direction: column; }
+  html[data-layout='mobile-2d'] .player--full-screen .play-controls > .play-button { width: 52px; height: 52px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-layout='mobile-2d'] .queue-popover--drawer,
+  html[data-layout='mobile-2d'] .mobile-queue-backdrop { transition-duration: 1ms !important; }
+}

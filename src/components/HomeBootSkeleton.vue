@@ -26,12 +26,9 @@
               </div>
               <h1><span class="home-boot-title" /></h1>
               <p><span class="home-boot-line home-boot-line--wide" /></p>
-              <div class="soda-slide__position">
-                <span class="home-boot-line home-boot-line--short" />
-              </div>
             </section>
           </div>
-          <section class="soda-lyrics-panel home-boot-lyrics">
+          <section class="soda-lyrics-panel soda-lyrics-panel--preview-lines home-boot-lyrics">
             <div class="soda-lyrics-list">
               <button type="button" class="placeholder">
                 <span class="home-boot-line" />
