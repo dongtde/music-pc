@@ -4,6 +4,8 @@
     :class="{ 'is-playing': playingPlaylist }"
     @mouseenter="prefetchPlaylistTracks"
     @focusin="prefetchPlaylistTracks"
+    @pointerdown.capture="preparePlaylistCover(playlist)"
+    @click.capture="preparePlaylistCover(playlist)"
   >
     <div class="playlist-card__cover-wrap">
       <router-link class="playlist-card__cover-link" :to="playlistLink" :aria-label="playlist.title">
@@ -22,6 +24,7 @@
             :alt="playlist.title"
             loading="lazy"
             decoding="async"
+            @load="preparePlaylistCover(playlist)"
           />
           <div v-else class="cover__visual">
             <span v-if="playlist.type === 'sunset'" class="sun" />
@@ -52,12 +55,13 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Headphones, Play } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import { getPlaylistDetailData } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
 import { getPlaybackErrorDisplay } from '../utils/playbackError'
+import { preparePlaylistCover, rememberPlaylistPreview } from '../utils/playlistPreview'
 
 const props = defineProps({
   playlist: {
@@ -72,6 +76,9 @@ const playingPlaylist = ref(false)
 const cachedTracks = ref(null)
 let playlistTracksRequest = null
 const playlistLink = computed(() => `/playlist/${props.playlist.id}`)
+watch(() => [props.playlist.id, props.playlist.title, props.playlist.coverUrl, props.playlist.type], () => {
+  rememberPlaylistPreview(props.playlist)
+}, { immediate: true })
 
 async function playPlaylist() {
   const playlistId = String(props.playlist?.id ?? '')
@@ -123,6 +130,7 @@ async function resolvePlaylistTracks(playlistId) {
 }
 
 function prefetchPlaylistTracks() {
+  void preparePlaylistCover(props.playlist)
   const playlistId = String(props.playlist?.id ?? '')
 
   if (!playlistId || cachedTracks.value || playlistTracksRequest) {

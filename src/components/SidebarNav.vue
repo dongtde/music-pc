@@ -74,6 +74,9 @@
           :class="{ 'is-active': isActive(item) }"
           :aria-label="item.label"
           :title="compact ? item.label : undefined"
+          @pointerdown="item.playlist && preparePlaylistCover(item.playlist)"
+          @focus="item.playlist && preparePlaylistCover(item.playlist)"
+          @click="item.playlist && preparePlaylistCover(item.playlist)"
         >
           <component :is="icons[item.icon]" :size="18" />
           <span class="nav-item__label">{{ item.label }}</span>
@@ -105,6 +108,7 @@ import {
 import { useAuthStore } from '../stores/auth'
 import { useLibraryStore } from '../stores/library'
 import { createUserPlaylistData, getUserPlaylistLibraryData } from '../services/netease'
+import { preparePlaylistCover } from '../utils/playlistPreview'
 
 const props = defineProps({
   compact: {
@@ -213,7 +217,8 @@ const sidebarGroups = computed(() => [
     items: library.state.createdPlaylists.map((playlist) => ({
       label: playlist.title,
       to: `/playlist/${playlist.id}`,
-      icon: 'Music2'
+      icon: 'Music2',
+      playlist
     }))
   },
   {
@@ -222,7 +227,8 @@ const sidebarGroups = computed(() => [
     items: library.state.collectedPlaylists.map((playlist) => ({
       label: playlist.title,
       to: `/playlist/${playlist.id}`,
-      icon: 'Music2'
+      icon: 'Music2',
+      playlist
     }))
   }
 ].filter((group) => group.visible !== false))

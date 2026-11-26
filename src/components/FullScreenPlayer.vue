@@ -12,10 +12,10 @@
     <section
       v-show="open"
       class="full-player-page"
-      :class="{ 'full-player-page--3d': is3DView, 'full-player-page--mobile': isMobile && !is3DView }"
+      :class="{ 'full-player-page--3d': is3DView, 'full-player-page--mobile': isMobile && !is3DView, 'full-player-page--route-hidden': routeHidden }"
       :style="coverStyle"
       :data-expansion-effect="isMobile ? theme.state.fullPlayerTransition : undefined"
-      :inert="!open"
+      :inert="!open || routeHidden"
       :id="homeMode ? 'home-music-feed' : undefined"
       :aria-label="homeMode ? '首页播放器' : '全屏播放器'"
     >
@@ -224,6 +224,7 @@ const props = defineProps({
   mobilePage: { type: String, default: 'cover', validator: value => ['cover', 'lyrics', 'danmaku'].includes(value) },
   liked: { type: Boolean, default: false },
   homeMode: { type: Boolean, default: false },
+  routeHidden: { type: Boolean, default: false },
   danmakuError: { type: String, default: '' },
   sourceRect: {
     type: Object,
@@ -321,9 +322,8 @@ let visualizerActivationTimer = null;
 let visualizerActivationFrame = 0;
 let lyricsLayoutTimer = 0;
 let lyricRequestId = 0;
-const coverFlightDuration = 620;
-const openingWorkDelay = coverFlightDuration + 90;
-const visualizerActivationDelay = coverFlightDuration + 120;
+const openingWorkDelay = computed(() => theme.getTransitionDuration() + 90);
+const visualizerActivationDelay = computed(() => theme.getTransitionDuration() + 120);
 const visualizerModeSwitchDelay = 120;
 
 const fallbackCoverPalette = {
@@ -389,7 +389,7 @@ watch(
   () => props.open,
   (open) => {
     if (open) {
-      scheduleVisualizerActivation(visualizerActivationDelay);
+      scheduleVisualizerActivation(visualizerActivationDelay.value);
       return;
     }
 
@@ -439,7 +439,7 @@ watch(
         return;
       }
       playCoverFlight('enter', { sourceRect });
-      requestLyricsLayoutRefresh('auto', openingWorkDelay);
+      requestLyricsLayoutRefresh('auto', openingWorkDelay.value);
       return;
     }
 
@@ -469,7 +469,7 @@ watch(
 
 watch(playbackLyricIndex, async () => {
   await nextTick();
-  requestLyricsLayoutRefresh('smooth', coverFlightActive.value ? openingWorkDelay : 0);
+  requestLyricsLayoutRefresh('smooth', coverFlightActive.value ? openingWorkDelay.value : 0);
 });
 
 onBeforeUnmount(() => {
@@ -524,7 +524,7 @@ function clearDanmakuActivation() {
   }
 }
 
-function scheduleVisualizerActivation(delay = visualizerActivationDelay) {
+function scheduleVisualizerActivation(delay = visualizerActivationDelay.value) {
   clearVisualizerActivation();
   visualizerActive.value = false;
 
@@ -597,7 +597,7 @@ async function loadTrackLyrics(track) {
   if (!isNeteaseTrackId(trackId)) {
     lyricLines.value = createLyricPlaceholder(trackId ? '暂无歌词' : '无播放歌曲');
     await nextTick();
-    requestLyricsLayoutRefresh('auto', props.open ? openingWorkDelay : 0);
+    requestLyricsLayoutRefresh('auto', props.open ? openingWorkDelay.value : 0);
     return;
   }
 
@@ -622,7 +622,7 @@ async function loadTrackLyrics(track) {
   }
 
   await nextTick();
-  requestLyricsLayoutRefresh('auto', props.open ? openingWorkDelay : 0);
+  requestLyricsLayoutRefresh('auto', props.open ? openingWorkDelay.value : 0);
 }
 
 function syncPlaybackLyric(currentTime) {
@@ -701,7 +701,7 @@ function playCoverFlight(direction, options = {}) {
       },
     ],
     {
-      duration: coverFlightDuration,
+      duration: theme.getTransitionDuration(),
       easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
       fill: 'forwards',
     },

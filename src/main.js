@@ -20,6 +20,8 @@ import './styles/mobile.css'
 import './styles/mobile-pages.css'
 import './styles/tablet-home.css'
 import './styles/typography.css'
+import './styles/route-player-transition.css'
+import './styles/detail-cover.css'
 
 const app = createApp(App)
 

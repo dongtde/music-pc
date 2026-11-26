@@ -18,7 +18,7 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .view { overscrol
 /* Compact rail: readable destinations without widening to a desktop sidebar. */
 .nav-item__compact-label { display: none; }
 html[data-layout='compact-2d'] { --compact-player-height: calc(112px + var(--mobile-bottom-inset)); }
-html[data-layout='compact-2d'] .app-shell { grid-template-columns: 88px minmax(0, 1fr); padding-bottom: var(--compact-player-height); }
+html[data-layout='compact-2d'] .app-shell { --page-player-clearance: var(--compact-player-height); grid-template-columns: 88px minmax(0, 1fr); padding-bottom: 0; }
 html[data-layout='compact-2d'] .sidebar--compact { gap: 24px; padding: 24px 8px 8px; }
 html[data-layout='compact-2d'] .sidebar--compact .profile-card { margin-inline: auto; }
 html[data-layout='compact-2d'] .sidebar--compact .nav-groups { padding: 0 0 80px; }
@@ -39,9 +39,23 @@ html[data-layout='compact-2d'] .top-search { width: min(320px, 42vw); }
 html[data-layout='compact-2d'] .top-search--open { width: min(460px, 52vw); }
 html[data-layout='compact-2d'] .search-panel { max-width: calc(100vw - 128px); border-color: var(--mobile-border); border-radius: 16px; box-shadow: var(--mobile-shadow); }
 
-html[data-layout='mobile-2d'] .app-shell { grid-template-columns: minmax(0, 1fr); padding-bottom: calc(var(--mobile-nav-height) + var(--mobile-mini-height) + var(--mobile-bottom-inset) + 8px); }
+html[data-layout='mobile-2d'] .app-shell { --page-player-clearance: calc(var(--mobile-nav-height) + var(--mobile-mini-height) + var(--mobile-bottom-inset) + 8px); grid-template-columns: minmax(0, 1fr); padding-bottom: 0; }
 html[data-layout='mobile-2d'] .app-shell > .sidebar { display: none; }
 html[data-layout='mobile-2d'] .main-panel { grid-column: 1; grid-row: 1; background: var(--mobile-bg); }
+
+/* Fixed playback controls overlay a full-height page. Reserve their space only
+   at the end of the scrollable content, so hiding them reveals the page below. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .app-shell.app-shell--player-transition {
+  --page-player-clearance: 0px;
+}
+html[data-layout='mobile-2d'] .app-shell--playlist-detail {
+  --page-content-bottom-gap: 0px;
+}
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .app-shell > .main-panel > .route-stage > .view:not(.home-view) {
+  padding-bottom: calc(var(--page-player-clearance) + var(--page-content-bottom-gap, 32px));
+  scroll-padding-bottom: calc(var(--page-player-clearance) + var(--page-content-bottom-gap, 32px));
+}
+
 html[data-layout='mobile-2d'] .app-shell .topbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 44px 44px;

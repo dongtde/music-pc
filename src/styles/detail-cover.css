@@ -1,0 +1,31 @@
+/* Extend the viewed playlist's artwork color through its page and transport. */
+:root .app-shell.app-shell--cover-detail {
+  --detail-page-bg: color-mix(in srgb, var(--detail-cover-tint) 64%, #19202b);
+  --detail-page-surface: color-mix(in srgb, var(--detail-page-bg) 88%, #fff);
+  background: var(--detail-page-bg);
+}
+
+:root[data-theme='light'] .app-shell--cover-detail {
+  --detail-page-bg: color-mix(in srgb, var(--detail-cover-tint) 24%, #fff);
+  --detail-page-surface: color-mix(in srgb, var(--detail-page-bg) 60%, #fff);
+}
+
+/* Scope the color to this page; the sidebar and full player retain their themes. */
+.app-shell--cover-detail > .main-panel {
+  --app-bg: var(--detail-page-bg);
+  --topbar-bg: var(--detail-page-bg);
+  --mobile-bg: var(--detail-page-bg);
+  --mobile-surface: var(--detail-page-surface);
+  --panel-bg: var(--detail-page-surface);
+  background-color: var(--detail-page-bg);
+}
+
+.app-shell--cover-detail .view.playlist-detail {
+  background-color: var(--detail-page-bg);
+}
+
+.app-shell.app-shell--cover-detail > .player:not(.player--full-screen) {
+  --player-bg: var(--detail-page-bg);
+  background: var(--detail-page-bg);
+  box-shadow: none;
+}

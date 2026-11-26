@@ -15,6 +15,10 @@ const coverTintPending = new Map()
 const coverTintQueue = []
 let coverTintActiveCount = 0
 
+export function getCachedCoverTint(coverUrl) {
+  return coverTintSampleCache.get(normalizeCoverTintUrl(coverUrl)) || ''
+}
+
 export function sampleCoverTint(coverUrl) {
   const cacheKey = normalizeCoverTintUrl(coverUrl)
 

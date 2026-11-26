@@ -6,6 +6,7 @@ import {
   STORAGE_KEYS,
   THEME_COLOR_PRESETS,
   THEME_MODE_OPTIONS,
+  TRANSITION_DURATION_LIMITS,
   THEME_TRANSITION_EFFECTS
 } from '../config/app'
 import { readJsonStorage, writeJsonStorage } from '../utils/storage'
@@ -26,6 +27,13 @@ function includesValue(options, value) {
 
 function normalizeChoice(value, options, fallback) {
   return includesValue(options, value) ? value : fallback
+}
+
+function normalizeTransitionDuration(value) {
+  const duration = value === '' || value == null ? NaN : Number(value)
+  return Number.isFinite(duration)
+    ? Math.round(Math.min(TRANSITION_DURATION_LIMITS.max, Math.max(TRANSITION_DURATION_LIMITS.min, duration)))
+    : SETTINGS_DEFAULTS.theme.transitionDuration
 }
 
 function normalizeHex(color) {
@@ -65,6 +73,7 @@ const state = reactive({
   transition: normalizeChoice(saved.transition, transitionEffects, themeDefaults.transition),
   queueTransition: normalizeChoice(saved.queueTransition, queueTransitionEffects, themeDefaults.queueTransition),
   fullPlayerTransition: normalizeChoice(saved.fullPlayerTransition, fullPlayerTransitionEffects, themeDefaults.fullPlayerTransition),
+  transitionDuration: normalizeTransitionDuration(saved.transitionDuration),
   primaryColor: normalizeHex(saved.primaryColor || themeDefaults.primaryColor),
   reducedMotion: Boolean(saved.reducedMotion ?? themeDefaults.reducedMotion),
   animating: false,
@@ -80,6 +89,7 @@ function persistPreferences() {
     transition: state.transition,
     queueTransition: state.queueTransition,
     fullPlayerTransition: state.fullPlayerTransition,
+    transitionDuration: state.transitionDuration,
     primaryColor: state.primaryColor,
     reducedMotion: state.reducedMotion
   })
@@ -102,6 +112,16 @@ function applyThemeColor(color) {
   document.documentElement.style.setProperty('--accent-rgb', `${red}, ${green}, ${blue}`)
   document.documentElement.style.setProperty('--accent-hover', mixColor(nextColor, '#ffffff', 0.18))
   document.documentElement.style.setProperty('--accent-pressed', mixColor(nextColor, '#000000', 0.18))
+}
+
+function applyTransitionDuration() {
+  if (typeof document !== 'undefined') {
+    document.documentElement.style.setProperty('--transition-duration', `${state.transitionDuration}ms`)
+  }
+}
+
+function getTransitionDuration() {
+  return prefersReducedMotion() ? 0 : state.transitionDuration
 }
 
 function applyReducedMotion(enabled) {
@@ -141,7 +161,7 @@ function playFallbackTransition() {
   state.animating = false
   state.usingViewTransition = false
 
-  if (prefersReducedMotion()) {
+  if (!getTransitionDuration()) {
     return
   }
 
@@ -151,7 +171,7 @@ function playFallbackTransition() {
     state.animating = true
     timer = window.setTimeout(() => {
       state.animating = false
-    }, 760)
+    }, getTransitionDuration())
   })
 }
 
@@ -191,6 +211,7 @@ export function useThemeStore() {
     applyTheme(state.mode)
     applyThemeColor(state.primaryColor)
     applyReducedMotion(state.reducedMotion)
+    applyTransitionDuration()
   }
 
   function setTheme(mode) {
@@ -240,6 +261,12 @@ export function useThemeStore() {
     persistPreferences()
   }
 
+  function setTransitionDuration(value) {
+    state.transitionDuration = normalizeTransitionDuration(value)
+    applyTransitionDuration()
+    persistPreferences()
+  }
+
   function setReducedMotion(enabled) {
     const nextValue = Boolean(enabled)
 
@@ -278,6 +305,8 @@ export function useThemeStore() {
     setTransition,
     setQueueTransition,
     setFullPlayerTransition,
+    setTransitionDuration,
+    getTransitionDuration,
     setReducedMotion,
     previewTransition
   }

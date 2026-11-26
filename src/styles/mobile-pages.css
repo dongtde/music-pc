@@ -517,7 +517,7 @@ html[data-layout='mobile-2d'] .discover .recommend-page .song-list--recommend {
   padding: 4px;
   margin-inline: -4px;
   scroll-padding-inline: 4px;
-  scroll-snap-type: x proximity;
+  scroll-snap-type: x mandatory;
   scrollbar-width: none;
 }
 html[data-layout='mobile-2d'] .discover .recommend-page .song-list--recommend .song-list-row { scroll-snap-align: start; touch-action: pan-x pan-y pinch-zoom; }

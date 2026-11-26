@@ -1,14 +1,9 @@
 /* The artwork page and the existing shared transport move as one phone player. */
 html[data-layout='mobile-2d'] {
-  --mobile-player-open-duration: 480ms;
-  --mobile-player-close-duration: 340ms;
+  --mobile-player-open-duration: var(--transition-duration);
+  --mobile-player-close-duration: var(--transition-duration);
   --mobile-player-open-ease: cubic-bezier(.22, 1, .36, 1);
   --mobile-player-close-ease: cubic-bezier(.4, 0, .8, .2);
-}
-
-html[data-layout='mobile-2d'] [data-expansion-effect='depth'] {
-  --mobile-player-open-duration: 580ms;
-  --mobile-player-close-duration: 380ms;
 }
 
 html[data-layout='mobile-2d'] .full-player-page:is(.mobile-player-slide-enter-active, .mobile-player-depth-enter-active) {
@@ -47,15 +42,15 @@ html[data-layout='mobile-2d'] .full-player-page:is(.mobile-player-slide-enter-to
 
 /* Animate wrapper layers, leaving the song/page swipe transforms untouched. */
 html[data-layout='mobile-2d'] .mobile-player-depth-enter-active .mobile-full-player__artwork {
-  animation: mobile-player-artwork-reveal 580ms var(--mobile-player-open-ease) both;
+  animation: mobile-player-artwork-reveal var(--transition-duration) var(--mobile-player-open-ease) both;
 }
 
 html[data-layout='mobile-2d'] .mobile-player-depth-enter-active .mobile-full-player__content {
-  animation: mobile-player-content-reveal 440ms 100ms var(--mobile-player-open-ease) both;
+  animation: mobile-player-content-reveal var(--transition-duration) var(--mobile-player-open-ease) both;
 }
 
 html[data-layout='mobile-2d'] .mobile-player-depth-enter-active :is(.full-player__close, .full-player__view-switch, .mobile-full-player__tabs) {
-  animation: mobile-player-chrome-reveal 300ms 160ms ease-out both;
+  animation: mobile-player-chrome-reveal var(--transition-duration) ease-out both;
 }
 
 /* Keep first-open controls hidden until the lazy player has mounted. */
@@ -78,10 +73,13 @@ html[data-layout='mobile-2d'] .app-shell > .player.player--full-screen[data-expa
   animation: mobile-player-transport-out var(--mobile-player-close-duration) var(--mobile-player-close-ease) both;
 }
 
-html[data-layout='mobile-2d'] .full-player-page:is(.mobile-player-none-enter-active, .mobile-player-none-leave-active),
-html[data-layout='mobile-2d'] .app-shell > .player.player--full-screen[data-expansion-effect='none'] {
+html[data-layout='mobile-2d'] .full-player-page:is(.mobile-player-none-enter-active, .mobile-player-none-leave-active) {
   animation: none;
   transition: none;
+}
+
+html[data-layout='mobile-2d'] .app-shell > .player.player--full-screen[data-expansion-effect='none'] {
+  animation: none;
 }
 
 @keyframes mobile-player-transport-in {

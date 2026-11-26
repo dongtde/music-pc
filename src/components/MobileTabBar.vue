@@ -4,7 +4,9 @@
     :class="{
       'mobile-navigation--immersive': collapsible,
       'mobile-navigation--expanded': expanded,
+      'mobile-navigation--route-hidden': routeHidden,
     }"
+    :inert="routeHidden"
     @keydown.esc="expanded = false"
   >
     <button
@@ -50,6 +52,7 @@ import { ChevronUp, Compass, House, RadioTower, UserRound, Video } from 'lucide-
 
 const props = defineProps({
   collapsible: { type: Boolean, default: false },
+  routeHidden: { type: Boolean, default: false },
 })
 const expanded = ref(false)
 const route = useRoute()

@@ -50,8 +50,10 @@
   --vip-tooltip-bg: rgba(31, 31, 34, 0.96);
   --vip-tooltip-color: #f8fafc;
   --vip-tooltip-shadow: 0 12px 30px rgba(0, 0, 0, 0.34);
-  --layout-duration: 460ms;
-  --layout-duration-fast: 320ms;
+  --transition-duration: 400ms;
+  --layout-duration: var(--transition-duration);
+  --layout-duration-fast: var(--transition-duration);
+  --full-player-transition-duration: var(--transition-duration);
   --layout-ease: cubic-bezier(0.16, 1, 0.3, 1);
   background: var(--app-bg);
   color: var(--text-main);
@@ -1266,8 +1268,7 @@ button {
 .app-shell--layout-switching,
 .app-shell--layout-switching .sidebar,
 .app-shell--layout-switching .sidebar *,
-.app-shell--layout-switching .topbar,
-.app-shell--layout-switching > .player {
+.app-shell--layout-switching .topbar {
   animation-duration: 0ms !important;
   transition-duration: 0ms !important;
 }
@@ -2122,6 +2123,54 @@ button {
   transform: translateX(22px) scale(0.992);
 }
 
+/* Detail pages slide over the previous page, reversing on history back. */
+.route-detail-forward-enter-active,
+.route-detail-forward-leave-active,
+.route-detail-back-enter-active,
+.route-detail-back-leave-active {
+  background-color: var(--app-bg);
+  transition:
+    transform var(--transition-duration) cubic-bezier(0.22, 0.68, 0, 1),
+    opacity var(--transition-duration) ease;
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+
+/* Keep leaving pages out of flow even when a detail view sets position. */
+.app-shell .main-panel .route-stage > .view.route-detail-forward-leave-active,
+.app-shell .main-panel .route-stage > .view.route-detail-back-leave-active {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.route-detail-forward-enter-active,
+.route-detail-back-leave-active {
+  z-index: 2;
+}
+
+.route-detail-forward-leave-active,
+.route-detail-back-enter-active {
+  z-index: 1;
+}
+
+.route-detail-forward-enter-active,
+.route-detail-back-enter-active {
+  position: relative;
+}
+
+.route-detail-forward-enter-from,
+.route-detail-back-leave-to {
+  transform: translate3d(100%, 0, 0);
+}
+
+.route-detail-forward-leave-to,
+.route-detail-back-enter-from {
+  opacity: 0.72;
+  transform: translate3d(-24%, 0, 0);
+}
+
 .theme-overlay {
   position: fixed;
   inset: 0;
@@ -2131,20 +2180,20 @@ button {
 }
 
 .theme-overlay--fade {
-  animation: theme-fade 720ms ease both;
+  animation: theme-fade var(--transition-duration) ease both;
 }
 
 .theme-overlay--wipe {
   transform-origin: left;
-  animation: theme-wipe 720ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: theme-wipe var(--transition-duration) cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .theme-overlay--circle {
-  animation: theme-circle 760ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: theme-circle var(--transition-duration) cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .theme-overlay--slide {
-  animation: theme-slide 760ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: theme-slide var(--transition-duration) cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .theme-overlay--blur {
@@ -2156,12 +2205,12 @@ button {
     ),
     var(--app-bg);
   backdrop-filter: blur(10px);
-  animation: theme-blur 720ms ease both;
+  animation: theme-blur var(--transition-duration) ease both;
 }
 
 ::view-transition-old(root),
 ::view-transition-new(root) {
-  animation-duration: 720ms;
+  animation-duration: var(--transition-duration);
   animation-fill-mode: both;
   animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   mix-blend-mode: normal;
@@ -2452,7 +2501,11 @@ button {
   .route-from-immersive-enter-active,
   .route-from-immersive-leave-active,
   .route-to-immersive-enter-active,
-  .route-to-immersive-leave-active {
+  .route-to-immersive-leave-active,
+  .route-detail-forward-enter-active,
+  .route-detail-forward-leave-active,
+  .route-detail-back-enter-active,
+  .route-detail-back-leave-active {
     animation: none !important;
     transition: none !important;
   }

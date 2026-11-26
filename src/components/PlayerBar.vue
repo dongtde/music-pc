@@ -4,6 +4,7 @@
     :open="fullPlayerRequestedOpen"
     :track="currentTrack"
     :home-mode="homePlayer"
+    :route-hidden="routeHidden"
     v-model:mobile-page="fullPlayerMobilePage"
     :liked="currentTrackLiked"
     :source-rect="fullPlayerCoverRect"
@@ -39,7 +40,9 @@
     v-show="!hidden"
     ref="playerBar"
     class="player"
-    :class="{ 'player--full-screen': fullPlayerOpen }"
+    :class="{ 'player--full-screen': fullPlayerOpen, 'player--route-hidden': routeHidden }"
+    :inert="hidden || routeHidden"
+    :aria-hidden="hidden || routeHidden"
     :data-mobile-page="isMobile && fullPlayerOpen ? fullPlayerMobilePage : undefined"
     :data-expansion-phase="isMobile ? fullPlayerMotionPhase || undefined : undefined"
     :data-expansion-effect="isMobile ? theme.state.fullPlayerTransition : undefined"
@@ -53,7 +56,7 @@
   >
     <component
       :is="isMobile && !fullPlayerOpen ? MiniPlayerTrackTransition : PlayerTrackSummary"
-      v-bind="isMobile && !fullPlayerOpen ? { ...miniPlayerAdjacentTracks, enabled: !hidden } : {}"
+      v-bind="isMobile && !fullPlayerOpen ? { ...miniPlayerAdjacentTracks, enabled: !hidden && !routeHidden } : {}"
       ref="trackSummary"
       :track="currentTrack"
       :full-player-open="fullPlayerOpen"
@@ -197,6 +200,7 @@
 
 <script setup>
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { Activity, MessageSquare, Repeat, Repeat1, Repeat2, Shuffle, Sparkles, Volume2, VolumeX } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import PlayerDanmakuToggle from './PlayerDanmakuToggle.vue'
@@ -231,11 +235,16 @@ import { getMiniPlayerSwipeDirection, getPlayerSwipeAxis } from '../utils/mobile
 import '../styles/player.css'
 
 const loadFullScreenPlayer = () => import('./FullScreenPlayer.vue')
-const props = defineProps({ hidden: { type: Boolean, default: false }, homePlayer: { type: Boolean, default: false } })
+const props = defineProps({
+  hidden: { type: Boolean, default: false },
+  routeHidden: { type: Boolean, default: false },
+  homePlayer: { type: Boolean, default: false }
+})
 const emit = defineEmits(['full-player-change', 'home-navigation', 'home-section-change'])
 const CommentModal = defineAsyncComponent(() => import('./CommentModal.vue'))
 const FullScreenPlayer = defineAsyncComponent(loadFullScreenPlayer)
 const theme = useThemeStore()
+const route = useRoute()
 const player = usePlayerStore()
 const library = useLibraryStore()
 const auth = useAuthStore()
@@ -506,9 +515,15 @@ watch(
   },
   { immediate: true }
 )
-watch(() => props.hidden, hidden => {
-  if (hidden) cancelMiniPlayerSwipe()
+watch([() => props.hidden, () => props.routeHidden], ([hidden, routeHidden]) => {
+  if (hidden || routeHidden) {
+    cancelMiniPlayerSwipe()
+    closePlayerPopovers()
+  }
 })
+watch(() => route.path, () => {
+  if (!props.homePlayer && fullPlayerRequestedOpen.value) fullPlayerOpen.value = false
+}, { flush: 'post' })
 
 watch(fullPlayerOpen, (open) => {
   if (!open) fullPlayerMobilePage.value = 'cover'

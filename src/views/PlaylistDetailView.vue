@@ -229,6 +229,7 @@ import { useVirtualRows } from '../composables/useVirtualRows';
 import { useLibraryStore } from '../stores/library';
 import { isAbortError } from '../utils/request';
 import { waitForMinimumDelay } from '../utils/time';
+import { getPlaylistPreview } from '../utils/playlistPreview';
 import '../styles/playlist.css';
 import '../styles/mobile-playlist.css';
 
@@ -238,6 +239,8 @@ const { isMobile2D, songRowHeight } = useResponsiveLayout();
 const emit = defineEmits(['playlist-header-change']);
 
 const route = useRoute();
+const playlistPath = route.path;
+const initialPlaylistPreview = getPlaylistPreview(route.params.id);
 const message = useMessage();
 const library = useLibraryStore();
 
@@ -267,7 +270,7 @@ const playlist = computed(
   () =>
     remotePlaylist.value || {
       id: route.params.id,
-      title: '歌单详情',
+      title: initialPlaylistPreview?.title || '歌单详情',
       description: '当前歌单暂无本地回退数据',
       creator: '网易云音乐用户',
       creatorAvatarUrl: '',
@@ -276,8 +279,8 @@ const playlist = computed(
       listeners: '0',
       commentCount: 0,
       tags: [],
-      type: 'sunset',
-      coverUrl: '',
+      type: initialPlaylistPreview?.coverType || 'sunset',
+      coverUrl: initialPlaylistPreview?.coverUrl || '',
     },
 );
 
@@ -384,8 +387,11 @@ function handlePageScroll() {
   if (isMobile2D.value) scheduleHeaderUpdate();
 }
 
-watch([() => playlist.value.title, mobileHeaderVisible], () => {
+watch([() => playlist.value.title, () => playlist.value.coverUrl, () => playlist.value.type, mobileHeaderVisible], () => {
   emit('playlist-header-change', {
+    path: playlistPath,
+    coverUrl: playlist.value.coverUrl,
+    coverType: playlist.value.type,
     title: playlist.value.title,
     visible: mobileHeaderVisible.value,
     collapsed: mobileHeaderVisible.value,
@@ -549,7 +555,7 @@ function loadLocalPlaylist(id) {
     commentCount: 0,
     tags: localPlaylist.collectedAt ? ['收藏'] : ['创建'],
     type: 'lofi',
-    coverUrl: ''
+    coverUrl: localPlaylist.coverUrl || localPlaylist.tracks[0]?.coverUrl || ''
   };
   remoteTracks.value = getUniqueTracks(localPlaylist.tracks);
   syncTrackHasMore();

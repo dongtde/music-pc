@@ -396,12 +396,15 @@
           :class="{ 'song-list--recommend-carousel': isCompactCarouselLayout || isMobile2D }"
           :style="recommendedSingleListStyle"
           aria-label="推荐单曲列表"
+          @scroll.passive="syncRecommendedSingleCarouselPage"
         >
           <SongListRow
             v-for="song in visibleRecommendedSingles"
             :key="song.id ?? song.rank"
             :track="song"
             compact
+            :queue-layout="isMobile2D"
+            :show-play-icon="!isMobile2D"
             @play="playRecommendedSong"
           />
         </div>
@@ -555,9 +558,11 @@ const isCompactCarouselLayout = computed(
   () => playlistCarouselColumns.value < PLAYLIST_CAROUSEL_WIDE_COLUMNS
 );
 const recommendedSingleVisibleColumns = computed(() =>
-  isCompactCarouselLayout.value
-    ? RECOMMENDED_SINGLE_COMPACT_COLUMNS
-    : RECOMMENDED_SINGLE_WIDE_COLUMNS
+  isMobile2D.value
+    ? 1
+    : isCompactCarouselLayout.value
+      ? RECOMMENDED_SINGLE_COMPACT_COLUMNS
+      : RECOMMENDED_SINGLE_WIDE_COLUMNS
 );
 const recommendedSingleTotalColumns = computed(() =>
   Math.max(1, Math.ceil(visibleRecommendedSingles.value.length / RECOMMENDED_SINGLE_ROWS))
@@ -1326,11 +1331,37 @@ function moveRecommendedSingleCarousel(direction) {
   );
 }
 
+function syncRecommendedSingleCarouselPage() {
+  const track = recommendedSingleTrack.value;
+  if (!isRecommendTabActive || !track?.isConnected || !track.clientWidth) return;
+
+  const maxScrollLeft = Math.max(track.scrollWidth - track.clientWidth, 0);
+  let closestPage = 0;
+  let closestDistance = Infinity;
+
+  recommendedSingleCarouselPageStarts.value.forEach((startColumn, index) => {
+    const target = Math.min(getPlaylistCarouselScrollLeft(track, startColumn), maxScrollLeft);
+    const distance = Math.abs(track.scrollLeft - target);
+    if (distance < closestDistance) {
+      closestPage = index;
+      closestDistance = distance;
+    }
+  });
+
+  recommendedSingleCarouselPageIndex.value = closestPage;
+}
+
 function getPlaylistCarouselScrollLeft(
   track,
   startColumn,
   visibleColumns = playlistCarouselColumns.value
 ) {
+  if (track === recommendedSingleTrack.value) {
+    const firstRow = track.firstElementChild;
+    const targetRow = track.children[startColumn * RECOMMENDED_SINGLE_ROWS];
+    return firstRow && targetRow ? targetRow.offsetLeft - firstRow.offsetLeft : 0;
+  }
+
   const styles = window.getComputedStyle(track);
   const columnGap = Number.parseFloat(styles.columnGap) || 0;
   const columnWidth =

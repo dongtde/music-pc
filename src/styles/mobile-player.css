@@ -175,7 +175,7 @@ html[data-layout='mobile-2d'] .queue-popover--drawer {
   box-shadow: 0 -16px 48px rgba(0, 0, 0, .18);
   outline: none;
   transform: translate3d(0, var(--queue-drag-offset, 0px), 0);
-  transition: transform 320ms cubic-bezier(.22, 1, .36, 1);
+  transition: transform var(--transition-duration) cubic-bezier(.22, 1, .36, 1);
 }
 html[data-layout='mobile-2d'] .queue-popover--immersive {
   --mobile-surface: color-mix(in srgb, var(--cover-primary, #213245) 48%, #11191d);
@@ -197,10 +197,10 @@ html[data-layout='mobile-2d'] .queue-popover__drag { display: grid; flex: 0 0 28
 html[data-layout='mobile-2d'] .queue-popover__drag span { width: 36px; height: 4px; border-radius: 4px; background: var(--mobile-muted); opacity: .45; }
 html[data-layout='mobile-2d'] .queue-popover--dragging { transition: none; }
 html[data-layout='mobile-2d'] .queue-popover--dragging .queue-popover__drag { cursor: grabbing; }
-html[data-layout='mobile-2d'] .queue-popover--drawer.queue-drawer-enter-active { transition-duration: 360ms; }
-html[data-layout='mobile-2d'] .queue-popover--drawer.queue-drawer-leave-active { transition: transform 260ms cubic-bezier(.4, 0, 1, 1); }
+html[data-layout='mobile-2d'] .queue-popover--drawer.queue-drawer-enter-active { transition-duration: var(--transition-duration); }
+html[data-layout='mobile-2d'] .queue-popover--drawer.queue-drawer-leave-active { transition: transform var(--transition-duration) cubic-bezier(.4, 0, 1, 1); }
 html[data-layout='mobile-2d'] .queue-popover--drawer:is(.queue-drawer-enter-from, .queue-drawer-leave-to) { transform: translate3d(0, 100%, 0); }
-html[data-layout='mobile-2d'] .mobile-queue-backdrop:is(.queue-backdrop-enter-active, .queue-backdrop-leave-active) { transition: opacity 280ms ease; }
+html[data-layout='mobile-2d'] .mobile-queue-backdrop:is(.queue-backdrop-enter-active, .queue-backdrop-leave-active) { transition: opacity var(--transition-duration) ease; }
 html[data-layout='mobile-2d'] .mobile-queue-backdrop:is(.queue-backdrop-enter-from, .queue-backdrop-leave-to) { opacity: 0; }
 html[data-layout='mobile-2d'] .queue-popover__head { flex: 0 0 auto; padding: 2px 20px 16px; gap: 8px; border-bottom: 1px solid var(--mobile-border); }
 html[data-layout='mobile-2d'] .queue-popover__head .queue-popover__title { flex-direction: row; align-items: baseline; gap: 10px; white-space: nowrap; }

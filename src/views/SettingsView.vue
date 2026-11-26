@@ -151,6 +151,52 @@
 
         <div class="setting-block">
           <div class="setting-block__head">
+            <Timer :size="22" />
+            <div>
+              <h2>过渡动画时间</h2>
+              <p id="transition-duration-description">统一控制页面切换、播放器显隐、播放列表和主题切换的时长，修改后自动保存。</p>
+            </div>
+          </div>
+
+          <div class="transition-duration-setting">
+            <label class="transition-duration-setting__value" for="transition-duration-slider">
+              <span>动画时长</span>
+              <strong>{{ theme.state.transitionDuration }} 毫秒</strong>
+            </label>
+            <input
+              id="transition-duration-slider"
+              class="transition-duration-setting__slider"
+              type="range"
+              :min="TRANSITION_DURATION_LIMITS.min"
+              :max="TRANSITION_DURATION_LIMITS.max"
+              :step="TRANSITION_DURATION_LIMITS.step"
+              :value="theme.state.transitionDuration"
+              :aria-valuetext="`${theme.state.transitionDuration} 毫秒`"
+              aria-describedby="transition-duration-description"
+              @input="theme.setTransitionDuration($event.target.value)"
+            />
+            <label class="transition-duration-setting__input">
+              <input
+                type="number"
+                inputmode="numeric"
+                :min="TRANSITION_DURATION_LIMITS.min"
+                :max="TRANSITION_DURATION_LIMITS.max"
+                :step="TRANSITION_DURATION_LIMITS.step"
+                :value="theme.state.transitionDuration"
+                aria-label="过渡动画时间（毫秒）"
+                @change="theme.setTransitionDuration($event.target.value)"
+              />
+              <span>毫秒</span>
+            </label>
+            <div class="transition-duration-setting__hint">
+              <small>{{ theme.state.reducedMotion ? '减少动效已开启，动画将直接完成。' : '0 毫秒为立即切换，最大 2000 毫秒。' }}</small>
+              <button type="button" @click="theme.setTransitionDuration(SETTINGS_DEFAULTS.theme.transitionDuration)">恢复默认</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="setting-block">
+          <div class="setting-block__head">
             <Gauge :size="22" />
             <div>
               <h2>减少动效</h2>
@@ -215,9 +261,10 @@
 <script setup>
 import { computed, onMounted } from 'vue'
 import { useMessage } from 'naive-ui'
-import { ArrowUpFromLine, Gauge, Gift, ListMusic, Moon, Paintbrush, Palette, Sun, Wand2 } from 'lucide-vue-next'
+import { ArrowUpFromLine, Gauge, Gift, ListMusic, Moon, Paintbrush, Palette, Sun, Timer, Wand2 } from 'lucide-vue-next'
 import { useAuthStore } from '../stores/auth'
 import { useThemeStore } from '../stores/theme'
+import { SETTINGS_DEFAULTS, TRANSITION_DURATION_LIMITS } from '../config/app'
 import '../styles/settings.css'
 
 const auth = useAuthStore()

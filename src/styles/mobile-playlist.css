@@ -12,12 +12,12 @@ html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar.topbar--playli
   grid-template-columns: 44px minmax(0, 1fr);
   padding-inline: 12px var(--mobile-inline);
   background: transparent;
-  transition: background-color 180ms ease;
+  transition: background-color var(--transition-duration) ease;
 }
 
 html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist .mobile-topbar-title {
   opacity: 0;
-  transition: opacity 180ms ease;
+  transition: opacity var(--transition-duration) ease;
 }
 
 html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist-title-visible .mobile-topbar-title {
@@ -26,6 +26,11 @@ html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist-titl
 
 html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist :is(.mobile-topbar-title h1, .history-actions button) {
   color: #fff;
+}
+
+/* Blend the transparent header with the pixels beneath it, including on scroll. */
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist:not(.topbar--playlist-collapsed) {
+  mix-blend-mode: difference;
 }
 
 html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar.topbar--playlist-collapsed {

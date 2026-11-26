@@ -2625,12 +2625,20 @@
 }
 
 .song-list--recommend.song-list--recommend-carousel {
+  grid-auto-flow: column;
+  grid-template-rows: repeat(4, auto);
   column-gap: var(--recommended-single-column-gap, 16px);
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
   scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
   scrollbar-width: none;
+}
+
+.song-list--recommend.song-list--recommend-carousel > .song-list-row {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
 }
 
 .song-list--recommend.song-list--recommend-carousel::-webkit-scrollbar {

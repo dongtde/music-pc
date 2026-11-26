@@ -59,7 +59,7 @@ export const routes = [
     path: '/podcast/:id',
     name: 'podcast-detail',
     component: () => import('../views/PodcastDetailView.vue'),
-    meta: { title: '电台详情', icon: 'RadioTower' }
+    meta: { title: '电台详情', icon: 'RadioTower', detail: true }
   },
   {
     path: '/mv',
@@ -90,19 +90,19 @@ export const routes = [
     path: '/playlist/:id',
     name: 'playlist',
     component: () => import('../views/PlaylistDetailView.vue'),
-    meta: { title: '歌单', icon: 'ListMusic' }
+    meta: { title: '歌单', icon: 'ListMusic', detail: true }
   },
   {
     path: '/album/:id',
     name: 'album',
     component: () => import('../views/AlbumDetailView.vue'),
-    meta: { title: '专辑', icon: 'Disc3' }
+    meta: { title: '专辑', icon: 'Disc3', detail: true }
   },
   {
     path: '/artist/:id',
     name: 'artist',
     component: () => import('../views/ArtistDetailView.vue'),
-    meta: { title: '歌手', icon: 'User' }
+    meta: { title: '歌手', icon: 'User', detail: true }
   },
   {
     path: '/settings',

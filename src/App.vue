@@ -14,7 +14,11 @@
           'app-shell--player-expanded': fullPlayerVisible,
           'app-shell--home-player': isMobileHomeMusic,
           'app-shell--playlist-detail': isMobilePlaylist,
+          'app-shell--detail-page': Boolean(route.meta.detail),
+          'app-shell--cover-detail': coverThemeActive,
+          'app-shell--player-transition': detailPlayerHidden,
         }"
+        :style="coverThemeStyle"
       >
         <MusicWorld v-if="isWorld" :suspended="fullPlayerVisible || auth.state.loginModalVisible" />
         <EnvironmentSwitch v-if="!isWorld && !fullPlayerVisible && !isNarrowHome && !isMobilePlaylist" />
@@ -34,30 +38,43 @@
           <TopBar :inert="isImmersiveRoute" :aria-hidden="isImmersiveRoute" :playlist-header="playlistHeader" />
           <div class="route-stage">
             <router-view v-slot="{ Component, route: viewRoute }">
-              <Transition :name="routeTransitionName" appear>
-                <KeepAlive v-if="Component && shouldKeepRouteAlive(viewRoute)">
+              <Transition
+                :name="routeTransitionName"
+                appear
+                @before-leave="saveCachedRouteScroll"
+                @enter="restoreCachedRouteScroll"
+                @after-enter="finishDetailPlayerEnter($event, viewRoute.fullPath)"
+              >
+                <KeepAlive>
                   <component
+                    v-if="Component && shouldKeepRouteAlive(viewRoute)"
                     :is="Component"
                     :key="getRouteViewKey(viewRoute)"
                     v-bind="isHomeRoute(viewRoute.name) ? { mobilePlayerSection: homeSection } : {}"
                     @home-ready="markHomeBootReady"
                     @home-page-change="homeMusicPage = $event"
                     @home-section-change="homeSection = $event"
-                    @playlist-header-change="playlistHeader = $event"
+                    @playlist-header-change="updatePlaylistHeader"
                   />
                 </KeepAlive>
+              </Transition>
+              <Transition
+                :name="routeTransitionName"
+                appear
+                @after-enter="finishDetailPlayerEnter($event, viewRoute.fullPath)"
+              >
                 <component
-                  v-else-if="Component"
+                  v-if="Component && !shouldKeepRouteAlive(viewRoute)"
                   :is="Component"
                   :key="getRouteViewKey(viewRoute)"
                   v-bind="isHomeRoute(viewRoute.name) ? { mobilePlayerSection: homeSection } : {}"
                   @home-ready="markHomeBootReady"
                   @home-page-change="homeMusicPage = $event"
                   @home-section-change="homeSection = $event"
-                  @playlist-header-change="playlistHeader = $event"
+                  @playlist-header-change="updatePlaylistHeader"
                 />
                 <div
-                  v-else
+                  v-else-if="!Component"
                   key="route-empty"
                   class="route-stage__boot-placeholder"
                   aria-hidden="true"
@@ -84,6 +101,7 @@
         <PlayerBar
           :home-player="isMobileHomeMusic"
           :hidden="isWorld || (isNarrowHome && !isMobileHomeMusic)"
+          :route-hidden="detailPlayerHidden"
           @full-player-change="fullPlayerVisible = $event"
           @home-section-change="homeSection = $event"
           @home-navigation="mobileNavigation?.openNavigation()"
@@ -93,6 +111,7 @@
           v-if="!isWorld && (isMobile || isNarrowHome) && !isMobileHomeLyrics && !isMobilePlaylist"
           v-show="!fullPlayerVisible || isMobileHomeMusic"
           :collapsible="isNarrowHome"
+          :route-hidden="detailPlayerHidden"
         />
         <ThemeTransitionOverlay />
         <div
@@ -123,6 +142,9 @@ import HomeBootSkeleton from './components/HomeBootSkeleton.vue';
 import TopBar from './components/TopBar.vue';
 import MobileTabBar from './components/MobileTabBar.vue';
 import { useResponsiveLayout } from './composables/useResponsiveLayout';
+import { useDetailPlayerTransition } from './composables/useDetailPlayerTransition';
+import { useDetailCoverTheme } from './composables/useDetailCoverTheme';
+import { getPlaylistPreview } from './utils/playlistPreview';
 import ThemeTransitionOverlay from './components/ThemeTransitionOverlay.vue';
 import WindowControls from './components/WindowControls.vue';
 import { useAuthStore } from './stores/auth';
@@ -185,7 +207,25 @@ const isMobileHomeLyrics = computed(() => !isMobileHomeMusic.value && isImmersiv
 const isDesktopApp = computed(() =>
   typeof window !== 'undefined' && Boolean(window.mappicDesktop?.windowControls),
 );
+const { coverThemeActive, coverThemeStyle } = useDetailCoverTheme(() => {
+  if (isWorld.value || route.name !== 'playlist') return null;
+  const preview = getPlaylistPreview(route.params.id);
+  const header = playlistHeader.value.path === route.path ? playlistHeader.value : null;
+  if (!preview && !header) return null;
+  return {
+    ...preview,
+    ...header,
+    path: route.path,
+    coverUrl: header?.coverUrl || preview?.coverUrl || '',
+    coverType: (header?.coverUrl ? header.coverType : preview?.coverType) || header?.coverType,
+    tint: preview?.tint || '',
+  };
+});
 const routeTransitionName = ref('route-soft');
+const { hidden: detailPlayerHidden, finishEnter: finishDetailPlayerEnter } = useDetailPlayerTransition(router, {
+  enabled: () => !isWorld.value && !isDesktopLyricsRoute.value,
+  getDuration: theme.getTransitionDuration,
+});
 const isLayoutSwitching = ref(false);
 const appUpdateAvailable = ref(false);
 const appBootVisible = ref(isHomePath(initialRoutePath));
@@ -196,13 +236,23 @@ const PODCAST_TAB_ROUTE_NAMES = new Set([
   'podcast-radio',
 ]);
 let layoutSwitchTimer = 0;
+let previousHistoryPosition = router.options.history.state.position;
 let appUpdateRegistration = null;
+const cachedRouteScrollPositions = new WeakMap();
+
+function updatePlaylistHeader(header) {
+  if (header.path === route.path) playlistHeader.value = header;
+}
 
 function isHomeRoute(routeName) {
   return routeName === 'home';
 }
 
 function getRouteViewKey(viewRoute) {
+  if (viewRoute.meta.detail) {
+    return viewRoute.path;
+  }
+
   const routeName = String(viewRoute.name || '');
 
   if (PODCAST_TAB_ROUTE_NAMES.has(routeName)) {
@@ -214,6 +264,19 @@ function getRouteViewKey(viewRoute) {
 
 function shouldKeepRouteAlive(viewRoute) {
   return Boolean(viewRoute.meta.keepAlive);
+}
+
+function saveCachedRouteScroll(root) {
+  const positions = [root, ...root.querySelectorAll('*')]
+    .filter((element) => element.scrollTop || element.scrollLeft)
+    .map((element) => ({ element, top: element.scrollTop, left: element.scrollLeft }));
+  cachedRouteScrollPositions.set(root, positions);
+}
+
+function restoreCachedRouteScroll(root) {
+  for (const { element, top, left } of cachedRouteScrollPositions.get(root) || []) {
+    element.scrollTo({ top, left, behavior: 'instant' });
+  }
 }
 
 function markLayoutSwitching() {
@@ -241,6 +304,7 @@ function clearBootRouteMarker() {
 }
 
 onBeforeUnmount(() => {
+  removeRouteTransitionHook();
   if (typeof window !== 'undefined') {
     window.clearTimeout(layoutSwitchTimer);
     window.removeEventListener('lanyin:app-update-available', handleAppUpdateAvailable);
@@ -280,28 +344,36 @@ watch(isSpaceRoute, (isSpace) => {
   if (isSpace) environment.setMode('3d');
 }, { immediate: true });
 
-watch(
-  () => route.name,
-  (nextName, previousName) => {
-    if (!previousName || nextName === previousName) {
-      return;
-    }
+const removeRouteTransitionHook = router.afterEach((to, from, failure) => {
+  if (failure) return;
 
-    const wasImmersive = isHomeRoute(previousName);
-    const willBeImmersive = isHomeRoute(nextName);
+  const historyPosition = router.options.history.state.position;
+  const isBackNavigation = Number.isFinite(historyPosition)
+    && Number.isFinite(previousHistoryPosition)
+    && historyPosition < previousHistoryPosition;
+  previousHistoryPosition = historyPosition;
 
-    routeTransitionName.value =
-      wasImmersive === willBeImmersive
-        ? 'route-soft'
-        : willBeImmersive
-          ? 'route-to-immersive'
-          : 'route-from-immersive';
+  if (!from.name || to.path === from.path) return;
 
-    if (wasImmersive !== willBeImmersive) {
-      markLayoutSwitching();
-    }
-  },
-);
+  const wasImmersive = isHomeRoute(from.name);
+  const willBeImmersive = isHomeRoute(to.name);
+
+  if (to.meta.detail || from.meta.detail) {
+    routeTransitionName.value = to.meta.detail && (!from.meta.detail || !isBackNavigation)
+      ? 'route-detail-forward'
+      : 'route-detail-back';
+  } else {
+    routeTransitionName.value = wasImmersive === willBeImmersive
+      ? 'route-soft'
+      : willBeImmersive
+        ? 'route-to-immersive'
+        : 'route-from-immersive';
+  }
+
+  if (wasImmersive !== willBeImmersive) {
+    markLayoutSwitching();
+  }
+});
 
 function hexToRgb(color) {
   const value = color.replace('#', '');

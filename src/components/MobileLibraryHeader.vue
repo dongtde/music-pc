@@ -86,9 +86,12 @@
             :key="playlist.id"
             :to="`/playlist/${playlist.id}`"
             class="mobile-library-playlist"
+            @pointerdown="preparePlaylistCover(playlist)"
+            @focus="preparePlaylistCover(playlist)"
+            @click="preparePlaylistCover(playlist)"
           >
             <span class="mobile-library-playlist__cover" aria-hidden="true">
-              <img v-if="playlist.coverUrl" :src="playlist.coverUrl" alt="" loading="lazy" decoding="async" />
+              <img v-if="playlist.coverUrl" :src="playlist.coverUrl" alt="" loading="lazy" decoding="async" @load="preparePlaylistCover(playlist)" />
               <Music2 v-else :size="20" />
             </span>
             <span class="mobile-library-playlist__title">{{ playlist.title }}</span>
@@ -111,6 +114,7 @@ import { useMessage } from 'naive-ui'
 import { useAuthStore } from '../stores/auth'
 import { useLibraryStore } from '../stores/library'
 import { createUserPlaylistData, getUserPlaylistLibraryData } from '../services/netease'
+import { preparePlaylistCover } from '../utils/playlistPreview'
 
 const auth = useAuthStore()
 const library = useLibraryStore()

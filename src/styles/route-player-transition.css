@@ -1,0 +1,55 @@
+/* Route changes move the shared transport and navigation offscreen together.
+   Individual translate keeps the player/page swipe transforms independent. */
+.app-shell > .player,
+.app-shell > .full-player-page {
+  translate: 0 0;
+  transition:
+    translate var(--transition-duration) var(--layout-ease),
+    opacity var(--transition-duration) ease,
+    background-color var(--transition-duration) ease,
+    filter var(--transition-duration) ease,
+    border-color var(--transition-duration) ease;
+}
+
+/* Route hiding also works while the full player is still opening or closing. */
+:root[data-layout] .app-shell > .player.player--route-hidden[inert],
+:root[data-layout] .app-shell > .full-player-page.full-player-page--route-hidden[inert] {
+  transition:
+    translate var(--transition-duration) var(--layout-ease),
+    opacity var(--transition-duration) ease,
+    background-color var(--transition-duration) ease,
+    filter var(--transition-duration) ease,
+    border-color var(--transition-duration) ease;
+}
+
+:root .app-shell > .player.player--route-hidden {
+  translate: 0 calc(100% + var(--mobile-nav-height, 0px) + var(--mobile-bottom-inset, 0px) + 32px);
+  opacity: 0;
+  pointer-events: none;
+}
+
+:root .app-shell > .full-player-page.full-player-page--route-hidden {
+  translate: 0 100dvh;
+  pointer-events: none;
+}
+
+.app-shell .mobile-navigation :is(.mobile-tabbar, .mobile-navigation__toggle) {
+  transition:
+    transform var(--transition-duration) var(--layout-ease),
+    opacity var(--transition-duration) ease;
+}
+
+.app-shell .mobile-navigation--route-hidden :is(.mobile-tabbar, .mobile-navigation__toggle) {
+  opacity: 0;
+  transform: translate3d(0, calc(100% + 32px), 0);
+  pointer-events: none;
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell > .player,
+  .app-shell > .full-player-page,
+  .app-shell .mobile-navigation :is(.mobile-tabbar, .mobile-navigation__toggle) {
+    transition: none;
+  }
+}

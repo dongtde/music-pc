@@ -40,7 +40,7 @@
   --scrollbar-thumb: rgba(146, 148, 159, 0.24);
   --scrollbar-thumb-hover: rgba(146, 148, 159, 0.4);
   --active-bg: rgba(var(--accent-rgb), 0.09);
-  --layout-duration-fast: 220ms;
+  --layout-duration-fast: var(--transition-duration);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   -webkit-text-size-adjust: 100%;
 }

@@ -31,12 +31,15 @@ export const STORAGE_KEYS = {
   fullPlayerVisualizerMode: 'mappic:full-player:visualizer-mode',
 };
 
+export const TRANSITION_DURATION_LIMITS = { min: 0, max: 2000, step: 50 };
+
 export const SETTINGS_DEFAULTS = {
   theme: {
     mode: 'dark',
     transition: 'fade',
     queueTransition: 'slide-left',
     fullPlayerTransition: 'slide',
+    transitionDuration: 400,
     primaryColor: '#ff3f73',
     reducedMotion: false,
   },
