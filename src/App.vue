@@ -255,11 +255,11 @@ const isDesktopApp = computed(() =>
 );
 const { coverThemeActive, coverThemeStyle } = useDetailCoverTheme(() => {
   const viewedRoute = mobileDetailActive.value ? mobileDetailRoute.value : route;
-  return isWorld.value ? null : getDetailCoverSource(viewedRoute, playlistHeader.value);
+  return !isMobile.value || isWorld.value ? null : getDetailCoverSource(viewedRoute, playlistHeader.value);
 });
 const routeTransitionName = ref('route-soft');
 const { hidden: detailPlayerHidden, finishEnter: finishDetailPlayerEnter } = useDetailPlayerTransition(router, {
-  enabled: () => !isWorld.value && !isDesktopLyricsRoute.value,
+  enabled: () => isMobile.value && !isWorld.value && !isDesktopLyricsRoute.value,
   getDuration: theme.getTransitionDuration,
 });
 const isLayoutSwitching = ref(false);

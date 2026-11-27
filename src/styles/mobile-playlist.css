@@ -4,41 +4,36 @@ html[data-layout='mobile-2d'] .app-shell--playlist-detail {
   --mobile-header-height: 56px;
   --mobile-nav-height: 0px;
   --playlist-header-height: calc(var(--mobile-header-height) + var(--mobile-top-inset));
+  --playlist-hero-lift: 64px;
 }
 
 html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar.topbar--playlist {
   position: absolute;
   inset: 0 0 auto;
+  isolation: isolate;
   grid-template-columns: 44px minmax(0, 1fr);
   column-gap: 16px;
   padding-inline: 0 var(--mobile-inline);
   background: transparent;
-  transition: background-color var(--transition-duration) ease;
+}
+
+/* Fade only the surface and title; keep the back button visible and usable. */
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: var(--mobile-bg);
+  opacity: var(--playlist-header-opacity, 0);
+  content: '';
+  pointer-events: none;
 }
 
 html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist .mobile-topbar-title {
-  opacity: 0;
-  transition: opacity var(--transition-duration) ease;
-}
-
-html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist-title-visible .mobile-topbar-title {
-  opacity: 1;
+  opacity: var(--playlist-header-opacity, 0);
+  transition: none;
 }
 
 html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist :is(.mobile-topbar-title h1, .history-actions button) {
-  color: #fff;
-}
-
-/* Blend the transparent header with the pixels beneath it, including on scroll. */
-html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist:not(.topbar--playlist-collapsed) {
-  mix-blend-mode: difference;
-}
-
-html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar.topbar--playlist-collapsed {
-  background: var(--mobile-bg);
-}
-
-html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist-collapsed :is(.mobile-topbar-title h1, .history-actions button) {
   color: var(--mobile-text);
 }
 
@@ -80,7 +75,7 @@ html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .play
   display: flex;
   min-width: 0;
   flex-direction: column;
-  padding: calc(clamp(260px, 78vw, 440px) + var(--mobile-top-inset)) var(--mobile-inline) 20px;
+  padding: calc(clamp(260px, 78vw, 440px) - var(--playlist-hero-lift) + var(--mobile-top-inset)) var(--mobile-inline) 20px;
   border: 0;
 }
 
@@ -158,18 +153,76 @@ html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .play
   order: 3;
   justify-content: center;
   gap: 12px;
-  margin-top: 18px;
+  margin-top: 16px;
   border: 0;
 }
 
 html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-actions .playlist-action {
-  height: 46px;
-  min-height: 46px;
-  flex: 0 1 124px;
-  padding: 0 16px;
+  position: relative;
+  isolation: isolate;
+  height: 44px;
+  min-height: 44px;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-width: 88px;
+  padding: 0 12px;
+  border: 0;
   border-radius: 999px;
-  font-size: var(--type-control);
+  color: var(--mobile-text);
+  background: transparent;
+  box-shadow: none;
+  font-size: 12px;
   font-weight: 500;
+  transition: transform 160ms ease;
+}
+
+/* Keep a 44px touch target around each 40px visible pill. */
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-action::before {
+  position: absolute;
+  z-index: -1;
+  inset: 2px 0;
+  border: 1px solid color-mix(in srgb, var(--mobile-text) 30%, transparent);
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--mobile-text) 6%, transparent);
+  content: '';
+  pointer-events: none;
+  transition: background-color 140ms ease;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-actions .playlist-action--primary {
+  min-width: 116px;
+  gap: 7px;
+  padding-inline: 15px;
+  color: #302b37;
+  font-size: 13px;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-action--primary::before {
+  border-color: rgba(48, 43, 55, .12);
+  background: rgba(255, 255, 255, .94);
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-action svg {
+  width: 16px;
+  height: 16px;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-actions .playlist-action:hover:not(:disabled) {
+  color: var(--mobile-text);
+  background: transparent;
+  transform: none;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-action:hover:not(:disabled)::before {
+  background: color-mix(in srgb, var(--mobile-text) 12%, transparent);
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-actions .playlist-action--primary:hover:not(:disabled) {
+  color: #302b37;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-action--primary:hover:not(:disabled)::before {
+  background: #fff;
 }
 
 html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail > .playlist-table {
@@ -198,7 +251,7 @@ html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .play
 html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-detail-skeleton__cover {
   width: calc(100% + 2 * var(--mobile-inline));
   max-width: none;
-  height: clamp(260px, 78vw, 440px);
+  height: calc(clamp(260px, 78vw, 440px) - var(--playlist-hero-lift));
   margin-inline: calc(-1 * var(--mobile-inline));
   aspect-ratio: auto;
   border-radius: 0;

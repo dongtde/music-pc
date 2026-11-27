@@ -58,13 +58,14 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .app-shell > .mai
 
 html[data-layout='mobile-2d'] .app-shell .topbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 52px;
+  grid-template-columns: max-content minmax(0, 1fr) 44px;
   grid-template-rows: minmax(0, 1fr);
   align-items: center;
   height: calc(var(--mobile-header-height) + var(--mobile-top-inset));
   min-height: calc(var(--mobile-header-height) + var(--mobile-top-inset));
   flex-basis: calc(var(--mobile-header-height) + var(--mobile-top-inset));
-  gap: 4px;
+  column-gap: 9px;
+  row-gap: 12px;
   padding: var(--mobile-top-inset) var(--mobile-inline) 0;
   border: 0;
   background: var(--mobile-bg);
@@ -96,10 +97,11 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .app-shell--disco
 }
 html[data-layout='mobile-2d'] .mobile-topbar-title { grid-column: 1; grid-row: 1; min-width: 0; }
 html[data-layout='mobile-2d'] .mobile-topbar-title h1 { overflow: hidden; margin: 0; color: var(--mobile-text); font-size: 28px; font-weight: 720; line-height: 1.18; letter-spacing: -0.7px; white-space: nowrap; text-overflow: ellipsis; }
+html[data-layout='mobile-2d'] .app-shell .topbar:not(.topbar--detail):not(.topbar--playlist):not(.topbar--search-page) .mobile-topbar-title { margin-right: 3px; }
 html[data-layout='mobile-2d'] .history-actions { display: none; }
 html[data-layout='mobile-2d'] .topbar > :is(.icon-button, .topbar__spacer, .window-controls) { display: none; }
-html[data-layout='mobile-2d'] .top-search { position: relative; grid-column: 2; grid-row: 1; justify-self: end; width: 100%; height: 36px; min-width: 44px; max-width: none; transition: none; will-change: auto; }
-html[data-layout='mobile-2d'] .mobile-search-trigger { display: flex; width: 100%; height: 36px; min-width: 0; align-items: center; justify-content: flex-start; gap: 8px; overflow: hidden; padding: 0 12px; border: 1px solid var(--mobile-border); border-radius: 999px; color: var(--mobile-muted); background: var(--mobile-surface-soft); text-align: left; cursor: pointer; }
+html[data-layout='mobile-2d'] .top-search { position: relative; grid-column: 2; grid-row: 1; justify-self: end; width: 100%; height: calc(var(--type-page, 22px) * 1.3); min-width: 44px; max-width: none; transition: none; will-change: auto; }
+html[data-layout='mobile-2d'] .mobile-search-trigger { display: flex; width: 100%; height: calc(var(--type-page, 22px) * 1.3); min-width: 0; align-items: center; justify-content: flex-start; gap: 8px; overflow: hidden; padding: 0 12px; border: 1px solid var(--mobile-border); border-radius: 999px; color: var(--mobile-muted); background: var(--mobile-surface-soft); text-align: left; cursor: pointer; }
 html[data-layout='mobile-2d'] .mobile-search-trigger svg { flex: 0 0 auto; }
 html[data-layout='mobile-2d'] .mobile-search-trigger span { min-width: 0; overflow: hidden; font-size: 14px; white-space: nowrap; text-overflow: ellipsis; }
 html[data-layout='mobile-2d'] .topbar .environment-switch {
@@ -108,7 +110,7 @@ html[data-layout='mobile-2d'] .topbar .environment-switch {
   grid-column: 3;
   grid-row: 1;
   justify-self: end;
-  width: 52px;
+  width: 44px;
   height: 44px;
   border: 0;
   border-radius: 12px;
@@ -118,7 +120,7 @@ html[data-layout='mobile-2d'] .topbar .environment-switch {
 }
 html[data-layout='mobile-2d'] .topbar .environment-switch:hover { background: var(--mobile-surface-soft); }
 html[data-layout='mobile-2d'] .mobile-search-trigger:active { opacity: 0.65; }
-html[data-layout='mobile-2d'] .topbar.topbar--detail { grid-template-columns: 44px minmax(0, 1fr) minmax(44px, min(220px, 40vw)); }
+html[data-layout='mobile-2d'] .topbar.topbar--detail { grid-template-columns: 44px minmax(0, 1fr) minmax(44px, min(220px, 40vw)); gap: 4px; }
 html[data-layout='mobile-2d'] .topbar--detail .mobile-topbar-title { grid-column: 2; }
 html[data-layout='mobile-2d'] .topbar--detail .mobile-topbar-title h1 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: 0; }
 html[data-layout='mobile-2d'] .topbar--detail .history-actions { display: flex; grid-column: 1; grid-row: 1; }
@@ -207,7 +209,7 @@ html[data-layout='mobile-2d'] .mobile-tabbar__item { display: flex; min-width: 4
 html[data-layout='mobile-2d'] .mobile-tabbar__item.is-active { color: var(--accent); font-weight: 650; }
 html[data-layout='mobile-2d'] .mobile-tabbar__item:active { opacity: 0.65; }
 html[data-layout='mobile-2d'] .app-shell > .environment-switch { left: auto; right: var(--mobile-inline); top: calc((var(--mobile-header-height) - 44px) / 2 + var(--mobile-top-inset)); bottom: auto; z-index: 21; display: flex; flex-direction: row; gap: 4px; width: 52px; height: 44px; border: 0; border-radius: 12px; color: var(--mobile-muted); background: transparent; box-shadow: none; backdrop-filter: none; font-size: 12px; font-weight: 600; }
-html[data-layout='mobile-2d'] .environment-switch svg { width: 15px; height: 15px; }
+html[data-layout='mobile-2d'] .environment-switch svg:not(.environment-switch__3d-icon) { width: 15px; height: 15px; }
 html[data-layout='mobile-2d'] .environment-switch:hover { background: var(--mobile-surface-soft); color: var(--mobile-text); }
 html[data-layout='mobile-2d'] .app-update-banner { bottom: calc(var(--mobile-nav-height) + var(--mobile-mini-height) + var(--mobile-bottom-inset) + 12px); border-radius: 14px; background: var(--mobile-surface); }
 

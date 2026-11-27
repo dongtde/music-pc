@@ -223,6 +223,7 @@ import { useLibraryStore } from '../stores/library';
 import { isAbortError } from '../utils/request';
 import { waitForMinimumDelay } from '../utils/time';
 import { getPlaylistPreview } from '../utils/playlistPreview';
+import { getDetailHeaderProgress } from '../utils/detailHeaderProgress';
 import '../styles/playlist.css';
 import '../styles/mobile-playlist.css';
 
@@ -239,7 +240,8 @@ const library = useLibraryStore();
 
 const pageRoot = ref(null);
 const heroTitle = ref(null);
-const mobileHeaderVisible = ref(false);
+const mobileHeaderProgress = ref(0);
+const mobileHeaderVisible = computed(() => mobileHeaderProgress.value > 0);
 let headerFrame = 0;
 let headerObserver = null;
 const remotePlaylist = ref(null);
@@ -356,14 +358,9 @@ const loadMoreController = useLoadMoreTrigger({
 });
 
 function updateMobileHeader() {
-  if (!isMobile2D.value || isLoading.value || !pageRoot.value) {
-    mobileHeaderVisible.value = false;
-    return;
-  }
-
-  const headerBottom = pageRoot.value.closest('.mobile-detail-page, .main-panel')?.querySelector('.topbar')?.getBoundingClientRect().bottom
-    ?? pageRoot.value.getBoundingClientRect().top;
-  mobileHeaderVisible.value = Boolean(pageRoot.value.scrollTop > 0 && heroTitle.value && heroTitle.value.getBoundingClientRect().bottom <= headerBottom + 8);
+  mobileHeaderProgress.value = !isMobile2D.value || isLoading.value
+    ? 0
+    : getDetailHeaderProgress(pageRoot.value, heroTitle.value);
 }
 
 function scheduleHeaderUpdate() {
@@ -379,14 +376,15 @@ function handlePageScroll() {
   if (isMobile2D.value) scheduleHeaderUpdate();
 }
 
-watch([() => playlist.value.title, () => playlist.value.coverUrl, () => playlist.value.type, mobileHeaderVisible], () => {
+watch([() => playlist.value.title, () => playlist.value.coverUrl, () => playlist.value.type, mobileHeaderProgress], () => {
   emit('playlist-header-change', {
     path: playlistPath,
     coverUrl: playlist.value.coverUrl,
     coverType: playlist.value.type,
     title: playlist.value.title,
+    progress: mobileHeaderProgress.value,
     visible: mobileHeaderVisible.value,
-    collapsed: mobileHeaderVisible.value,
+    collapsed: mobileHeaderProgress.value === 1,
   });
 }, { immediate: true });
 
@@ -446,7 +444,7 @@ async function loadPlaylistDetail(id) {
   abortDetailRequest();
   abortTrackRequest();
   loadMoreController.cleanup();
-  mobileHeaderVisible.value = false;
+  mobileHeaderProgress.value = 0;
   if (pageRoot.value) pageRoot.value.scrollTop = 0;
   remotePlaylist.value = null;
   remoteTracks.value = [];

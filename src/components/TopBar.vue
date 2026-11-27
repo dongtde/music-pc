@@ -8,6 +8,7 @@
       'topbar--playlist-title-visible': isMobilePlaylist && currentPlaylistHeader.visible,
       'topbar--playlist-collapsed': isMobilePlaylist && currentPlaylistHeader.collapsed,
     }"
+    :style="playlistHeaderStyle"
   >
     <div v-if="isMobile && !isMobileSearchPage" class="mobile-topbar-title" :aria-hidden="isMobilePlaylist && !currentPlaylistHeader.visible">
       <h1 v-if="isMobilePlaylist">
@@ -216,7 +217,7 @@
         </div>
     </div>
 
-    <EnvironmentSwitch v-if="props.showEnvironmentSwitch && !isMobileSearchPage && !isMobileDetail" />
+    <EnvironmentSwitch v-if="props.showEnvironmentSwitch && !isMobileSearchPage && !isMobileDetail" :icon-only="isMobile" />
     <div
       class="topbar__spacer"
       :class="{ 'topbar__spacer--search-active': searchExpanded }"
@@ -340,7 +341,7 @@ const props = defineProps({
   showEnvironmentSwitch: { type: Boolean, default: false },
   playlistHeader: {
     type: Object,
-    default: () => ({ title: '', visible: false, collapsed: false })
+    default: () => ({ title: '', progress: 0, visible: false, collapsed: false })
   }
 })
 
@@ -443,7 +444,12 @@ const isMobileDetail = computed(() => isMobile.value && /^\/(playlist|album|arti
 const isMobilePlaylist = computed(() => isMobile.value && Boolean(route.meta.coverDetail))
 const currentPlaylistHeader = computed(() => props.playlistHeader?.path === route.path
   ? props.playlistHeader
-  : { title: '', visible: false, collapsed: false })
+  : { title: '', progress: 0, visible: false, collapsed: false })
+const playlistHeaderStyle = computed(() => {
+  if (!isMobilePlaylist.value) return undefined
+  const progress = currentPlaylistHeader.value.progress ?? (currentPlaylistHeader.value.visible ? 1 : 0)
+  return { '--playlist-header-opacity': Math.max(0, Math.min(1, progress)) }
+})
 const mobilePageTitle = computed(() => {
   const root = route.path.split('/')[1]
   return { home: '现在就听', search: '搜索', discover: '发现', podcast: '电台', mv: '视频', video: '视频', library: '我的音乐', settings: '设置', playlist: '歌单', album: '专辑', artist: '歌手', 'kugou-mv': '视频', friends: '朋友' }[root] || route.meta.title || '现在就听'

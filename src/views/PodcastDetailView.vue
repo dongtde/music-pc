@@ -183,6 +183,7 @@ import { usePlayerStore } from '../stores/player'
 import { getPlaybackErrorDisplay } from '../utils/playbackError'
 import { isAbortError } from '../utils/request'
 import { getPodcastPreview } from '../utils/podcastPreview'
+import { getDetailHeaderProgress } from '../utils/detailHeaderProgress'
 import '../styles/playlist.css'
 import '../styles/mobile-playlist.css'
 
@@ -196,7 +197,8 @@ const player = usePlayerStore()
 const message = useMessage()
 const pageRoot = ref(null)
 const heroTitle = ref(null)
-const mobileHeaderVisible = ref(false)
+const mobileHeaderProgress = ref(0)
+const mobileHeaderVisible = computed(() => mobileHeaderProgress.value > 0)
 let headerFrame = 0
 let headerObserver = null
 const programVirtualList = ref(null)
@@ -245,14 +247,9 @@ const loadMoreController = useLoadMoreTrigger({
 })
 
 function updateMobileHeader() {
-  if (!isMobile2D.value || loading.value || !pageRoot.value) {
-    mobileHeaderVisible.value = false
-    return
-  }
-
-  const headerBottom = pageRoot.value.closest('.mobile-detail-page, .main-panel')?.querySelector('.topbar')?.getBoundingClientRect().bottom
-    ?? pageRoot.value.getBoundingClientRect().top
-  mobileHeaderVisible.value = Boolean(heroTitle.value && heroTitle.value.getBoundingClientRect().bottom <= headerBottom + 8)
+  mobileHeaderProgress.value = !isMobile2D.value || loading.value
+    ? 0
+    : getDetailHeaderProgress(pageRoot.value, heroTitle.value)
 }
 
 function scheduleHeaderUpdate() {
@@ -268,14 +265,15 @@ function handlePageScroll() {
   if (isMobile2D.value) scheduleHeaderUpdate()
 }
 
-watch([podcast, podcastPreview, mobileHeaderVisible], () => {
+watch([podcast, podcastPreview, mobileHeaderProgress], () => {
   emit('playlist-header-change', {
     path: route.path,
     coverUrl: podcast.value?.coverUrl || podcastPreview.value?.coverUrl || '',
     coverType: podcast.value?.type || podcastPreview.value?.coverType,
     title: podcast.value?.title || podcastPreview.value?.title || '电台详情',
+    progress: mobileHeaderProgress.value,
     visible: mobileHeaderVisible.value,
-    collapsed: mobileHeaderVisible.value
+    collapsed: mobileHeaderProgress.value === 1
   })
 }, { immediate: true })
 
@@ -331,7 +329,7 @@ async function loadDetail() {
   offset.value = 0
   more.value = false
   total.value = 0
-  mobileHeaderVisible.value = false
+  mobileHeaderProgress.value = 0
   if (pageRoot.value) pageRoot.value.scrollTop = 0
 
   try {

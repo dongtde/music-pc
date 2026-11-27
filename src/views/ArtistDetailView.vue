@@ -460,6 +460,7 @@ import {
 } from '../services/netease'
 import { createLruCache } from '../utils/lruCache'
 import { isAbortError } from '../utils/request'
+import { getDetailHeaderProgress } from '../utils/detailHeaderProgress'
 import '../styles/playlist.css'
 import '../styles/mobile-playlist.css'
 import '../styles/artist.css'
@@ -481,7 +482,8 @@ const message = useMessage()
 
 const pageRoot = ref(null)
 const heroTitle = ref(null)
-const mobileHeaderVisible = ref(false)
+const mobileHeaderProgress = ref(0)
+const mobileHeaderVisible = computed(() => mobileHeaderProgress.value > 0)
 let headerFrame = 0
 const remoteArtist = ref(null)
 const remoteTracks = ref([])
@@ -716,15 +718,16 @@ watch(
   { immediate: true }
 )
 
-watch([artist, isLoading, mobileHeaderVisible], ([info, loading, visible]) => {
+watch([artist, isLoading, mobileHeaderProgress], ([info, loading, progress]) => {
   if (loading) return
   emit('playlist-header-change', {
     path: artistPath,
     coverUrl: artistCoverUrl.value,
     coverType: info.type,
     title: info.name,
-    visible,
-    collapsed: visible
+    progress,
+    visible: mobileHeaderVisible.value,
+    collapsed: progress === 1
   })
 }, { immediate: true })
 
@@ -739,16 +742,9 @@ watch([pageRoot, heroTitle, isMobile2D], ([root, title, mobile], _, onCleanup) =
 }, { flush: 'post' })
 
 function updateMobileHeader() {
-  const root = pageRoot.value
-  const title = heroTitle.value
-  if (!isMobile2D.value || !root?.scrollTop || !title) {
-    mobileHeaderVisible.value = false
-    return
-  }
-
-  const headerBottom = root.closest('.mobile-detail-page, .main-panel')?.querySelector('.topbar')?.getBoundingClientRect().bottom
-    ?? root.getBoundingClientRect().top
-  mobileHeaderVisible.value = title.getBoundingClientRect().bottom <= headerBottom + 8
+  mobileHeaderProgress.value = !isMobile2D.value || isLoading.value
+    ? 0
+    : getDetailHeaderProgress(pageRoot.value, heroTitle.value)
 }
 
 function scheduleHeaderUpdate() {
