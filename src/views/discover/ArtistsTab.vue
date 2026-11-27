@@ -1,5 +1,5 @@
 <template>
-  <section class="discover-page artists-page">
+  <section ref="artistsPage" class="discover-page artists-page">
     <section
       v-if="skeletonVisible"
       class="artists-skeleton"
@@ -97,6 +97,7 @@
             :key="item.value"
             type="button"
             :class="{ active: filters.initial === item.value }"
+            :aria-pressed="filters.initial === item.value"
             @click="setFilter('initial', item.value)"
           >
             {{ item.label }}
@@ -107,12 +108,13 @@
       <section
         v-if="!skeletonVisible && !(error && !hasArtistContent)"
         class="artist-library-section"
+        id="artist-library"
       >
-        <header class="artist-library-head">
+        <header ref="artistLibraryHead" class="artist-library-head">
           <h2 class="section-title compact artist-library-title">分类歌手</h2>
-          <small>{{ artists.length }} 位歌手</small>
+          <small>{{ loading ? '加载中...' : `${artists.length} 位歌手` }}</small>
         </header>
-        <div class="artist-grid artist-grid--real">
+        <div class="artist-grid artist-grid--real" :aria-busy="loading">
           <router-link
             v-for="artist in artists"
             :key="artist.id"
@@ -145,7 +147,7 @@
             </span>
           </router-link>
           <article
-            v-for="item in loadingMore ? ARTIST_LOAD_MORE_SKELETON_COUNT : 0"
+            v-for="item in loading ? ARTIST_SKELETON_COUNT : loadingMore ? ARTIST_LOAD_MORE_SKELETON_COUNT : 0"
             :key="`artist-load-more-skeleton-${item}`"
             class="skeleton-artist-card"
           >
@@ -154,6 +156,9 @@
             <span class="skeleton-line skeleton-line--artist-meta" />
           </article>
         </div>
+        <p v-if="!loading && !artists.length && !error" class="artist-library-empty">
+          暂无符合条件的歌手
+        </p>
         <div
           ref="loadMoreTrigger"
           class="artist-load-more"
@@ -161,10 +166,10 @@
           aria-live="polite"
         >
           <span
-            v-if="loadingMore"
+            v-if="loading || loadingMore"
             class="artist-load-more__status"
           >
-            正在加载更多歌手...
+            {{ loading ? '正在加载歌手...' : '正在加载更多歌手...' }}
           </span>
           <button
             v-else-if="error && artists.length"
@@ -176,6 +181,27 @@
           <span v-else-if="!hasMore && artists.length">没有更多歌手了</span>
         </div>
       </section>
+      <Teleport to="body">
+        <nav
+          v-if="initialIndexVisible"
+          class="artist-initial-index"
+          :style="initialIndexStyle"
+          aria-label="按首字母筛选歌手"
+        >
+          <button
+            v-for="item in initialFilters"
+            :key="item.value"
+            type="button"
+            :class="{ active: filters.initial === item.value }"
+            :aria-label="item.value === -1 ? '热门歌手' : item.value === '#' ? '其他首字母歌手' : `${item.label} 开头的歌手`"
+            :aria-pressed="filters.initial === item.value"
+            aria-controls="artist-library"
+            @click="selectInitial(item.value)"
+          >
+            {{ item.value === -1 ? '热' : item.label }}
+          </button>
+        </nav>
+      </Teleport>
   </section>
 </template>
 
@@ -183,10 +209,13 @@
 import {
   computed,
   nextTick,
+  onActivated,
   onBeforeUnmount,
   onMounted,
+  onDeactivated,
   reactive,
   ref,
+  watch,
 } from 'vue';
 import { Mic2 } from 'lucide-vue-next';
 import { useLoadMoreTrigger } from '../../composables/useLoadMoreTrigger';
@@ -222,6 +251,7 @@ const initialFilters = [
   ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     .split('')
     .map((letter) => ({ label: letter, value: letter.toLowerCase() })),
+  { label: '#', value: '#' },
 ];
 
 const filters = reactive({
@@ -237,6 +267,13 @@ const artists = ref([]);
 const topArtists = ref([]);
 const artistsOffset = ref(0);
 const hasMore = ref(true);
+const artistsPage = ref(null);
+const artistLibraryHead = ref(null);
+const initialIndexVisible = ref(false);
+const initialIndexStyle = ref({});
+let artistScrollRoot = null;
+let initialIndexResizeObserver = null;
+let initialIndexFrame = 0;
 const loadMoreTrigger = ref(null);
 const hasArtistContent = computed(() =>
   Boolean(artists.value.length || topArtists.value.length),
@@ -254,10 +291,16 @@ const loadMoreController = useLoadMoreTrigger({
 
 onMounted(() => {
   loadData({ reset: true });
+  setupInitialIndex();
 });
+
+onActivated(() => nextTick(setupInitialIndex));
+onDeactivated(cleanupInitialIndex);
+watch(artistLibraryHead, scheduleInitialIndexUpdate, { flush: 'post' });
 
 onBeforeUnmount(() => {
   cancelArtistRequest();
+  cleanupInitialIndex();
 });
 
 function setFilter(key, value) {
@@ -267,6 +310,82 @@ function setFilter(key, value) {
 
   filters[key] = value;
   loadData({ reset: true });
+}
+
+function setupInitialIndex() {
+  cleanupInitialIndex();
+  artistScrollRoot = artistsPage.value?.closest('.view.discover');
+
+  if (!artistScrollRoot) {
+    return;
+  }
+
+  artistScrollRoot.addEventListener('scroll', scheduleInitialIndexUpdate, { passive: true });
+  window.addEventListener('resize', scheduleInitialIndexUpdate);
+  initialIndexResizeObserver = new ResizeObserver(scheduleInitialIndexUpdate);
+  initialIndexResizeObserver.observe(artistScrollRoot);
+  initialIndexResizeObserver.observe(artistsPage.value);
+  scheduleInitialIndexUpdate();
+}
+
+function cleanupInitialIndex() {
+  artistScrollRoot?.removeEventListener('scroll', scheduleInitialIndexUpdate);
+  window.removeEventListener('resize', scheduleInitialIndexUpdate);
+  initialIndexResizeObserver?.disconnect();
+  initialIndexResizeObserver = null;
+  artistScrollRoot = null;
+  window.cancelAnimationFrame(initialIndexFrame);
+  initialIndexFrame = 0;
+  initialIndexVisible.value = false;
+}
+
+function scheduleInitialIndexUpdate() {
+  if (!initialIndexFrame && artistScrollRoot) {
+    initialIndexFrame = window.requestAnimationFrame(updateInitialIndex);
+  }
+}
+
+function getArtistLibraryTop() {
+  const bounds = artistScrollRoot.getBoundingClientRect();
+  const tabs = artistScrollRoot.querySelector(':scope > .tabs');
+  return Math.max(bounds.top, tabs?.getBoundingClientRect().bottom ?? bounds.top) + 8;
+}
+
+function updateInitialIndex() {
+  initialIndexFrame = 0;
+  const layout = document.documentElement.dataset.layout;
+
+  if (!artistScrollRoot || !artistLibraryHead.value || !['mobile-2d', 'compact-2d'].includes(layout)) {
+    initialIndexVisible.value = false;
+    return;
+  }
+
+  const bounds = artistScrollRoot.getBoundingClientRect();
+  const top = getArtistLibraryTop();
+  const bottomClearance = parseFloat(window.getComputedStyle(artistScrollRoot).paddingBottom) || 0;
+  const availableHeight = Math.max(0, Math.min(bounds.bottom, window.innerHeight) - bottomClearance - top - 8);
+  const height = Math.min(560, availableHeight);
+  initialIndexVisible.value = artistLibraryHead.value.getBoundingClientRect().top <= top + 1 && height > 0;
+  initialIndexStyle.value = {
+    top: `${top + (availableHeight - height) / 2}px`,
+    height: `${height}px`,
+    '--artist-index-right': `${Math.max(4, window.innerWidth - bounds.right + 4)}px`,
+  };
+}
+
+function selectInitial(value) {
+  setFilter('initial', value);
+  nextTick(() => {
+    if (!artistScrollRoot || !artistLibraryHead.value) {
+      return;
+    }
+
+    artistScrollRoot.scrollTo({
+      top: artistScrollRoot.scrollTop + artistLibraryHead.value.getBoundingClientRect().top - getArtistLibraryTop(),
+      behavior: 'instant',
+    });
+    scheduleInitialIndexUpdate();
+  });
 }
 
 function reload() {
@@ -374,7 +493,7 @@ async function loadData({ reset = false, force = false } = {}) {
     loadMoreController.cleanup();
     loading.value = true;
     loadingMore.value = false;
-    skeletonVisible.value = true;
+    skeletonVisible.value = !hasArtistContent.value;
     artists.value = [];
     artistsOffset.value = 0;
     hasMore.value = true;

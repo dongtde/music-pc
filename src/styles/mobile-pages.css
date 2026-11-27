@@ -248,8 +248,8 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist
 }
 
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist-filter-panel > div {
-  gap: 12px;
-  padding: 3px 1px;
+  gap: 10px;
+  padding: 2px 1px;
 }
 
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist-filter-panel strong {
@@ -265,14 +265,14 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist
 
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist-filter-panel button {
   min-width: max-content;
-  min-height: 46px;
-  height: 46px;
-  padding: 0 18px;
+  min-height: 32px;
+  height: 32px;
+  padding: 0 14px;
   border: 0;
   border-radius: 999px;
   color: var(--pages-text);
   background: var(--pages-surface);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -281,6 +281,58 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist
   background: #69e88e;
   font-weight: 600;
 }
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist-library-section {
+  min-height: calc(100dvh - var(--mobile-nav-height, 64px) - var(--mobile-mini-height, 72px) - var(--mobile-bottom-inset, 0px) - 48px);
+  padding-right: 16px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-initial-index {
+  position: fixed;
+  right: max(var(--artist-index-right, 4px), env(safe-area-inset-right, 0px));
+  z-index: 18;
+  display: flex;
+  width: 28px;
+  flex-direction: column;
+  padding: 4px 2px;
+  border-radius: 999px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-width: none;
+  background: color-mix(in srgb, var(--mobile-bg) 94%, transparent);
+  user-select: none;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-initial-index button {
+  display: flex;
+  width: 100%;
+  min-height: 12px;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: var(--pages-muted);
+  background: transparent;
+  font-size: clamp(10px, 1.6dvh, 13px);
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-initial-index button.active {
+  color: #15391f;
+  background: #69e88e;
+  font-weight: 650;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-initial-index button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* Explicit controls only: never reset buttons or geometry inside song rows. */
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover-error button, .playlist-load-more button, .artist-load-more button, .album-scroll-sentinel button, .artist-tab-load-more button, .library-empty button, .playlist-action, .album-action, .album-stats button, .artist-play-all, .podcast-action, .podcast-load-more, .podcast-text-button, .podcast-autoload button, .podcast-showcase__head a, .podcast-rank-select select, .mv-section-head button, .mv-detail-action, .vip-claim-button, .login-modal__button, .login-send-button, .comment-modal__retry, .feature-modal__close, .playlist-category-modal__close, .playlist-category-modal__group button) {
   min-width: 44px;

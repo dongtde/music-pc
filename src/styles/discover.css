@@ -888,6 +888,16 @@
   background: rgba(var(--accent-rgb), 0.1);
 }
 
+.artist-initial-index {
+  display: none;
+}
+
+.artist-library-empty {
+  margin: 48px 0;
+  color: var(--text-muted);
+  text-align: center;
+}
+
 .artist-rank-panel {
   margin-bottom: 38px;
   overflow: visible;
