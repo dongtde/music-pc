@@ -1,95 +1,108 @@
 <template>
-  <div ref="pageRoot" class="view podcast-detail-view" @scroll.passive="scheduleProgramRangeUpdate">
+  <div
+    ref="pageRoot"
+    class="view playlist-detail podcast-detail-view"
+    @scroll.passive="handlePageScroll"
+  >
     <section
       v-if="loading && !podcast"
-      class="podcast-detail-skeleton"
+      class="playlist-detail-skeleton"
       aria-busy="true"
       aria-label="正在加载电台详情"
     >
-      <section class="podcast-detail-skeleton__hero">
-        <span class="podcast-detail-skeleton__cover" />
-        <div class="podcast-detail-skeleton__content">
-          <span class="podcast-detail-skeleton__line podcast-detail-skeleton__line--title" />
-          <span class="podcast-detail-skeleton__line podcast-detail-skeleton__line--description" />
-          <span class="podcast-detail-skeleton__line podcast-detail-skeleton__line--description-short" />
-          <div class="podcast-detail-skeleton__meta">
+      <section class="playlist-detail-skeleton__hero">
+        <span class="playlist-detail-skeleton__cover" />
+        <div class="playlist-detail-skeleton__content">
+          <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--title" />
+          <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--description" />
+          <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--description-short" />
+          <div class="playlist-detail-skeleton__meta">
+            <span class="playlist-detail-skeleton__avatar" />
             <span
               v-for="item in 5"
               :key="`podcast-detail-meta-${item}`"
-              class="podcast-detail-skeleton__pill"
+              class="playlist-detail-skeleton__pill"
             />
+          </div>
+          <div class="playlist-detail-skeleton__actions">
+            <span class="playlist-detail-skeleton__button playlist-detail-skeleton__button--primary" />
           </div>
         </div>
       </section>
 
-      <section class="podcast-detail-skeleton__table" aria-hidden="true">
-        <header class="podcast-detail-table__head">
+      <section class="playlist-detail-skeleton__table" aria-hidden="true">
+        <header class="playlist-table__head">
           <span>标题</span>
           <span>电台</span>
           <span>时长</span>
         </header>
-        <div class="podcast-detail-skeleton__rows">
+        <div class="playlist-detail-skeleton__rows">
           <article
             v-for="item in 10"
             :key="`podcast-program-skeleton-${item}`"
-            class="podcast-detail-skeleton__row"
+            class="playlist-detail-skeleton__row"
           >
-            <span class="podcast-detail-skeleton__song-main">
-              <span class="podcast-detail-skeleton__thumb" />
-              <span class="podcast-detail-skeleton__song-lines">
-                <span class="podcast-detail-skeleton__line podcast-detail-skeleton__line--song" />
-                <span class="podcast-detail-skeleton__line podcast-detail-skeleton__line--artist" />
+            <span class="playlist-detail-skeleton__song-main">
+              <span class="playlist-detail-skeleton__thumb" />
+              <span class="playlist-detail-skeleton__song-lines">
+                <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--song" />
+                <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--artist" />
               </span>
             </span>
-            <span class="podcast-detail-skeleton__line podcast-detail-skeleton__line--album" />
-            <span class="podcast-detail-skeleton__line podcast-detail-skeleton__line--duration" />
+            <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--album" />
+            <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--duration" />
           </article>
         </div>
       </section>
     </section>
 
     <template v-else-if="podcast">
-      <section class="podcast-detail-hero">
-        <div class="podcast-detail-cover" :class="`podcast-detail-cover--${podcast.type}`">
+      <section class="playlist-hero">
+        <div class="playlist-cover" :class="`playlist-cover--${podcast.type}`">
           <img
             v-if="podcast.coverUrl"
-            class="podcast-detail-cover__image"
+            class="playlist-cover__image"
             :src="podcast.coverUrl"
             :alt="podcast.title"
-            loading="lazy"
+            loading="eager"
             decoding="async"
+            fetchpriority="high"
           />
-          <span class="podcast-detail-cover__badge">
-            <RadioTower :size="22" />
-          </span>
         </div>
 
-        <div class="podcast-detail-content">
-          <h1>{{ podcast.title }}</h1>
-          <p>{{ podcast.description }}</p>
-
-          <div class="podcast-detail-meta">
-            <span>
-              <ListMusic :size="14" />
-              {{ podcast.programCountLabel || `${total} 首歌曲` }}
-            </span>
-            <span>
-              <RadioTower :size="14" />
-              FM {{ podcast.id }}
-            </span>
-            <span>
-              <Headphones :size="14" />
-              {{ podcast.playCountLabel || '连续播放' }}
-            </span>
-            <span v-if="podcast.lastUpdated">
-              <RefreshCw :size="14" />
-              更新于 {{ podcast.lastUpdated }}
-            </span>
+        <div class="playlist-hero__content">
+          <h1 ref="heroTitle" class="playlist-title">
+            <OverflowMarquee :text="podcast.title" :enabled="isMobile2D" :active="!mobileHeaderVisible" />
+          </h1>
+          <div class="playlist-description">
+            <DetailDescription
+              :text="podcast.description"
+              title="电台简介"
+              :subtitle="podcast.title"
+            />
           </div>
 
-          <div class="podcast-detail-actions">
+          <div class="playlist-meta">
+            <span class="playlist-avatar">
+              <img
+                v-if="podcast.creatorAvatarUrl"
+                :src="podcast.creatorAvatarUrl"
+                :alt="podcast.creator"
+                loading="lazy"
+                decoding="async"
+              />
+              <RadioTower v-else :size="14" />
+            </span>
+            <strong class="playlist-meta__creator">{{ podcast.creator || '音乐电台' }}</strong>
+            <span v-if="podcast.lastUpdated" class="playlist-meta__updated">更新于 {{ podcast.lastUpdated }}</span>
+            <span class="playlist-meta__count">{{ podcast.programCountLabel || `${total} 首歌曲` }}</span>
+            <span class="playlist-meta__listeners">{{ podcast.playCountLabel || '连续播放' }}</span>
+            <span class="playlist-meta__tags">{{ podcast.category ? `${podcast.category} / ` : '' }}FM {{ podcast.id }}</span>
+          </div>
+
+          <div class="playlist-actions">
             <button
-              class="podcast-action podcast-action--primary"
+              class="playlist-action playlist-action--primary"
               type="button"
               :disabled="!programs.length"
               @click="playAll"
@@ -101,57 +114,48 @@
         </div>
       </section>
 
-      <div v-if="errorMessage" class="podcast-state podcast-state--error">
+      <div v-if="errorMessage" class="playlist-state playlist-state--error">
         {{ errorMessage }}
       </div>
 
-      <section class="podcast-detail-layout">
-        <article class="podcast-detail-main">
-          <section v-if="programs.length" class="podcast-detail-table" aria-label="电台歌曲列表">
-            <header class="podcast-detail-table__head">
-              <span>标题</span>
-              <span>电台</span>
-              <span>时长</span>
-            </header>
-            <div class="podcast-detail-programs">
-              <div
-                ref="programVirtualList"
-                class="playlist-virtual-list"
-                :style="{ height: `${programVirtualTotalHeight}px` }"
-              >
-                <div
-                  class="playlist-virtual-window"
-                  :style="{ transform: `translateY(${programVirtualOffsetY}px)` }"
-                >
-                  <SongListRow
-                    v-for="track in visiblePrograms"
-                    :key="track.programId || track.id"
-                    :track="track"
-                    @play="playProgram(track)"
-                  />
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <div v-else class="podcast-state">暂无歌曲。</div>
-
-          <button
-            v-if="more"
-            ref="programLoadMoreTrigger"
-            class="podcast-load-more"
-            type="button"
-            :disabled="programLoading"
-            @click="loadMorePrograms"
+      <section class="playlist-table" aria-label="电台歌曲列表">
+        <template v-if="programs.length">
+          <header class="playlist-table__head">
+            <span>标题</span>
+            <span>电台</span>
+            <span>时长</span>
+          </header>
+          <div
+            ref="programVirtualList"
+            class="playlist-virtual-list"
+            :style="{ height: `${programVirtualTotalHeight}px` }"
           >
-            <LoaderCircle v-if="programLoading" :size="16" class="podcast-spin" />
-            <span>加载更多歌曲</span>
-          </button>
-        </article>
+            <div
+              class="playlist-virtual-window"
+              :style="{ transform: `translateY(${programVirtualOffsetY}px)` }"
+            >
+              <SongListRow
+                v-for="track in visiblePrograms"
+                :key="track.programId || track.id"
+                :track="track"
+                :compact="isMobile2D"
+                :queue-layout="isMobile2D"
+                :show-play-icon="!isMobile2D"
+                @play="playProgram(track)"
+              />
+            </div>
+          </div>
+        </template>
+        <div v-else class="playlist-state">暂无歌曲。</div>
+
+        <div v-if="more" ref="programLoadMoreTrigger" class="playlist-load-more" aria-live="polite">
+          <span v-if="programLoading">正在加载更多歌曲...</span>
+          <button v-else type="button" @click="loadMorePrograms">加载更多歌曲</button>
+        </div>
       </section>
     </template>
 
-    <section v-else-if="errorMessage" class="podcast-state podcast-state--error">
+    <section v-else-if="errorMessage" class="playlist-state playlist-state--error">
       {{ errorMessage }}
     </section>
   </div>
@@ -162,15 +166,14 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import {
-  Headphones,
-  ListMusic,
-  LoaderCircle,
   Play,
   RadioTower,
-  RefreshCw,
 } from 'lucide-vue-next'
 import SongListRow from '../components/SongListRow.vue'
+import OverflowMarquee from '../components/OverflowMarquee.vue'
+import DetailDescription from '../components/DetailDescription.vue'
 import { useLoadMoreTrigger } from '../composables/useLoadMoreTrigger'
+import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useVirtualRows } from '../composables/useVirtualRows'
 import {
   getPodcastDetailData,
@@ -179,16 +182,23 @@ import {
 import { usePlayerStore } from '../stores/player'
 import { getPlaybackErrorDisplay } from '../utils/playbackError'
 import { isAbortError } from '../utils/request'
-import '../styles/podcast.css'
+import { getPodcastPreview } from '../utils/podcastPreview'
 import '../styles/playlist.css'
+import '../styles/mobile-playlist.css'
 
 const PROGRAM_LIMIT = 40
-const PROGRAM_ROW_HEIGHT = 58
+const { isMobile2D, songRowHeight } = useResponsiveLayout()
+const emit = defineEmits(['playlist-header-change'])
 
 const route = useRoute()
+const podcastPreview = computed(() => getPodcastPreview(route.params.id))
 const player = usePlayerStore()
 const message = useMessage()
 const pageRoot = ref(null)
+const heroTitle = ref(null)
+const mobileHeaderVisible = ref(false)
+let headerFrame = 0
+let headerObserver = null
 const programVirtualList = ref(null)
 const programLoadMoreTrigger = ref(null)
 const podcast = ref(null)
@@ -219,7 +229,7 @@ const {
 } = useVirtualRows(rankedPrograms, {
   root: pageRoot,
   list: programVirtualList,
-  rowHeight: PROGRAM_ROW_HEIGHT
+  rowHeight: songRowHeight
 })
 const loadMoreController = useLoadMoreTrigger({
   trigger: programLoadMoreTrigger,
@@ -234,13 +244,64 @@ const loadMoreController = useLoadMoreTrigger({
   scrollThreshold: 720
 })
 
+function updateMobileHeader() {
+  if (!isMobile2D.value || loading.value || !pageRoot.value) {
+    mobileHeaderVisible.value = false
+    return
+  }
+
+  const headerBottom = pageRoot.value.closest('.mobile-detail-page, .main-panel')?.querySelector('.topbar')?.getBoundingClientRect().bottom
+    ?? pageRoot.value.getBoundingClientRect().top
+  mobileHeaderVisible.value = Boolean(heroTitle.value && heroTitle.value.getBoundingClientRect().bottom <= headerBottom + 8)
+}
+
+function scheduleHeaderUpdate() {
+  if (headerFrame) return
+  headerFrame = window.requestAnimationFrame(() => {
+    headerFrame = 0
+    updateMobileHeader()
+  })
+}
+
+function handlePageScroll() {
+  scheduleProgramRangeUpdate()
+  if (isMobile2D.value) scheduleHeaderUpdate()
+}
+
+watch([podcast, podcastPreview, mobileHeaderVisible], () => {
+  emit('playlist-header-change', {
+    path: route.path,
+    coverUrl: podcast.value?.coverUrl || podcastPreview.value?.coverUrl || '',
+    coverType: podcast.value?.type || podcastPreview.value?.coverType,
+    title: podcast.value?.title || podcastPreview.value?.title || '电台详情',
+    visible: mobileHeaderVisible.value,
+    collapsed: mobileHeaderVisible.value
+  })
+}, { immediate: true })
+
+watch([loading, isMobile2D, heroTitle], async () => {
+  await nextTick()
+  headerObserver?.disconnect()
+  if (isMobile2D.value) {
+    [pageRoot.value, heroTitle.value].filter(Boolean).forEach((element) => headerObserver?.observe(element))
+  }
+  updateMobileHeader()
+  updateProgramVirtualRange()
+})
+
 onMounted(() => {
+  headerObserver = new ResizeObserver(scheduleHeaderUpdate)
+  if (isMobile2D.value && pageRoot.value) headerObserver.observe(pageRoot.value)
+  scheduleHeaderUpdate()
   loadDetail()
 })
 
 onUnmounted(() => {
   cancelDetailRequest()
   cancelProgramRequest()
+  headerObserver?.disconnect()
+  if (headerFrame) window.cancelAnimationFrame(headerFrame)
+  loadMoreController.cleanup()
 })
 
 watch(
@@ -269,6 +330,9 @@ async function loadDetail() {
   programs.value = []
   offset.value = 0
   more.value = false
+  total.value = 0
+  mobileHeaderVisible.value = false
+  if (pageRoot.value) pageRoot.value.scrollTop = 0
 
   try {
     const data = await getPodcastDetailData({ id, limit: PROGRAM_LIMIT, offset: 0 }, {

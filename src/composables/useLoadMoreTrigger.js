@@ -1,4 +1,4 @@
-import { nextTick, onBeforeUnmount, onMounted, unref, watch } from 'vue'
+import { nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, unref, watch } from 'vue'
 
 export function useLoadMoreTrigger(options = {}) {
   const {
@@ -13,12 +13,17 @@ export function useLoadMoreTrigger(options = {}) {
 
   let observer = null
   let scrollRoot = null
+  let isActive = true
 
   function canRequestLoad() {
     return resolveValue(canLoad) !== false
   }
 
   function requestLoad(force = false) {
+    if (!isActive) {
+      return
+    }
+
     if (!force && !canRequestLoad()) {
       return
     }
@@ -28,6 +33,10 @@ export function useLoadMoreTrigger(options = {}) {
 
   function setup() {
     cleanup()
+
+    if (!isActive) {
+      return
+    }
 
     const element = unref(trigger)
 
@@ -82,8 +91,18 @@ export function useLoadMoreTrigger(options = {}) {
     }
   }
 
+  function deactivate() {
+    isActive = false
+    cleanup()
+  }
+
   onMounted(() => nextTick(setup))
-  onBeforeUnmount(cleanup)
+  onActivated(() => {
+    isActive = true
+    nextTick(setup)
+  })
+  onDeactivated(deactivate)
+  onBeforeUnmount(deactivate)
   watch(() => unref(trigger), () => nextTick(setup))
 
   return {

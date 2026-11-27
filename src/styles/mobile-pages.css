@@ -123,6 +123,22 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover > .
   box-shadow: none;
 }
 
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .view.discover > .tabs {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  width: calc(100% + (2 * var(--pages-inline)));
+  max-width: none;
+  margin-inline: calc(-1 * var(--pages-inline));
+  padding-inline: var(--pages-inline);
+  background: var(--mobile-bg);
+
+}
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .view.discover {
+  --page-content-bottom-gap: 8px;
+  overflow-anchor: none;
+}
+
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover > .tabs a, .artist-detail-tabs button, .mv-tabs button) {
   display: inline-flex;
   min-width: 44px;
@@ -186,7 +202,7 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.artist-filte
   font-weight: 400;
 }
 
-html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .filter-row button, .playlist-category-chip, .artist-filter-panel button, .podcast-filter-options button, .podcast-chip-row button, .mv-filter-group button, .artist-sort-tabs button) {
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .filter-row button, .playlist-category-chip, .artist-filter-panel button, .podcast-filter-options button, .podcast-chip-row button, .mv-filter-group button) {
   min-width: 44px;
   min-height: 44px;
   height: auto;
@@ -202,7 +218,7 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .fi
   transition: color 140ms var(--pages-ease), background-color 140ms var(--pages-ease);
 }
 
-html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .filter-row button.active, .playlist-category-chip.active, .artist-filter-panel button.active, .podcast-filter-options button.active, .podcast-chip-row button.active, .mv-filter-group button.active, .artist-sort-tabs button.active) {
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .filter-row button.active, .playlist-category-chip.active, .artist-filter-panel button.active, .podcast-filter-options button.active, .podcast-chip-row button.active, .mv-filter-group button.active) {
   padding-inline: 12px;
   border: 0;
   color: var(--accent);
@@ -862,14 +878,10 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.album-stats 
 
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-tab-bar { display: block; margin-top: 24px; }
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-detail-tabs { margin-bottom: 0; }
-html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-sort-tabs { height: auto; border: 0; background: var(--pages-surface-soft); border-radius: 10px; }
-
-html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.artist-detail-section__head, .artist-detail-section__title-row, .artist-song-toolbar) {
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-detail-section__head {
   flex-wrap: wrap;
   gap: 8px 12px;
 }
-
-html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-play-all--compact { min-height: 44px; font-size: 13px; }
 
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-detail .artist-album-grid {
   grid-template-columns: repeat(var(--pages-card-columns), minmax(0, 1fr));

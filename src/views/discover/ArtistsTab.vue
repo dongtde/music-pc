@@ -87,6 +87,9 @@
             :key="artist.id"
             :to="`/artist/${artist.id}`"
             class="artist-rank-row"
+            @focus="prepareArtistCover(artist)"
+            @pointerdown.capture="prepareArtistCover(artist)"
+            @click.capture="prepareArtistCover(artist)"
           >
             <span class="artist-rank-cover">
               <img
@@ -95,6 +98,7 @@
                 :alt="artist.name"
                 loading="lazy"
                 decoding="async"
+                @load="prepareArtistCover(artist)"
               />
               <Mic2 v-else :size="26" />
               <em>{{ artist.rank }}</em>
@@ -115,6 +119,9 @@
             :key="artist.id"
             :to="`/artist/${artist.id}`"
             class="artist-card"
+            @focus="prepareArtistCover(artist)"
+            @pointerdown.capture="prepareArtistCover(artist)"
+            @click.capture="prepareArtistCover(artist)"
           >
             <span class="artist-avatar artist-avatar--image">
               <img
@@ -123,6 +130,7 @@
                 :alt="artist.name"
                 loading="lazy"
                 decoding="async"
+                @load="prepareArtistCover(artist)"
               />
               <Mic2 v-else :size="34" />
             </span>
@@ -185,6 +193,7 @@ import {
 import { Mic2 } from 'lucide-vue-next';
 import { useLoadMoreTrigger } from '../../composables/useLoadMoreTrigger';
 import { getArtistsDiscoveryData } from '../../services/netease';
+import { prepareArtistCover } from '../../utils/artistPreview';
 import { createLruCache } from '../../utils/lruCache';
 import { isAbortError } from '../../utils/request';
 import { waitForMinimumDelay } from '../../utils/time';

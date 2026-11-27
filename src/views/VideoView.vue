@@ -179,7 +179,12 @@
             </p>
           </div>
 
-          <p v-if="activeMv?.description" class="mv-watch__desc">{{ activeMv.description }}</p>
+          <DetailDescription
+            class="mv-watch__desc"
+            :text="activeMv?.description || ''"
+            title="视频简介"
+            :subtitle="activeMv?.title || ''"
+          />
 
           <div class="mv-watch__actions">
             <button class="mv-detail-action" type="button" :disabled="!activeMv || subscribeLoading" @click="toggleSubscribe">
@@ -561,6 +566,7 @@ import {
   VolumeX
 } from 'lucide-vue-next'
 import CommentModal from '../components/CommentModal.vue'
+import DetailDescription from '../components/DetailDescription.vue'
 import DanmakuLayer from '../components/DanmakuLayer.vue'
 import { useLoadMoreTrigger } from '../composables/useLoadMoreTrigger'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'

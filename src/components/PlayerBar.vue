@@ -170,6 +170,7 @@
         :transition-name="`queue-${theme.state.queueTransition}`"
         :immersive="fullPlayerOpen"
         :cover-style="currentTrackCoverStyle"
+        :detail-cover-style="fullPlayerOpen ? null : detailCoverStyle"
         @toggle="toggleQueueMenu"
         @close="closePlayerPopovers"
         @play-track="playQueueTrack"
@@ -238,6 +239,7 @@ const loadFullScreenPlayer = () => import('./FullScreenPlayer.vue')
 const props = defineProps({
   hidden: { type: Boolean, default: false },
   routeHidden: { type: Boolean, default: false },
+  detailCoverStyle: { type: Object, default: null },
   homePlayer: { type: Boolean, default: false }
 })
 const emit = defineEmits(['full-player-change', 'home-navigation', 'home-section-change'])

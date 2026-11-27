@@ -79,20 +79,12 @@
           <h1 ref="heroTitle" class="playlist-title">
             <OverflowMarquee :text="playlist.title" :enabled="isMobile2D" :active="!mobileHeaderVisible" />
           </h1>
-          <div class="playlist-description" :class="{ 'is-expanded': descriptionExpanded }">
-            <p id="playlist-description">{{ playlist.description }}</p>
-            <button
-              v-if="isMobile2D && playlist.description"
-              class="playlist-description__toggle"
-              type="button"
-              :aria-label="descriptionExpanded ? '收起歌单简介' : '展开歌单简介'"
-              :aria-expanded="descriptionExpanded"
-              aria-controls="playlist-description"
-              @click="descriptionExpanded = !descriptionExpanded"
-            >
-              <ChevronDown v-if="descriptionExpanded" :size="18" />
-              <ArrowRight v-else :size="18" />
-            </button>
+          <div class="playlist-description">
+            <DetailDescription
+              :text="playlist.description"
+              title="歌单简介"
+              :subtitle="playlist.title"
+            />
           </div>
 
           <div class="playlist-meta">
@@ -208,9 +200,10 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { ArrowRight, ChevronDown, MessageCircle, Play } from 'lucide-vue-next';
+import { MessageCircle, Play } from 'lucide-vue-next';
 import { useMessage } from 'naive-ui';
 import CommentModal from '../components/CommentModal.vue';
+import DetailDescription from '../components/DetailDescription.vue';
 import SongListRow from '../components/SongListRow.vue';
 import OverflowMarquee from '../components/OverflowMarquee.vue';
 import {
@@ -247,7 +240,6 @@ const library = useLibraryStore();
 const pageRoot = ref(null);
 const heroTitle = ref(null);
 const mobileHeaderVisible = ref(false);
-const descriptionExpanded = ref(false);
 let headerFrame = 0;
 let headerObserver = null;
 const remotePlaylist = ref(null);
@@ -369,9 +361,9 @@ function updateMobileHeader() {
     return;
   }
 
-  const headerBottom = pageRoot.value.closest('.main-panel')?.querySelector('.topbar')?.getBoundingClientRect().bottom
+  const headerBottom = pageRoot.value.closest('.mobile-detail-page, .main-panel')?.querySelector('.topbar')?.getBoundingClientRect().bottom
     ?? pageRoot.value.getBoundingClientRect().top;
-  mobileHeaderVisible.value = Boolean(heroTitle.value && heroTitle.value.getBoundingClientRect().bottom <= headerBottom + 8);
+  mobileHeaderVisible.value = Boolean(pageRoot.value.scrollTop > 0 && heroTitle.value && heroTitle.value.getBoundingClientRect().bottom <= headerBottom + 8);
 }
 
 function scheduleHeaderUpdate() {
@@ -398,7 +390,7 @@ watch([() => playlist.value.title, () => playlist.value.coverUrl, () => playlist
   });
 }, { immediate: true });
 
-watch([isLoading, isMobile2D, descriptionExpanded, heroTitle], async () => {
+watch([isLoading, isMobile2D, heroTitle], async () => {
   await nextTick();
   headerObserver?.disconnect();
   if (isMobile2D.value) {
@@ -454,7 +446,6 @@ async function loadPlaylistDetail(id) {
   abortDetailRequest();
   abortTrackRequest();
   loadMoreController.cleanup();
-  descriptionExpanded.value = false;
   mobileHeaderVisible.value = false;
   if (pageRoot.value) pageRoot.value.scrollTop = 0;
   remotePlaylist.value = null;

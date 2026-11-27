@@ -1,78 +1,88 @@
 <template>
-  <div ref="pageRoot" class="view artist-detail" @scroll.passive="scheduleArtistSongsRangeUpdate">
+  <div ref="pageRoot" class="view playlist-detail artist-detail" @scroll.passive="handlePageScroll">
     <section
       v-if="isLoading"
-      class="artist-detail-skeleton"
+      class="playlist-detail-skeleton"
       aria-busy="true"
       aria-label="正在加载歌手详情"
     >
-      <section class="artist-detail-skeleton__hero">
-        <span class="artist-detail-skeleton__cover" />
-        <div class="artist-detail-skeleton__content">
-          <span class="artist-detail-skeleton__line artist-detail-skeleton__line--title" />
-          <span class="artist-detail-skeleton__line artist-detail-skeleton__line--alias" />
-          <span class="artist-detail-skeleton__line artist-detail-skeleton__line--description" />
-          <div class="artist-detail-skeleton__chips">
-            <span v-for="item in 4" :key="`artist-meta-skeleton-${item}`" />
-          </div>
-          <div class="artist-detail-skeleton__chips artist-detail-skeleton__chips--tags">
-            <span v-for="item in 5" :key="`artist-tag-skeleton-${item}`" />
+      <section class="playlist-detail-skeleton__hero">
+        <span class="playlist-detail-skeleton__cover" />
+        <div class="playlist-detail-skeleton__content">
+          <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--title" />
+          <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--description" />
+          <div class="playlist-detail-skeleton__meta">
+            <span v-for="item in 4" :key="item" class="playlist-detail-skeleton__pill" />
           </div>
         </div>
       </section>
 
-      <section class="artist-detail-skeleton__table">
-        <span class="artist-detail-skeleton__line artist-detail-skeleton__line--section" />
-        <div class="artist-detail-skeleton__rows">
-          <span
+      <section class="playlist-detail-skeleton__table" aria-hidden="true">
+        <div class="artist-detail-section__title-row artist-track-skeleton-heading">
+          <span class="playlist-detail-skeleton__line" />
+          <span class="playlist-detail-skeleton__button" />
+        </div>
+        <header class="playlist-table__head">
+          <span>标题</span>
+          <span>专辑</span>
+          <span>时长</span>
+        </header>
+        <div class="playlist-detail-skeleton__rows">
+          <article
             v-for="item in ARTIST_DETAIL_TRACK_SKELETON_COUNT"
-            :key="`artist-track-skeleton-${item}`"
-          />
+            :key="item"
+            class="playlist-detail-skeleton__row"
+          >
+            <span class="playlist-detail-skeleton__song-main">
+              <span class="playlist-detail-skeleton__thumb" />
+              <span class="playlist-detail-skeleton__song-lines">
+                <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--song" />
+                <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--artist" />
+              </span>
+            </span>
+            <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--album" />
+            <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--duration" />
+          </article>
         </div>
       </section>
     </section>
 
     <template v-else>
-      <section class="artist-detail-hero">
-        <div class="artist-detail-cover" :class="`artist-detail-cover--${artist.type}`">
+      <section class="playlist-hero">
+        <div class="playlist-cover" :class="`playlist-cover--${artist.type}`">
           <img
-            v-if="artist.coverUrl || artist.avatarUrl"
-            class="artist-detail-cover__image"
-            :src="artist.coverUrl || artist.avatarUrl"
+            v-if="artistCoverUrl"
+            class="playlist-cover__image"
+            :src="artistCoverUrl"
             :alt="artist.name"
-            loading="lazy"
+            loading="eager"
             decoding="async"
+            fetchpriority="high"
           />
         </div>
 
-        <div class="artist-detail-hero__content">
-          <h1>{{ artist.name }}</h1>
-          <div v-if="artist.aliases.length" class="artist-detail-aliases">
-            {{ artist.aliases.join(' / ') }}
+        <div class="playlist-hero__content">
+          <h1 ref="heroTitle" class="playlist-title">
+            <OverflowMarquee :text="artist.name" :enabled="isMobile2D" :active="!mobileHeaderVisible" />
+          </h1>
+          <div v-if="artist.description" class="playlist-description">
+            <DetailDescription :text="artist.description" title="歌手简介" :subtitle="artist.name" />
           </div>
 
-          <div
-            v-if="artist.description"
-            class="artist-detail-description-wrap"
-            :data-full-text="artist.description"
-          >
-            <p class="artist-detail-description">{{ artist.description }}</p>
-          </div>
-
-          <div v-if="artistProfileItems.length" class="artist-detail-meta artist-detail-meta--profile">
-            <span v-for="item in artistProfileItems" :key="item.key">
-              <component :is="item.icon" :size="14" />
+          <div v-if="artist.aliases.length || artistProfileItems.length || artistTags.length" class="playlist-meta artist-profile">
+            <strong v-if="artist.aliases.length" class="playlist-meta__creator artist-profile__aliases">
+              {{ artist.aliases.join(' / ') }}
+            </strong>
+            <span v-for="item in artistProfileItems" :key="item.key" class="artist-profile__item">
+              <component :is="item.icon" :size="14" aria-hidden="true" />
               {{ item.text }}
             </span>
-          </div>
-
-          <div v-if="artistTags.length" class="artist-detail-tags">
-            <span v-for="tag in artistTags" :key="tag">{{ tag }}</span>
+            <span v-if="artistTags.length" class="playlist-meta__tags">{{ artistTags.join(' / ') }}</span>
           </div>
         </div>
       </section>
 
-      <div v-if="errorMessage" class="artist-detail-state artist-detail-state--error">
+      <div v-if="errorMessage" class="playlist-state playlist-state--error">
         {{ errorMessage }}
       </div>
 
@@ -98,12 +108,13 @@
               <div class="artist-detail-section__title-row">
                 <h2>热门歌曲</h2>
                 <button
-                  class="artist-play-all artist-play-all--compact"
+                  class="artist-track-play"
                   type="button"
+                  aria-label="播放全部热门歌曲"
                   :disabled="!artistTracks.length"
                   @click="playAllFeaturedTracks"
                 >
-                  <Play :size="15" fill="currentColor" />
+                  <Play :size="14" fill="currentColor" aria-hidden="true" />
                   <span>播放全部</span>
                 </button>
               </div>
@@ -121,6 +132,9 @@
                 v-for="track in artistTracks"
                 :key="track.id"
                 :track="track"
+                :compact="isMobile2D"
+                :queue-layout="isMobile2D"
+                :show-play-icon="!isMobile2D"
                 @play="playFeaturedTrack"
               />
             </section>
@@ -208,19 +222,20 @@
           <section class="artist-detail-section">
             <div class="artist-song-toolbar">
               <button
-                class="artist-play-all"
+                class="artist-track-play"
                 type="button"
+                aria-label="播放全部歌曲"
                 :disabled="!rankedArtistSongs.length"
                 @click="playLoadedArtistSongs"
               >
-                <Play :size="16" fill="currentColor" />
+                <Play :size="14" fill="currentColor" aria-hidden="true" />
                 <span>播放全部</span>
               </button>
-
-              <div class="artist-sort-tabs" aria-label="歌曲排序">
+              <div class="artist-sort-tabs" role="group" aria-label="歌曲排序">
                 <button
                   type="button"
                   :class="{ active: artistSongOrder === 'hot' }"
+                  :aria-pressed="artistSongOrder === 'hot'"
                   @click="setArtistSongOrder('hot')"
                 >
                   热门
@@ -228,6 +243,7 @@
                 <button
                   type="button"
                   :class="{ active: artistSongOrder === 'time' }"
+                  :aria-pressed="artistSongOrder === 'time'"
                   @click="setArtistSongOrder('time')"
                 >
                   时间
@@ -256,6 +272,9 @@
                       v-for="track in visibleArtistSongs"
                       :key="track.id"
                       :track="track"
+                      :compact="isMobile2D"
+                      :queue-layout="isMobile2D"
+                      :show-play-icon="!isMobile2D"
                       @play="playSongTrack"
                     />
                   </div>
@@ -425,6 +444,8 @@ import {
 } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import ArtistVideoCard from '../components/ArtistVideoCard.vue'
+import DetailDescription from '../components/DetailDescription.vue'
+import OverflowMarquee from '../components/OverflowMarquee.vue'
 import SongListRow from '../components/SongListRow.vue'
 import { useLoadMoreTrigger } from '../composables/useLoadMoreTrigger'
 import { useQueuePlayback } from '../composables/useQueuePlayback'
@@ -439,8 +460,9 @@ import {
 } from '../services/netease'
 import { createLruCache } from '../utils/lruCache'
 import { isAbortError } from '../utils/request'
-import '../styles/artist.css'
 import '../styles/playlist.css'
+import '../styles/mobile-playlist.css'
+import '../styles/artist.css'
 
 const ARTIST_DETAIL_TRACK_SKELETON_COUNT = 10
 const ARTIST_SONG_PAGE_SIZE = 30
@@ -450,12 +472,17 @@ const ARTIST_TAB_SKELETON_MIN_MS = 360
 const ARTIST_FEATURED_PREVIEW_IDLE_TIMEOUT = 1200
 const ARTIST_FEATURED_PREVIEW_FALLBACK_DELAY = 320
 const ARTIST_TAB_CACHE_SIZE = 48
-const { songRowHeight } = useResponsiveLayout()
+const { isMobile2D, songRowHeight } = useResponsiveLayout()
+const emit = defineEmits(['playlist-header-change'])
 
 const route = useRoute()
+const artistPath = route.path
 const message = useMessage()
 
 const pageRoot = ref(null)
+const heroTitle = ref(null)
+const mobileHeaderVisible = ref(false)
+let headerFrame = 0
 const remoteArtist = ref(null)
 const remoteTracks = ref([])
 const artistSongs = ref([])
@@ -537,6 +564,7 @@ const artist = computed(() =>
     type: 'sunset'
   }
 )
+const artistCoverUrl = computed(() => artist.value.coverUrl || artist.value.avatarUrl)
 
 const artistTabs = computed(() => [
   { value: 'featured', label: '精选' },
@@ -688,6 +716,54 @@ watch(
   { immediate: true }
 )
 
+watch([artist, isLoading, mobileHeaderVisible], ([info, loading, visible]) => {
+  if (loading) return
+  emit('playlist-header-change', {
+    path: artistPath,
+    coverUrl: artistCoverUrl.value,
+    coverType: info.type,
+    title: info.name,
+    visible,
+    collapsed: visible
+  })
+}, { immediate: true })
+
+watch([pageRoot, heroTitle, isMobile2D], ([root, title, mobile], _, onCleanup) => {
+  if (mobile && root && title) {
+    const observer = new ResizeObserver(scheduleHeaderUpdate)
+    observer.observe(root)
+    observer.observe(title)
+    onCleanup(() => observer.disconnect())
+  }
+  updateMobileHeader()
+}, { flush: 'post' })
+
+function updateMobileHeader() {
+  const root = pageRoot.value
+  const title = heroTitle.value
+  if (!isMobile2D.value || !root?.scrollTop || !title) {
+    mobileHeaderVisible.value = false
+    return
+  }
+
+  const headerBottom = root.closest('.mobile-detail-page, .main-panel')?.querySelector('.topbar')?.getBoundingClientRect().bottom
+    ?? root.getBoundingClientRect().top
+  mobileHeaderVisible.value = title.getBoundingClientRect().bottom <= headerBottom + 8
+}
+
+function scheduleHeaderUpdate() {
+  if (headerFrame) return
+  headerFrame = window.requestAnimationFrame(() => {
+    headerFrame = 0
+    updateMobileHeader()
+  })
+}
+
+function handlePageScroll() {
+  scheduleArtistSongsRangeUpdate()
+  if (isMobile2D.value) scheduleHeaderUpdate()
+}
+
 watch(
   () => [
     activeTab.value,
@@ -704,6 +780,7 @@ watch(
 )
 
 onUnmounted(() => {
+  if (headerFrame) window.cancelAnimationFrame(headerFrame)
   cancelArtistRequest()
   cancelFeaturedPreviewSchedule()
   cancelAllTabRequests()

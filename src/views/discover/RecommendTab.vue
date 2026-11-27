@@ -445,10 +445,10 @@
           class="radio-grid radio-grid--carousel"
           aria-label="推荐电台列表"
         >
-          <router-link
+          <PodcastLink
             v-for="radio in homeRecommendedRadios"
             :key="radio.id"
-            :to="radio.to || `/podcast/${radio.id}`"
+            :podcast="radio"
             class="radio-card"
           >
             <span class="radio-cover" :class="`cover--${radio.type}`">
@@ -470,7 +470,7 @@
             </span>
             <strong>{{ radio.title }}</strong>
             <small>{{ radio.description || radio.desc }}</small>
-          </router-link>
+          </PodcastLink>
         </div>
       </div>
     </section>
@@ -499,6 +499,7 @@ import {
   Radio,
 } from 'lucide-vue-next';
 import PlaylistCard from '../../components/PlaylistCard.vue';
+import PodcastLink from '../../components/PodcastLink.vue';
 import SectionTitle from '../../components/SectionTitle.vue';
 import SongListRow from '../../components/SongListRow.vue';
 import {

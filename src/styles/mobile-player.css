@@ -138,6 +138,24 @@ html[data-layout='mobile-2d'] .player.player--full-screen > .player-tools > .con
 html[data-layout='mobile-2d'] .player.player--full-screen > .player-tools > .icon-button.active { color: var(--accent); }
 html[data-layout='mobile-2d'] .player :is(.play-button, .track-action-button, .control-popover-wrap > button):active { opacity: .65; }
 
+/* Touch controls keep their state in the icon, without sticky hover fills. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .player :is(
+  .player-center .play-controls > button:not(.play-button),
+  .control-popover-wrap > button,
+  .player-tools > .icon-button,
+  .track-action-button
+),
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .player.player--full-screen :is(
+  .player-center .play-controls > button:not(.play-button),
+  .control-popover-wrap > button,
+  .player-tools > .icon-button,
+  .track-action-button
+) {
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
 /* Settings retain their popovers; the queue opens as a viewport-level drawer. */
 html[data-layout='mobile-2d'] .mobile-player-backdrop { position: fixed; inset: 0; z-index: 38; width: 100%; height: 100%; padding: 0; border: 0; background: rgba(8, 9, 12, .5); }
 html[data-layout='mobile-2d'] .player .player-popover { position: fixed; inset: auto 12px calc(var(--mobile-nav-height) + var(--mobile-mini-height) + var(--mobile-bottom-inset) + 8px); z-index: 10; width: auto; height: auto; max-height: min(65vh, 560px); max-height: min(65dvh, 560px); overflow-x: hidden; overflow-y: auto; padding: 12px; border: 1px solid var(--mobile-border); border-radius: 20px; background: var(--mobile-surface); color: var(--mobile-text); box-shadow: var(--mobile-shadow); transform: none; }

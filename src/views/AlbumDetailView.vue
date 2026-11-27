@@ -15,17 +15,12 @@
 
       <div class="album-hero__content">
         <h1>{{ album.title }}</h1>
-        <n-tooltip
-          trigger="hover"
-          placement="bottom-start"
-          :disabled="!album.description"
-          class="album-description-tooltip"
-        >
-          <template #trigger>
-            <p class="album-description">{{ album.description }}</p>
-          </template>
-          {{ album.description }}
-        </n-tooltip>
+        <DetailDescription
+          class="album-description"
+          :text="album.description"
+          title="专辑简介"
+          :subtitle="album.title"
+        />
 
         <div class="album-meta">
           <span>{{ album.artist }}</span>
@@ -123,6 +118,7 @@ import {
 } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import CommentModal from '../components/CommentModal.vue'
+import DetailDescription from '../components/DetailDescription.vue'
 import SongListRow from '../components/SongListRow.vue'
 import {
   getAlbumCommentsData,

@@ -1,0 +1,156 @@
+/* Route-backed detail sheets are enabled only in the 2D phone layout. */
+html[data-layout='mobile-2d'] .app-shell > .main-panel {
+  transform-origin: left center;
+  transition:
+    transform var(--transition-duration) var(--layout-ease),
+    border-radius var(--transition-duration) var(--layout-ease);
+}
+
+html[data-layout='mobile-2d'] .app-shell > .main-panel--drawer-covered {
+  transform: translate3d(-12px, 0, 0) scale(.985);
+  border-radius: 18px;
+}
+
+html[data-layout='mobile-2d'] .mobile-detail-layer {
+  position: fixed;
+  z-index: 36;
+  inset: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+html[data-layout='mobile-2d'] .mobile-detail-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, .28);
+}
+
+html[data-layout='mobile-2d'] .mobile-detail-drawer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--mobile-bg);
+  box-shadow: -12px 0 40px rgba(0, 0, 0, .16);
+}
+
+html[data-layout='mobile-2d'] .mobile-detail-page {
+  --mobile-header-height: 56px;
+  --mobile-nav-height: 0px;
+  --page-player-clearance: calc(var(--mobile-mini-height) + var(--mobile-bottom-inset));
+  position: absolute;
+  inset: 0;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--mobile-bg);
+  outline: none;
+}
+
+/* The covered home page keeps its immersive layout; sheet headers stay visible. */
+html[data-layout='mobile-2d'] .app-shell .mobile-detail-page > .topbar:not(.topbar--search-page) {
+  display: grid;
+}
+
+html[data-layout='mobile-2d'] .mobile-detail-page.app-shell--detail-page .route-stage > .view {
+  padding-bottom: calc(var(--page-player-clearance) + 12px);
+  scroll-padding-bottom: calc(var(--page-player-clearance) + 12px);
+}
+
+html[data-layout='mobile-2d'] .mobile-detail-page.app-shell--cover-detail {
+  --detail-page-bg: color-mix(in srgb, var(--detail-cover-tint) 64%, #19202b);
+  --detail-page-surface: color-mix(in srgb, var(--detail-page-bg) 88%, #fff);
+  --app-bg: var(--detail-page-bg);
+  --topbar-bg: var(--detail-page-bg);
+  --mobile-bg: var(--detail-page-bg);
+  --mobile-surface: var(--detail-page-surface);
+  --panel-bg: var(--detail-page-surface);
+}
+
+html[data-layout='mobile-2d'][data-theme='light'] .mobile-detail-page.app-shell--cover-detail {
+  --detail-page-bg: color-mix(in srgb, var(--detail-cover-tint) 24%, #fff);
+  --detail-page-surface: color-mix(in srgb, var(--detail-page-bg) 60%, #fff);
+}
+
+/* Keep one shared transport above the sheet, without the bottom navigation gap. */
+html[data-layout='mobile-2d'] .app-shell.app-shell--mobile-detail > .player {
+  --mobile-nav-height: 0px;
+  display: grid;
+}
+
+html[data-layout='mobile-2d'] .app-shell--mobile-detail.app-shell--player-expanded > .full-player-page {
+  z-index: 42;
+}
+
+html[data-layout='mobile-2d'] .app-shell.app-shell--mobile-detail > .player.player--full-screen[data-mobile-page] {
+  z-index: 44;
+}
+
+html[data-layout='mobile-2d'] :is(.mobile-detail-enter-active, .mobile-detail-leave-active) .mobile-detail-drawer {
+  transition: transform var(--transition-duration) var(--layout-ease);
+  will-change: transform;
+  pointer-events: none;
+}
+
+html[data-layout='mobile-2d'] :is(.mobile-detail-enter-active, .mobile-detail-leave-active) .mobile-detail-backdrop {
+  transition: opacity var(--transition-duration) ease;
+}
+
+html[data-layout='mobile-2d'] :is(.mobile-detail-enter-from, .mobile-detail-leave-to) .mobile-detail-drawer {
+  transform: translate3d(100%, 0, 0);
+}
+
+html[data-layout='mobile-2d'] :is(.mobile-detail-enter-from, .mobile-detail-leave-to) .mobile-detail-backdrop {
+  opacity: 0;
+}
+
+html[data-layout='mobile-2d'] :is(
+  .mobile-detail-forward-enter-active,
+  .mobile-detail-forward-leave-active,
+  .mobile-detail-back-enter-active,
+  .mobile-detail-back-leave-active
+) {
+  transition:
+    transform var(--transition-duration) var(--layout-ease),
+    opacity var(--transition-duration) ease;
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+
+html[data-layout='mobile-2d'] :is(.mobile-detail-forward-enter-active, .mobile-detail-back-leave-active) {
+  z-index: 2;
+}
+
+html[data-layout='mobile-2d'] :is(.mobile-detail-forward-leave-active, .mobile-detail-back-enter-active) {
+  z-index: 1;
+}
+
+html[data-layout='mobile-2d'] :is(.mobile-detail-forward-enter-from, .mobile-detail-back-leave-to) {
+  transform: translate3d(100%, 0, 0);
+}
+
+html[data-layout='mobile-2d'] :is(.mobile-detail-forward-leave-to, .mobile-detail-back-enter-from) {
+  transform: translate3d(-20%, 0, 0);
+  opacity: .7;
+}
+
+html[data-layout='mobile-2d'][data-reduced-motion='true'] :is(
+  .app-shell > .main-panel,
+  .mobile-detail-drawer,
+  .mobile-detail-backdrop,
+  .mobile-detail-page
+) {
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-layout='mobile-2d'] :is(
+    .app-shell > .main-panel,
+    .mobile-detail-drawer,
+    .mobile-detail-backdrop,
+    .mobile-detail-page
+  ) {
+    transition: none !important;
+  }
+}

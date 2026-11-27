@@ -22,6 +22,7 @@ import './styles/tablet-home.css'
 import './styles/typography.css'
 import './styles/route-player-transition.css'
 import './styles/detail-cover.css'
+import './styles/mobile-detail-drawer.css'
 
 const app = createApp(App)
 

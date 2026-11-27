@@ -33,10 +33,10 @@
 
     <section v-else-if="isOverviewPage" class="podcast-showcase">
       <article class="podcast-showcase__panel podcast-showcase__panel--fm">
-        <RouterLink
+        <PodcastLink
           v-if="spotlightPodcast || heroBanner"
           class="podcast-spotlight"
-          :to="spotlightPodcast ? getPodcastTo(spotlightPodcast) : '/podcast'"
+          :podcast="spotlightPodcast"
         >
           <span class="podcast-spotlight__cover">
             <img
@@ -55,7 +55,7 @@
           <span class="podcast-showcase__signal">
             <RadioTower :size="22" />
           </span>
-        </RouterLink>
+        </PodcastLink>
       </article>
 
       <article class="podcast-showcase__panel podcast-showcase__panel--green">
@@ -64,16 +64,16 @@
           <a href="#podcast-hot-rank">查看全部</a>
         </div>
         <div class="podcast-top-list">
-          <RouterLink
+          <PodcastLink
             v-for="(item, index) in highScorePodcasts"
             :key="`high-score-${item.id}`"
             class="podcast-top-item"
-            :to="getPodcastTo(item)"
+            :podcast="item"
           >
             <span>{{ index + 1 }}</span>
             <img v-if="item.coverUrl" :src="item.coverUrl" :alt="item.title" loading="lazy" decoding="async" />
             <strong>{{ item.title }}</strong>
-          </RouterLink>
+          </PodcastLink>
         </div>
       </article>
 
@@ -83,16 +83,16 @@
           <a href="#podcast-hot-rank">查看全部</a>
         </div>
         <div class="podcast-top-list">
-          <RouterLink
+          <PodcastLink
             v-for="(item, index) in hotTopPodcasts"
             :key="`hot-top-${item.id}`"
             class="podcast-top-item"
-            :to="getPodcastTo(item)"
+            :podcast="item"
           >
             <span>{{ index + 1 }}</span>
             <img v-if="item.coverUrl" :src="item.coverUrl" :alt="item.title" loading="lazy" decoding="async" />
             <strong>{{ item.title }}</strong>
-          </RouterLink>
+          </PodcastLink>
         </div>
       </article>
     </section>
@@ -271,16 +271,16 @@
                 </div>
 
                 <div v-if="rankPodcastItems.length" class="podcast-rank-podium">
-                  <RouterLink
+                  <PodcastLink
                     v-for="(item, index) in rankPodcastItems"
                     :key="`home-rank-leader-${item.id}`"
                     class="podcast-rank-podium__item"
-                    :to="getPodcastTo(item)"
+                    :podcast="item"
                   >
                     <span class="podcast-rank-podium__badge">{{ index + 1 }}</span>
                     <img v-if="item.coverUrl" :src="item.coverUrl" :alt="item.title" loading="lazy" decoding="async" />
                     <strong>{{ item.title }}</strong>
-                  </RouterLink>
+                  </PodcastLink>
                 </div>
               </article>
             </aside>
@@ -378,16 +378,16 @@
                 </div>
 
                 <div v-if="rankPodcastItems.length" class="podcast-rank-podium">
-                  <RouterLink
+                  <PodcastLink
                     v-for="(item, index) in rankPodcastItems"
                     :key="`rank-leader-${item.id}`"
                     class="podcast-rank-podium__item"
-                    :to="getPodcastTo(item)"
+                    :podcast="item"
                   >
                     <span class="podcast-rank-podium__badge">{{ index + 1 }}</span>
                     <img v-if="item.coverUrl" :src="item.coverUrl" :alt="item.title" loading="lazy" decoding="async" />
                     <strong>{{ item.title }}</strong>
-                  </RouterLink>
+                  </PodcastLink>
                 </div>
               </article>
             </aside>
@@ -499,6 +499,7 @@ import {
   RefreshCw
 } from 'lucide-vue-next'
 import SongListRow from '../components/SongListRow.vue'
+import PodcastLink from '../components/PodcastLink.vue'
 import { useLoadMoreTrigger } from '../composables/useLoadMoreTrigger'
 import {
   getPodcastCategoryData,
@@ -555,8 +556,8 @@ const PodcastCard = defineComponent({
   setup(props) {
     return () =>
       h(
-        RouterLink,
-        { class: 'podcast-card', to: props.podcast.to || `/podcast/${props.podcast.id}` },
+        PodcastLink,
+        { class: 'podcast-card', podcast: props.podcast },
         () => [
           h('span', { class: 'podcast-card__cover' }, [
             props.podcast.coverUrl
@@ -883,10 +884,6 @@ function getPodcastProgramQueueSource() {
     type: 'podcast-programs',
     id: sourceId
   }
-}
-
-function getPodcastTo(podcast) {
-  return podcast?.to || `/podcast/${podcast?.id || ''}`
 }
 
 function dedupeById(items = []) {

@@ -10,7 +10,8 @@ html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar.topbar--playli
   position: absolute;
   inset: 0 0 auto;
   grid-template-columns: 44px minmax(0, 1fr);
-  padding-inline: 12px var(--mobile-inline);
+  column-gap: 16px;
+  padding-inline: 0 var(--mobile-inline);
   background: transparent;
   transition: background-color var(--transition-duration) ease;
 }
@@ -137,6 +138,7 @@ html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .play
   align-items: center;
   gap: 8px;
   margin-top: 8px;
+  text-align: center;
 }
 
 html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-description p {
@@ -150,38 +152,6 @@ html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .play
   line-height: 1.7;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-description.is-expanded {
-  align-items: start;
-}
-
-html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-description.is-expanded p {
-  overflow: visible;
-  white-space: pre-line;
-  overflow-wrap: anywhere;
-  -webkit-line-clamp: unset;
-}
-
-html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-description__toggle {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  color: var(--mobile-text-soft);
-  background: transparent;
-  cursor: pointer;
-}
-
-html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-description__toggle svg {
-  box-sizing: content-box;
-  padding: 4px;
-  border-radius: 50%;
-  background: var(--mobile-surface-soft);
 }
 
 html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-actions {

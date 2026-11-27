@@ -144,7 +144,7 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .app-shell .view 
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .app-shell .view :is(
   .filter-row button, .playlist-category-chip, .artist-filter-panel button,
   .podcast-filter-options button, .podcast-chip-row button,
-  .mv-filter-group button, .artist-sort-tabs button, .playlist-action,
+  .mv-filter-group button, .playlist-action,
   .album-action, .artist-play-all, .podcast-action, .mv-detail-action
 ) {
   font-size: var(--type-control);

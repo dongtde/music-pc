@@ -9,19 +9,21 @@
           'theme-is-switching': theme.state.animating,
           'app-shell--layout-switching': isLayoutSwitching,
           'app-shell--immersive': isImmersiveRoute,
+          'app-shell--discover-header-hidden': route.name === 'discover' && isDiscoverHeaderHidden,
           'app-shell--desktop': isDesktopApp,
           'app-shell--world': isWorld,
           'app-shell--player-expanded': fullPlayerVisible,
           'app-shell--home-player': isMobileHomeMusic,
           'app-shell--playlist-detail': isMobilePlaylist,
-          'app-shell--detail-page': Boolean(route.meta.detail),
+          'app-shell--detail-page': Boolean(mainRoute.meta.detail),
           'app-shell--cover-detail': coverThemeActive,
           'app-shell--player-transition': detailPlayerHidden,
+          'app-shell--mobile-detail': mobileDetailActive,
         }"
         :style="coverThemeStyle"
       >
         <MusicWorld v-if="isWorld" :suspended="fullPlayerVisible || auth.state.loginModalVisible" />
-        <EnvironmentSwitch v-if="!isWorld && !fullPlayerVisible && !isNarrowHome && !isMobilePlaylist" />
+        <EnvironmentSwitch v-if="!isWorld && !isMobile && !fullPlayerVisible && !isNarrowHome && !isMobilePlaylist && !mobileDetailActive" />
         <SidebarNav v-if="!isWorld && !isNarrowHome" :compact="isImmersiveRoute || isNarrow" />
         <div
           v-if="isDesktopApp && (isImmersiveRoute || isWorld)"
@@ -34,16 +36,30 @@
           class="app-window-controls"
         />
         <button v-if="showWorldRoutePanel" type="button" class="world-route-close" @click="router.push('/space')">返回音乐馆 ↗</button>
-        <section class="main-panel" :class="{ 'main-panel--world-hidden': isWorld && !showWorldRoutePanel }" :inert="isMobile && fullPlayerVisible">
-          <TopBar :inert="isImmersiveRoute" :aria-hidden="isImmersiveRoute" :playlist-header="playlistHeader" />
+        <RouteScope :route="mainRoute">
+        <section
+          class="main-panel"
+          :class="{
+            'main-panel--world-hidden': isWorld && !showWorldRoutePanel,
+            'main-panel--drawer-covered': mobileDetailOpen,
+          }"
+          :inert="isMobile && (fullPlayerVisible || mobileDetailActive)"
+          :aria-hidden="mobileDetailActive || undefined"
+        >
+          <TopBar
+            :inert="isImmersiveRoute"
+            :aria-hidden="isImmersiveRoute"
+            :playlist-header="playlistHeader"
+            :show-environment-switch="isMobile && !isWorld && !fullPlayerVisible && !isNarrowHome && !isMobilePlaylist && !mobileDetailActive"
+          />
           <div class="route-stage">
-            <router-view v-slot="{ Component, route: viewRoute }">
+            <router-view :route="mainRoute" v-slot="{ Component, route: viewRoute }">
               <Transition
                 :name="routeTransitionName"
                 appear
                 @before-leave="saveCachedRouteScroll"
                 @enter="restoreCachedRouteScroll"
-                @after-enter="finishDetailPlayerEnter($event, viewRoute.fullPath)"
+                @after-enter="!mobileDetailActive && finishDetailPlayerEnter($event, viewRoute.fullPath)"
               >
                 <KeepAlive>
                   <component
@@ -51,6 +67,7 @@
                     :is="Component"
                     :key="getRouteViewKey(viewRoute)"
                     v-bind="isHomeRoute(viewRoute.name) ? { mobilePlayerSection: homeSection } : {}"
+                    @discover-scroll-state="handleDiscoverScrollState"
                     @home-ready="markHomeBootReady"
                     @home-page-change="homeMusicPage = $event"
                     @home-section-change="homeSection = $event"
@@ -61,13 +78,14 @@
               <Transition
                 :name="routeTransitionName"
                 appear
-                @after-enter="finishDetailPlayerEnter($event, viewRoute.fullPath)"
+                @after-enter="!mobileDetailActive && finishDetailPlayerEnter($event, viewRoute.fullPath)"
               >
                 <component
                   v-if="Component && !shouldKeepRouteAlive(viewRoute)"
                   :is="Component"
                   :key="getRouteViewKey(viewRoute)"
                   v-bind="isHomeRoute(viewRoute.name) ? { mobilePlayerSection: homeSection } : {}"
+                  @discover-scroll-state="handleDiscoverScrollState"
                   @home-ready="markHomeBootReady"
                   @home-page-change="homeMusicPage = $event"
                   @home-section-change="homeSection = $event"
@@ -83,9 +101,22 @@
             </router-view>
           </div>
         </section>
+        </RouteScope>
+        <MobileDetailDrawer
+          v-if="mobileDetailEnabled"
+          :open="mobileDetailOpen"
+          :route="mobileDetailRoute"
+          :transition-name="mobileDetailTransition"
+          :duration="theme.getTransitionDuration()"
+          :back="backFromMobileDetail"
+          :inert="fullPlayerVisible"
+          @entered="finishDetailPlayerEnter"
+          @closed="handleMobileDetailClose"
+          @playlist-header-change="updatePlaylistHeader"
+        />
         <Transition name="app-boot">
           <div
-            v-if="appBootVisible && isImmersiveRoute"
+            v-if="appBootVisible && isImmersiveRoute && !mobileDetailActive"
             class="app-boot-overlay"
             aria-hidden="true"
             inert
@@ -100,8 +131,9 @@
         </Transition>
         <PlayerBar
           :home-player="isMobileHomeMusic"
-          :hidden="isWorld || (isNarrowHome && !isMobileHomeMusic)"
+          :hidden="isWorld || (isNarrowHome && !isMobileHomeMusic && !mobileDetailActive)"
           :route-hidden="detailPlayerHidden"
+          :detail-cover-style="coverThemeActive ? coverThemeStyle : null"
           @full-player-change="fullPlayerVisible = $event"
           @home-section-change="homeSection = $event"
           @home-navigation="mobileNavigation?.openNavigation()"
@@ -111,7 +143,7 @@
           v-if="!isWorld && (isMobile || isNarrowHome) && !isMobileHomeLyrics && !isMobilePlaylist"
           v-show="!fullPlayerVisible || isMobileHomeMusic"
           :collapsible="isNarrowHome"
-          :route-hidden="detailPlayerHidden"
+          :route-hidden="detailPlayerHidden || mobileDetailActive"
         />
         <ThemeTransitionOverlay />
         <div
@@ -141,10 +173,13 @@ import SidebarNav from './components/SidebarNav.vue';
 import HomeBootSkeleton from './components/HomeBootSkeleton.vue';
 import TopBar from './components/TopBar.vue';
 import MobileTabBar from './components/MobileTabBar.vue';
+import RouteScope from './components/RouteScope.vue';
+import MobileDetailDrawer from './components/MobileDetailDrawer.vue';
+import { useMobileDetailRoutes } from './composables/useMobileDetailRoutes';
 import { useResponsiveLayout } from './composables/useResponsiveLayout';
 import { useDetailPlayerTransition } from './composables/useDetailPlayerTransition';
 import { useDetailCoverTheme } from './composables/useDetailCoverTheme';
-import { getPlaylistPreview } from './utils/playlistPreview';
+import { getDetailCoverSource } from './utils/detailCoverSource';
 import ThemeTransitionOverlay from './components/ThemeTransitionOverlay.vue';
 import WindowControls from './components/WindowControls.vue';
 import { useAuthStore } from './stores/auth';
@@ -175,6 +210,7 @@ const auth = useAuthStore();
 const theme = useThemeStore();
 const route = useRoute();
 const fullPlayerVisible = ref(false);
+const isDiscoverHeaderHidden = ref(false);
 const playlistHeader = ref({ title: '', visible: false, collapsed: false });
 const homeMusicPage = ref(1);
 const homeSection = ref('music');
@@ -183,7 +219,7 @@ const router = useRouter();
 const environment = useEnvironmentStore();
 const { isMobile, isCompact, isNarrow, isTabletPortrait, isHomeTouch2D } = useResponsiveLayout();
 const isWorld = computed(() => environment.state.mode === '3d' && !isDesktopLyricsRoute.value);
-const isMobilePlaylist = computed(() => isMobile.value && !isWorld.value && route.name === 'playlist');
+const isMobilePlaylist = computed(() => isMobile.value && !isWorld.value && Boolean(mainRoute.value.meta.coverDetail));
 const initialRoutePath = getInitialRoutePath();
 const initialRoute = router.resolve(initialRoutePath);
 const isSpaceRoute = computed(() => route.name === 'space' || (!route.name && initialRoute.name === 'space'));
@@ -198,28 +234,28 @@ const naiveTheme = computed(() =>
 const isDesktopLyricsRoute = computed(() =>
   route.meta.desktopLyrics || (!route.name && initialRoutePath.startsWith('/desktop-lyrics')),
 );
+const mobileDetailEnabled = computed(() => isMobile.value && !isWorld.value && !isDesktopLyricsRoute.value);
+const {
+  mainRoute,
+  detailRoute: mobileDetailRoute,
+  open: mobileDetailOpen,
+  active: mobileDetailActive,
+  transitionName: mobileDetailTransition,
+  back: backFromMobileDetail,
+  finishClose: finishMobileDetailClose,
+} = useMobileDetailRoutes(router, mobileDetailEnabled);
 const isImmersiveRoute = computed(() =>
-  !isWorld.value && (route.name === 'home' || (!route.name && isHomePath(initialRoutePath))),
+  !isWorld.value && (mainRoute.value.name === 'home' || (!mainRoute.value.name && isHomePath(initialRoutePath))),
 );
 const isNarrowHome = computed(() => isImmersiveRoute.value && (isNarrow.value || isHomeTouch2D.value));
-const isMobileHomeMusic = computed(() => isImmersiveRoute.value && isMobile.value && homeSection.value === 'music');
-const isMobileHomeLyrics = computed(() => !isMobileHomeMusic.value && isImmersiveRoute.value && isHomeTouch2D.value && homeMusicPage.value === 2);
+const isMobileHomeMusic = computed(() => isImmersiveRoute.value && isMobile.value && homeSection.value === 'music' && !mobileDetailActive.value);
+const isMobileHomeLyrics = computed(() => !mobileDetailActive.value && !isMobileHomeMusic.value && isImmersiveRoute.value && isHomeTouch2D.value && homeMusicPage.value === 2);
 const isDesktopApp = computed(() =>
   typeof window !== 'undefined' && Boolean(window.mappicDesktop?.windowControls),
 );
 const { coverThemeActive, coverThemeStyle } = useDetailCoverTheme(() => {
-  if (isWorld.value || route.name !== 'playlist') return null;
-  const preview = getPlaylistPreview(route.params.id);
-  const header = playlistHeader.value.path === route.path ? playlistHeader.value : null;
-  if (!preview && !header) return null;
-  return {
-    ...preview,
-    ...header,
-    path: route.path,
-    coverUrl: header?.coverUrl || preview?.coverUrl || '',
-    coverType: (header?.coverUrl ? header.coverType : preview?.coverType) || header?.coverType,
-    tint: preview?.tint || '',
-  };
+  const viewedRoute = mobileDetailActive.value ? mobileDetailRoute.value : route;
+  return isWorld.value ? null : getDetailCoverSource(viewedRoute, playlistHeader.value);
 });
 const routeTransitionName = ref('route-soft');
 const { hidden: detailPlayerHidden, finishEnter: finishDetailPlayerEnter } = useDetailPlayerTransition(router, {
@@ -242,6 +278,14 @@ const cachedRouteScrollPositions = new WeakMap();
 
 function updatePlaylistHeader(header) {
   if (header.path === route.path) playlistHeader.value = header;
+}
+
+function handleDiscoverScrollState(hidden) {
+  isDiscoverHeaderHidden.value = route.name === 'discover' && hidden;
+}
+function handleMobileDetailClose(element) {
+  finishMobileDetailClose();
+  finishDetailPlayerEnter(element, mainRoute.value.fullPath);
 }
 
 function isHomeRoute(routeName) {
@@ -336,6 +380,9 @@ watch([isImmersiveRoute, isTabletPortrait], () => {
   document.documentElement.dataset.homeLayout = isImmersiveRoute.value && isTabletPortrait.value ? 'tablet' : '';
 }, { immediate: true });
 
+watch([() => route.fullPath, isMobile, isCompact], () => {
+  isDiscoverHeaderHidden.value = false;
+});
 watch(() => environment.state.mode, (mode) => {
   document.documentElement.dataset.environment = mode;
   if (mode === '3d') appBootVisible.value = false;
@@ -354,6 +401,7 @@ const removeRouteTransitionHook = router.afterEach((to, from, failure) => {
   previousHistoryPosition = historyPosition;
 
   if (!from.name || to.path === from.path) return;
+  if (mobileDetailEnabled.value && (to.meta.detail || from.meta.detail)) return;
 
   const wasImmersive = isHomeRoute(from.name);
   const willBeImmersive = isHomeRoute(to.name);

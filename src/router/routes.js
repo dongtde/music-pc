@@ -15,11 +15,13 @@ export const routes = [
   },
   {
     path: '/search',
-    redirect: '/home'
+    name: 'search',
+    component: () => import('../views/SearchView.vue'),
+    meta: { title: '搜索', icon: 'Search', detail: true }
   },
   {
     path: '/search/:keyword',
-    redirect: '/home'
+    redirect: to => ({ name: 'search', query: { keyword: to.params.keyword } })
   },
   {
     path: '/discover/:tab?',
@@ -59,7 +61,7 @@ export const routes = [
     path: '/podcast/:id',
     name: 'podcast-detail',
     component: () => import('../views/PodcastDetailView.vue'),
-    meta: { title: '电台详情', icon: 'RadioTower', detail: true }
+    meta: { title: '电台详情', icon: 'RadioTower', detail: true, coverDetail: true }
   },
   {
     path: '/mv',
@@ -90,7 +92,7 @@ export const routes = [
     path: '/playlist/:id',
     name: 'playlist',
     component: () => import('../views/PlaylistDetailView.vue'),
-    meta: { title: '歌单', icon: 'ListMusic', detail: true }
+    meta: { title: '歌单', icon: 'ListMusic', detail: true, coverDetail: true }
   },
   {
     path: '/album/:id',
@@ -102,7 +104,7 @@ export const routes = [
     path: '/artist/:id',
     name: 'artist',
     component: () => import('../views/ArtistDetailView.vue'),
-    meta: { title: '歌手', icon: 'User', detail: true }
+    meta: { title: '歌手', icon: 'User', detail: true, coverDetail: true }
   },
   {
     path: '/settings',

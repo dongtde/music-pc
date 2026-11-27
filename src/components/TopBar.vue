@@ -2,21 +2,21 @@
   <header
     class="topbar"
     :class="{
-      'topbar--search-open': searchExpanded,
+      'topbar--search-page': isMobileSearchPage,
       'topbar--detail': isMobileDetail,
       'topbar--playlist': isMobilePlaylist,
-      'topbar--playlist-title-visible': isMobilePlaylist && playlistHeader.visible,
-      'topbar--playlist-collapsed': isMobilePlaylist && playlistHeader.collapsed,
+      'topbar--playlist-title-visible': isMobilePlaylist && currentPlaylistHeader.visible,
+      'topbar--playlist-collapsed': isMobilePlaylist && currentPlaylistHeader.collapsed,
     }"
   >
-    <div v-if="isMobile" class="mobile-topbar-title" :aria-hidden="isMobilePlaylist && !playlistHeader.visible">
+    <div v-if="isMobile && !isMobileSearchPage" class="mobile-topbar-title" :aria-hidden="isMobilePlaylist && !currentPlaylistHeader.visible">
       <h1 v-if="isMobilePlaylist">
-        <OverflowMarquee :text="playlistHeader.title || mobilePageTitle" :active="playlistHeader.visible" />
+        <OverflowMarquee :text="currentPlaylistHeader.title || mobilePageTitle" :active="currentPlaylistHeader.visible" />
       </h1>
       <h1 v-else>{{ isMobileDetail ? mobilePageTitle : '澜音' }}</h1>
     </div>
-    <div class="history-actions">
-      <button type="button" title="后退" aria-label="后退" @click="router.back()"><ChevronLeft :size="20" /></button>
+    <div v-if="!isMobileSearchPage" class="history-actions">
+      <button type="button" title="后退" aria-label="后退" @click="back ? back() : router.back()"><ChevronLeft :size="20" /></button>
       <button type="button" title="前进" aria-label="前进" @click="router.forward()"><ChevronRight :size="20" /></button>
     </div>
 
@@ -24,11 +24,15 @@
       v-if="!isMobilePlaylist"
       ref="searchWrap"
       class="top-search"
-      :class="{ 'top-search--open': searchExpanded }"
+      :class="{ 'top-search--open': !isMobile && searchExpanded }"
       @focusout="handleSearchFocusOut"
       @pointerdown.capture="handleSearchPointerDown"
     >
-      <button v-if="isMobile && !searchExpanded" class="mobile-search-trigger" type="button" aria-label="搜索音乐" @click="openMobileSearch"><Search :size="21" /></button>
+      <button v-if="isMobile && !isMobileSearchPage" class="mobile-search-trigger" type="button" aria-label="打开搜索" @click="openMobileSearch">
+        <Search :size="18" />
+        <span>{{ searchPlaceholder }}</span>
+      </button>
+      <div v-else class="search-content" :style="isMobileSearchPage ? searchViewportStyle : undefined">
       <n-input
         ref="searchInput"
         aria-label="搜索音乐、歌手或专辑"
@@ -37,8 +41,6 @@
         clearable
         :placeholder="searchPlaceholder"
         class="search-input"
-        :inert="isMobile && !searchExpanded"
-        :aria-hidden="isMobile && !searchExpanded"
         @focus="openSearchPanel"
         @clear="clearSearch"
         @keydown.enter.prevent="submitSearch()"
@@ -48,10 +50,10 @@
           <Search :size="18" />
         </template>
       </n-input>
-      <button v-if="isMobile && searchExpanded" class="mobile-search-cancel" type="button" @pointerdown.prevent @click="closeMobileSearch">取消</button>
+      <button v-if="isMobileSearchPage" class="mobile-search-cancel" type="button" @pointerdown.prevent @click="closeMobileSearch">取消</button>
 
-      <Transition name="search-panel" @after-leave="handleSearchPanelAfterLeave">
-        <div v-if="searchPanelVisible" class="search-panel" @pointerdown="handlePanelPointerDown">
+      <Transition name="search-panel" :css="!isMobile" @after-leave="handleSearchPanelAfterLeave">
+        <div v-if="isMobileSearchPage || searchPanelVisible" class="search-panel" @pointerdown="handlePanelPointerDown">
         <section v-if="!trimmedKeyword && !searchedKeyword" class="search-section">
           <div v-if="searchHistory.length" class="search-history-block">
             <header class="search-section__head search-section__head--controls">
@@ -198,6 +200,7 @@
                   alt=""
                   loading="lazy"
                   decoding="async"
+                  @load="prepareSearchArtistCover(item)"
                 />
                 <component v-else :is="activeTabIcon" :size="18" />
               </span>
@@ -210,8 +213,10 @@
         </section>
         </div>
       </Transition>
+        </div>
     </div>
 
+    <EnvironmentSwitch v-if="props.showEnvironmentSwitch && !isMobileSearchPage && !isMobileDetail" />
     <div
       class="topbar__spacer"
       :class="{ 'topbar__spacer--search-active': searchExpanded }"
@@ -239,10 +244,6 @@
     <router-link class="icon-button" to="/settings" title="设置" aria-label="设置">
       <Settings :size="18" />
     </router-link>
-    <button v-if="isMobile && !isMobileDetail" class="mobile-account-button" type="button" :aria-label="auth.state.isLoggedIn ? '我的账号' : '登录账号'" @click="auth.openLoginModal">
-      <img v-if="mobileAvatarUrl" :src="mobileAvatarUrl" alt="" />
-      <UserRound v-else :size="20" />
-    </button>
     <WindowControls class="topbar__window-controls" />
 
     <n-modal
@@ -296,8 +297,8 @@
 </template>
 
 <script setup>
-import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, defineComponent, h, nextTick, onActivated, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   ChevronLeft,
   ChevronRight,
@@ -314,13 +315,13 @@ import {
   Sun,
   Trash2,
   User,
-  UserRound,
   Video
 } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui'
 import SongListRow from './SongListRow.vue'
 import OverflowMarquee from './OverflowMarquee.vue'
 import WindowControls from './WindowControls.vue'
+import EnvironmentSwitch from './EnvironmentSwitch.vue'
 import {
   useSearchBoot,
   useSearchHistory,
@@ -329,12 +330,14 @@ import {
 import { getSearchResultData } from '../services/netease'
 import { usePlayerStore } from '../stores/player'
 import { useThemeStore } from '../stores/theme'
-import { useAuthStore } from '../stores/auth'
+import { prepareArtistCover } from '../utils/artistPreview'
 import { getPlaybackErrorDisplay } from '../utils/playbackError'
 import { isAbortError } from '../utils/request'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 
-defineProps({
+const props = defineProps({
+  back: { type: Function, default: null },
+  showEnvironmentSwitch: { type: Boolean, default: false },
   playlistHeader: {
     type: Object,
     default: () => ({ title: '', visible: false, collapsed: false })
@@ -431,28 +434,40 @@ const featureModalSections = [
 
 const theme = useThemeStore()
 const player = usePlayerStore()
-const auth = useAuthStore()
-const mobileAvatarUrl = auth.avatarUrl
 const router = useRouter()
+const route = useRoute()
 const message = useMessage()
 const { isMobile2D: isMobile } = useResponsiveLayout()
-const isMobileDetail = computed(() => isMobile.value && /^\/(playlist|album|artist|settings|podcast\/[^/]+|kugou-mv)(\/|$)/.test(router.currentRoute.value.path) && !['/podcast/rank', '/podcast/sleep', '/podcast/radio'].includes(router.currentRoute.value.path))
-const isMobilePlaylist = computed(() => isMobile.value && router.currentRoute.value.name === 'playlist')
+const isMobileSearchPage = computed(() => isMobile.value && route.name === 'search')
+const isMobileDetail = computed(() => isMobile.value && /^\/(playlist|album|artist|settings|podcast\/[^/]+|kugou-mv)(\/|$)/.test(route.path) && !['/podcast/rank', '/podcast/sleep', '/podcast/radio'].includes(route.path))
+const isMobilePlaylist = computed(() => isMobile.value && Boolean(route.meta.coverDetail))
+const currentPlaylistHeader = computed(() => props.playlistHeader?.path === route.path
+  ? props.playlistHeader
+  : { title: '', visible: false, collapsed: false })
 const mobilePageTitle = computed(() => {
-  const currentRoute = router.currentRoute.value
-  const root = currentRoute.path.split('/')[1]
-  return { home: '现在就听', discover: '发现', podcast: '电台', mv: '视频', video: '视频', library: '我的音乐', settings: '设置', playlist: '歌单', album: '专辑', artist: '歌手', 'kugou-mv': '视频', friends: '朋友' }[root] || currentRoute.meta.title || '现在就听'
+  const root = route.path.split('/')[1]
+  return { home: '现在就听', search: '搜索', discover: '发现', podcast: '电台', mv: '视频', video: '视频', library: '我的音乐', settings: '设置', playlist: '歌单', album: '专辑', artist: '歌手', 'kugou-mv': '视频', friends: '朋友' }[root] || route.meta.title || '现在就听'
 })
 
 function openMobileSearch() {
-  openSearchPanel()
-  nextTick(() => searchInput.value?.focus())
+  void router.push({ name: 'search' })
 }
 const searchInput = ref(null)
 const searchWrap = ref(null)
 const featureModalVisible = ref(false)
 const searchExpanded = ref(false)
+const searchViewportStyle = ref(null)
 const searchPanelVisible = ref(false)
+
+function openSearchRoute() {
+  if (isMobile.value) {
+    loadSearchHistory()
+    updateSearchViewport()
+    return
+  }
+  openSearchPanel()
+  nextTick(() => searchInput.value?.focus())
+}
 const searchKeyword = ref('')
 const searchedKeyword = ref('')
 const activeSearchType = ref(1)
@@ -495,6 +510,7 @@ const activeTabIcon = computed(() =>
 )
 
 watch(trimmedKeyword, (keyword) => {
+  if (keyword === searchedKeyword.value) return
   searchedKeyword.value = ''
 
   if (!keyword) {
@@ -502,17 +518,45 @@ watch(trimmedKeyword, (keyword) => {
   }
 })
 
-watch(() => router.currentRoute.value.fullPath, closeMobileSearch)
+watch([() => route.name, isMobile], ([name]) => {
+  if (name === 'search') openSearchRoute()
+}, { immediate: true })
+
+watch(() => route.name === 'search' ? route.query.keyword : undefined, (keyword) => {
+  if (typeof keyword !== 'string' || !keyword.trim()) return
+  const query = keyword.trim()
+  if (query === searchKeyword.value) return
+
+  searchKeyword.value = query
+  nextTick(() => {
+    if (route.name !== 'search' || searchKeyword.value !== query) return
+    searchedKeyword.value = query
+    activeSearchType.value = 1
+    loadResults()
+  })
+}, { immediate: true })
+
+watch(() => router.currentRoute.value.fullPath, () => {
+  if (!isMobile.value && router.currentRoute.value.name !== 'search') closeSearchPanel()
+})
 
 function updateSearchViewport() {
-  if (!isMobile.value) return
+  if (!isMobileSearchPage.value) return
   const viewport = window.visualViewport
-  const top = viewport?.offsetTop || 0
-  document.documentElement.style.setProperty('--search-viewport-height', `${viewport?.height || window.innerHeight}px`)
-  document.documentElement.style.setProperty('--search-viewport-top', `${top}px`)
+  searchViewportStyle.value = {
+    '--search-viewport-height': `${viewport?.height || window.innerHeight}px`,
+    '--search-viewport-top': `${viewport?.offsetTop || 0}px`,
+  }
 }
 
 function closeMobileSearch() {
+  if (route.name === 'search') {
+    if (props.back) props.back()
+    else if (router.options.history.state.back) router.back()
+    else void router.replace('/home')
+    return
+  }
+
   closeSearchPanel()
   searchInput.value?.blur()
 }
@@ -529,6 +573,10 @@ onMounted(() => {
   window.visualViewport?.addEventListener('scroll', updateSearchViewport)
 })
 
+onActivated(() => {
+  if (route.name === 'search') openSearchRoute()
+})
+
 onUnmounted(() => {
   cancelResultRequest()
   window.clearTimeout(searchPanelTimer)
@@ -539,18 +587,7 @@ onUnmounted(() => {
 })
 
 function openSearchPanel() {
-  updateSearchViewport()
-  if (isMobile.value) {
-    window.clearTimeout(searchPanelTimer)
-    window.clearTimeout(searchPanelCloseTimer)
-    searchPanelTimer = 0
-    searchPanelCloseTimer = 0
-    searchPanelLeaving = false
-    loadSearchHistory()
-    searchExpanded.value = true
-    searchPanelVisible.value = true
-    return
-  }
+  if (isMobile.value) return
   if (searchPanelVisible.value) {
     return
   }
@@ -582,6 +619,7 @@ function openSearchPanel() {
 }
 
 function closeSearchPanel() {
+  if (isMobile.value) return
   window.clearTimeout(searchPanelTimer)
   searchPanelTimer = 0
 
@@ -601,7 +639,7 @@ function closeSearchPanel() {
 }
 
 function handleSearchPanelAfterLeave() {
-  if (searchPanelCloseTimer) {
+  if (isMobile.value || searchPanelCloseTimer) {
     return
   }
 
@@ -626,7 +664,7 @@ function handleSearchPointerDown() {
 }
 
 function handleSearchFocusOut(event) {
-  if (isMobile.value && searchExpanded.value) return
+  if (isMobile.value) return
   const relatedTarget = event.relatedTarget
 
   if (
@@ -653,6 +691,10 @@ function clearSearch() {
   searchedKeyword.value = ''
   searchResults.value = []
   resultTotal.value = 0
+
+  if (route.name === 'search' && route.query.keyword) {
+    void router.replace({ name: 'search' })
+  }
 }
 
 function pickKeyword(keyword) {
@@ -672,6 +714,15 @@ function submitSearch(keyword = trimmedKeyword.value || defaultKeyword.value) {
   searchKeyword.value = query
   searchedKeyword.value = query
   activeSearchType.value = 1
+
+  if (route.name === 'search') {
+    if (route.query.keyword !== query) {
+      void router.replace({ name: 'search', query: { ...route.query, keyword: query } })
+    }
+  } else {
+    void router.push({ name: 'search', query: { keyword: query } })
+  }
+
   loadResults()
 }
 
@@ -745,6 +796,15 @@ function cancelResultRequest() {
   resultLoading.value = false
 }
 
+function prepareSearchArtistCover(item) {
+  if (item.type !== 'artist' || !item.coverUrl || !item.to) return
+  prepareArtistCover({ id: router.resolve(item.to).params.id, coverUrl: item.coverUrl })
+}
+
+function closeSearchBeforeNavigation() {
+  if (!isMobile.value || route.name !== 'search') closeSearchPanel()
+}
+
 function handleSuggestionSelect(item) {
   if (item.type === 'song') {
     playSong(item, suggestions.value.songs)
@@ -752,7 +812,8 @@ function handleSuggestionSelect(item) {
   }
 
   if (item.to) {
-    closeSearchPanel()
+    prepareSearchArtistCover(item)
+    closeSearchBeforeNavigation()
     router.push(item.to)
     return
   }
@@ -762,7 +823,8 @@ function handleSuggestionSelect(item) {
 
 function handleResultSelect(item) {
   if (item.to) {
-    closeSearchPanel()
+    prepareSearchArtistCover(item)
+    closeSearchBeforeNavigation()
     router.push(item.to)
     return
   }
@@ -795,6 +857,7 @@ function getResultSubtitle(item) {
 }
 
 function handleOutsideClick(event) {
+  if (isMobile.value) return
   const target = event.target
 
   if (!(target instanceof Element)) {

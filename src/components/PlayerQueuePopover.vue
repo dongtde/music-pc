@@ -38,6 +38,7 @@
           :class="{
             'queue-popover--drawer': isMobile,
             'queue-popover--immersive': isMobile && immersive,
+            'queue-popover--cover-detail': isMobile && !immersive && Boolean(detailCoverStyle),
             'queue-popover--dragging': dragging
           }"
           :style="isMobile ? drawerStyle : undefined"
@@ -108,6 +109,10 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  detailCoverStyle: {
+    type: Object,
+    default: null
+  },
   coverStyle: {
     type: Object,
     default: () => ({})
@@ -125,7 +130,7 @@ let dragStartY = 0
 let dragPointerId = null
 
 const drawerStyle = computed(() => ({
-  ...(props.immersive ? props.coverStyle : {}),
+  ...(props.immersive ? props.coverStyle : props.detailCoverStyle || {}),
   '--queue-drag-offset': `${dragOffset.value}px`
 }))
 
