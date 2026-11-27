@@ -10,6 +10,7 @@ export const DEFAULT_COVER_PALETTE = Object.freeze({
 const COVER_TINT_CONCURRENCY = 2
 const COVER_TINT_CACHE_SIZE = 80
 const coverTintSampleCache = createLruCache(COVER_TINT_CACHE_SIZE)
+const coverPixelSampleCache = createLruCache(COVER_TINT_CACHE_SIZE)
 const coverTintFailureCache = createLruCache(COVER_TINT_CACHE_SIZE)
 const coverTintPending = new Map()
 const coverTintQueue = []
@@ -17,6 +18,15 @@ let coverTintActiveCount = 0
 
 export function getCachedCoverTint(coverUrl) {
   return coverTintSampleCache.get(normalizeCoverTintUrl(coverUrl)) || ''
+}
+
+// Reuse the existing small cover decode for local icon contrast sampling.
+export async function sampleCoverPixels(coverUrl) {
+  const key = normalizeCoverTintUrl(coverUrl)
+  const cached = coverPixelSampleCache.get(key)
+  if (cached) return cached
+  await sampleCoverTint(key)
+  return coverPixelSampleCache.get(key) || null
 }
 
 export function sampleCoverTint(coverUrl) {
@@ -134,7 +144,14 @@ function sampleCoverTintNow(coverUrl) {
         canvas.width = sampleSize
         canvas.height = sampleSize
         context.drawImage(image, 0, 0, sampleSize, sampleSize)
-        resolve(extractCoverTint(context.getImageData(0, 0, sampleSize, sampleSize).data))
+        const pixels = context.getImageData(0, 0, sampleSize, sampleSize).data
+        coverPixelSampleCache.set(normalizeCoverTintUrl(coverUrl), {
+          data: pixels,
+          size: sampleSize,
+          width: image.naturalWidth,
+          height: image.naturalHeight
+        })
+        resolve(extractCoverTint(pixels))
       } catch (error) {
         reject(error)
       }

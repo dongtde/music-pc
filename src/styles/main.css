@@ -55,6 +55,8 @@
   --layout-duration-fast: var(--transition-duration);
   --full-player-transition-duration: var(--transition-duration);
   --layout-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --page-nav-gap: 24px;
+  --section-heading-gap: 24px;
   background: var(--app-bg);
   color: var(--text-main);
 }

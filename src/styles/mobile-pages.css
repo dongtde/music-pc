@@ -84,7 +84,11 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .se
   margin: 0;
 }
 
-html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .latest-section, .chart-section + .chart-section, .artist-detail-section) {
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.playlists-page > .section-title, .chart-section > .section-title) {
+  margin-block: var(--section-heading-gap);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .latest-section, .artist-detail-section) {
   margin-top: 32px;
 }
 
@@ -131,6 +135,7 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .view.discover > 
   max-width: none;
   margin-inline: calc(-1 * var(--pages-inline));
   padding-inline: var(--pages-inline);
+  margin-bottom: var(--page-nav-gap);
   background: var(--mobile-bg);
 
 }
@@ -176,10 +181,6 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .fi
   padding-block: 4px;
 }
 
-html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .artists-page, .discover .albums-page, .discover .playlists-page) {
-  padding-top: 0;
-}
-
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .artist-filter-panel, .mv-filter-panel) {
   gap: 4px;
   margin-bottom: 24px;
@@ -192,6 +193,14 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .ar
   align-items: center;
   gap: 4px;
   padding-block: 4px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.filter-row, .playlist-category-strip, .artist-filter-panel, .artist-filter-panel > div) {
+  padding-block: 0;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .playlist-category-strip {
+  margin-bottom: 0;
 }
 
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.artist-filter-panel strong, .mv-filter-group > span) {
@@ -232,6 +241,46 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .playlist-categor
   color: var(--pages-text);
 }
 
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist-filter-panel {
+  gap: 6px;
+  margin-bottom: 24px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist-filter-panel > div {
+  gap: 12px;
+  padding: 3px 1px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist-filter-panel strong {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist-filter-panel button {
+  min-width: max-content;
+  min-height: 46px;
+  height: 46px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--pages-text);
+  background: var(--pages-surface);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist-filter-panel button.active {
+  color: #15391f;
+  background: #69e88e;
+  font-weight: 600;
+}
 /* Explicit controls only: never reset buttons or geometry inside song rows. */
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover-error button, .playlist-load-more button, .artist-load-more button, .album-scroll-sentinel button, .artist-tab-load-more button, .library-empty button, .playlist-action, .album-action, .album-stats button, .artist-play-all, .podcast-action, .podcast-load-more, .podcast-text-button, .podcast-autoload button, .podcast-showcase__head a, .podcast-rank-select select, .mv-section-head button, .mv-detail-action, .vip-claim-button, .login-modal__button, .login-send-button, .comment-modal__retry, .feature-modal__close, .playlist-category-modal__close, .playlist-category-modal__group button) {
   min-width: 44px;
@@ -394,8 +443,8 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover :is(.pl
 }
 
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page .hero {
-  margin: 4px 0 28px;
-  padding: 4px 0 0;
+  margin: 0 0 28px;
+  padding: 0;
 }
 
 html[data-layout='mobile-2d'] .discover .recommend-page .hero__page {
@@ -479,7 +528,7 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recomm
 }
 
 /* Phone banners use swipe + an overlaid pager inside the artwork. */
-html[data-layout='mobile-2d'] .discover .recommend-page .hero { margin: 8px 0 24px; padding: 0; }
+html[data-layout='mobile-2d'] .discover .recommend-page .hero { margin: 0 0 24px; padding: 0; }
 html[data-layout='mobile-2d'] .discover .recommend-page .hero__track { touch-action: pan-y pinch-zoom; }
 html[data-layout='mobile-2d'] .discover .recommend-page .hero--swiping .hero__track { transition: none; }
 html[data-layout='mobile-2d'] .discover .recommend-page .hero__slide { aspect-ratio: 2.4 / 1; user-select: none; }
@@ -656,7 +705,7 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .artist
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .chart-summary-grid {
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
-  margin: 4px 0 32px;
+  margin: 0;
 }
 
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .chart-summary-card {
@@ -951,12 +1000,12 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view {
   grid-template-columns: minmax(0, 1fr);
   align-content: start;
   padding-top: 8px;
-  gap: 24px;
+  gap: var(--section-heading-gap);
 }
 
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view :is(.podcast-showcase, .podcast-dashboard, .podcast-rank-layout, .podcast-radio-layout, .podcast-sleep-layout) {
   grid-template-columns: minmax(0, 1fr);
-  gap: 28px;
+  gap: var(--section-heading-gap) 28px;
 }
 
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view :is(.podcast-showcase__panel, .podcast-hero, .podcast-panel, .podcast-section) {
@@ -1106,6 +1155,8 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .po
 html[data-layout='mobile-2d'] .podcast-view .podcast-rank-programs { grid-template-columns: minmax(0, 1fr); }
 
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view :is(.podcast-section__head, .podcast-showcase__head) { flex-wrap: wrap; gap: 8px 12px; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-section__head { margin-bottom: 0; }
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-showcase__head { margin-bottom: var(--section-heading-gap); }
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-filter-options { margin-bottom: 0; }
 
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-rank-select select {
@@ -1774,12 +1825,6 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) :is(.discover .ho
   --skeleton-outline: transparent;
 }
 
-html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .playlist-detail-skeleton {
-  --playlist-skeleton-base: var(--pages-surface-soft);
-  --playlist-skeleton-glint: color-mix(in srgb, var(--pages-text) 5%, transparent);
-  --playlist-skeleton-outline: transparent;
-}
-
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .artist-detail-skeleton {
   --artist-skeleton-base: var(--pages-surface-soft);
   --artist-skeleton-glint: color-mix(in srgb, var(--pages-text) 5%, transparent);
@@ -1800,7 +1845,7 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .comment-modal :i
 
 html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .podcast-view .podcast-skeleton { border: 0; background: var(--pages-surface-soft); }
 
-html[data-layout='mobile-2d'] .discover .recommend-page .skeleton-hero { grid-template-columns: minmax(0, 1fr); margin: 8px 0 28px; }
+html[data-layout='mobile-2d'] .discover .recommend-page .skeleton-hero { grid-template-columns: minmax(0, 1fr); margin: 0 0 28px; }
 html[data-layout='mobile-2d'] .discover .recommend-page .skeleton-hero-card { aspect-ratio: 2.5 / 1; border-radius: var(--pages-radius); box-shadow: none; }
 html[data-layout='mobile-2d'] .discover .recommend-page .skeleton-hero-card + .skeleton-hero-card { display: none; }
 
@@ -1879,4 +1924,30 @@ html:is([data-layout='mobile-2d'], [data-layout='compact-2d'])[data-reduced-moti
   animation: none !important;
   transition: none !important;
   scroll-behavior: auto !important;
+}
+/* Keep recommendation shelves on the same mobile spacing rhythm. */
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page {
+  --recommend-section-gap: 24px;
+  --recommend-section-content-gap: 12px;
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page > :is(.hero, .skeleton-hero) {
+  margin-bottom: var(--recommend-section-gap);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page > .section-head,
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page > .latest-section > .section-head {
+  margin-bottom: var(--recommend-section-content-gap);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page > .latest-section {
+  margin-top: var(--recommend-section-gap);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page > .latest-section > .section-title {
+  margin: 0 0 var(--recommend-section-content-gap);
+}
+
+html:is([data-layout='mobile-2d'], [data-layout='compact-2d']) .discover .recommend-page > .skeleton-section {
+  margin-top: var(--recommend-section-gap);
 }

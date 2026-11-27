@@ -1,6 +1,6 @@
 <template>
   <div ref="pageRoot" class="view album-detail" @scroll.passive="scheduleAlbumRangeUpdate">
-    <section class="album-hero">
+    <section class="album-hero" :class="{ 'detail-hero--loading': isLoading }" :aria-busy="isLoading" :inert="isLoading">
       <div class="album-cover" :class="`album-cover--${album.type}`">
         <img
           v-if="album.coverUrl"
@@ -37,7 +37,7 @@
             @click="playAllTracks"
           >
             <Play :size="18" fill="currentColor" />
-            <span>播放全部</span>
+            <span>播放</span>
           </button>
           <div v-if="hasAlbumStats" class="album-stats" aria-label="专辑动态">
             <span>

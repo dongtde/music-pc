@@ -37,6 +37,23 @@ html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist :is(
   color: var(--mobile-text);
 }
 
+/* Adapt the bare arrow to the artwork beneath it; never add a button fill. */
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist .history-actions button,
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist .history-actions button:hover {
+  color: var(--detail-back-ink, var(--mobile-text));
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist .history-actions button::before {
+  content: none;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .topbar--playlist .history-actions button svg {
+  filter: drop-shadow(0 0 .65px var(--detail-back-outline, var(--mobile-bg)));
+}
+
 html[data-layout='mobile-2d'] .app-shell--playlist-detail .view.playlist-detail {
   position: relative;
   padding: 0 0 24px;
@@ -242,28 +259,45 @@ html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail > .pl
   margin-inline: var(--mobile-inline);
 }
 
-html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-detail-skeleton__hero {
-  position: relative;
+/* Loading rows use the same inset and divider as the loaded table. */
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail > .playlist-detail-skeleton {
   display: block;
-  padding: 0 var(--mobile-inline) 20px;
+  margin: 12px 14px 0;
 }
 
-html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail .playlist-detail-skeleton__cover {
-  width: calc(100% + 2 * var(--mobile-inline));
-  max-width: none;
-  height: calc(clamp(260px, 78vw, 440px) - var(--playlist-hero-lift));
-  margin-inline: calc(-1 * var(--mobile-inline));
-  aspect-ratio: auto;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail-skeleton__content {
-  margin-top: 16px;
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail > .playlist-detail-skeleton::before {
+  display: block;
+  margin: 0 6px 16px;
+  border-top: 1px solid var(--mobile-border-strong);
+  content: '';
 }
 
 html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail-skeleton__table {
-  margin-inline: var(--mobile-inline);
+  margin: 0;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail-skeleton__row {
+  min-height: 64px;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  gap: 8px;
+  padding: 8px 6px;
+  border-radius: 12px;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail-skeleton__song-main {
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 12px;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail-skeleton__thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+}
+
+html[data-layout='mobile-2d'] .app-shell--playlist-detail .playlist-detail-skeleton__line--duration {
+  width: 28px;
+  justify-self: end;
 }
 
 @media (prefers-reduced-motion: reduce) {

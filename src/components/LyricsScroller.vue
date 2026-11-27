@@ -28,6 +28,7 @@
       @pointerup="stopDrag"
       @pointerleave="stopDrag"
       @pointercancel="stopDrag"
+      @lostpointercapture.self="stopDrag"
       @wheel.prevent="handleWheel"
     >
       <button
@@ -69,6 +70,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Play } from 'lucide-vue-next'
 import { getLyricWordState } from '../utils/lyrics'
+import { getPlayerSwipeAxis } from '../utils/mobilePlayerSwipe'
 
 const props = defineProps({
   lines: {
@@ -116,7 +118,8 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
-  previewLines: { type: Number, default: 0 }
+  previewLines: { type: Number, default: 0 },
+  verticalDragOnly: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['seek'])
@@ -126,15 +129,18 @@ const wheeling = ref(false)
 const previewing = ref(false)
 const previewIndex = ref(null)
 const dragState = {
+  pointerId: null,
+  startX: 0,
   startY: 0,
   startScrollTop: 0,
+  pending: false,
   moved: false
 }
 let previewFrame = 0
 let layoutTimer = 0
 let previewTimer = null
 let wheelTimer = null
-let suppressNextClick = false
+let suppressClickUntil = 0
 
 const rootTag = computed(() => (props.variant === 'home' ? 'section' : 'div'))
 const interactionActive = computed(() => dragging.value || wheeling.value || previewing.value)
@@ -255,56 +261,70 @@ function getWordClass(line, word) {
 function startDrag(event) {
   const element = scroller.value
 
-  if (!element || event.button > 0 || !canInteract()) {
+  if (!element || event.button > 0 || event.isPrimary === false || dragState.pointerId !== null || !canInteract()) {
     return
   }
 
-  dragging.value = true
-  previewing.value = true
-  previewIndex.value = props.activeIndex
+  dragState.pointerId = event.pointerId
+  dragState.startX = event.clientX
   dragState.startY = event.clientY
   dragState.startScrollTop = element.scrollTop
   dragState.moved = false
+  dragState.pending = props.verticalDragOnly && event.pointerType === 'touch'
+  if (!dragState.pending) beginDrag(event)
+}
+
+function beginDrag(event) {
+  dragging.value = true
+  previewing.value = true
+  previewIndex.value = props.activeIndex
   clearPreviewTimer()
   clearWheelTimer()
   wheeling.value = false
-  element.setPointerCapture?.(event.pointerId)
+  if (event.isTrusted) scroller.value?.setPointerCapture?.(event.pointerId)
   updatePreviewFromCenter()
+}
+
+function releaseDragPointer() {
+  const pointerId = dragState.pointerId
+  dragState.pointerId = null
+  dragState.pending = false
+  if (pointerId !== null && scroller.value?.hasPointerCapture?.(pointerId)) {
+    scroller.value.releasePointerCapture(pointerId)
+  }
 }
 
 function handlePointerMove(event) {
   const element = scroller.value
-
-  if (!element || !dragging.value) {
-    return
-  }
+  if (!element || dragState.pointerId !== event.pointerId) return
 
   const deltaY = event.clientY - dragState.startY
-
-  if (Math.abs(deltaY) > 3) {
-    dragState.moved = true
+  if (dragState.pending) {
+    const axis = getPlayerSwipeAxis(event.clientX - dragState.startX, deltaY, { page: 'lyrics' })
+    if (axis === 'horizontal') {
+      releaseDragPointer()
+      return
+    }
+    if (axis !== 'scroll') return
+    dragState.pending = false
+    beginDrag(event)
   }
+  if (!dragging.value) return
 
+  if (Math.abs(deltaY) > 3) dragState.moved = true
   element.scrollTop = dragState.startScrollTop - deltaY * 2.2
   requestPreviewUpdate()
+  event.preventDefault()
 }
 
 function stopDrag(event) {
-  if (!dragging.value) {
-    return
-  }
+  if (dragState.pointerId !== event.pointerId) return
+  releaseDragPointer()
+  if (!dragging.value) return
 
   flushPreviewUpdate()
-  scroller.value?.releasePointerCapture?.(event.pointerId)
   dragging.value = false
-
-  if (dragState.moved) {
-    suppressNextClick = true
-    window.setTimeout(() => {
-      suppressNextClick = false
-    }, 0)
-  }
-
+  if (dragState.moved) suppressClickUntil = Date.now() + 500
   schedulePlaybackReturn()
 }
 
@@ -334,11 +354,7 @@ function handleWheel(event) {
 }
 
 function selectLyric(index) {
-  if (suppressNextClick) {
-    suppressNextClick = false
-    return
-  }
-
+  if (Date.now() < suppressClickUntil) return
   seekToLine(index)
 }
 
@@ -493,11 +509,12 @@ function handleResize() {
 }
 
 function resetInteraction() {
+  releaseDragPointer()
   dragging.value = false
   wheeling.value = false
   previewing.value = false
   previewIndex.value = null
-  suppressNextClick = false
+  suppressClickUntil = 0
   cleanupTimers()
 }
 

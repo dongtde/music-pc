@@ -1,3 +1,5 @@
+@import './detail-hero-skeleton.css';
+
 .playlist-detail {
   padding-top: 24px;
 }
@@ -317,25 +319,11 @@
 }
 
 .playlist-detail-skeleton {
-  --playlist-skeleton-base: color-mix(
-    in srgb,
-    var(--control-bg) 78%,
-    var(--accent)
-  );
-  --playlist-skeleton-glint: rgba(255, 255, 255, 0.14);
-  --playlist-skeleton-outline: rgba(var(--accent-rgb), 0.14);
+  --playlist-skeleton-base: var(--detail-skeleton-base);
+  --playlist-skeleton-glint: var(--detail-skeleton-glint);
+  --playlist-skeleton-outline: transparent;
   display: grid;
   gap: 22px;
-}
-
-:root[data-theme='light'] .playlist-detail-skeleton {
-  --playlist-skeleton-base: color-mix(
-    in srgb,
-    var(--control-bg) 90%,
-    var(--accent)
-  );
-  --playlist-skeleton-glint: rgba(255, 255, 255, 0.72);
-  --playlist-skeleton-outline: rgba(var(--accent-rgb), 0.1);
 }
 
 .playlist-detail-skeleton__hero {

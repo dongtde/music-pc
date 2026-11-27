@@ -1,22 +1,52 @@
 <template>
   <div ref="pageRoot" class="view playlist-detail artist-detail" @scroll.passive="handlePageScroll">
     <section
+      class="playlist-hero"
+      :class="{ 'detail-hero--loading': isLoading }"
+      :aria-busy="isLoading"
+      :aria-hidden="isLoading || undefined"
+      :inert="isLoading"
+    >
+      <div class="playlist-cover" :class="`playlist-cover--${artist.type}`">
+        <img
+          v-if="artistCoverUrl"
+          class="playlist-cover__image"
+          :src="artistCoverUrl"
+          :alt="artist.name"
+          loading="eager"
+          decoding="async"
+          fetchpriority="high"
+        />
+      </div>
+
+      <div class="playlist-hero__content">
+        <h1 ref="heroTitle" class="playlist-title">
+          <OverflowMarquee :text="artist.name" :enabled="isMobile2D" :active="!isLoading && !mobileHeaderVisible" />
+        </h1>
+        <div v-if="(isLoading && !remoteArtist) || artist.description" class="playlist-description">
+          <DetailDescription :text="artist.description || '\u00a0'" title="歌手简介" :subtitle="artist.name" />
+        </div>
+
+        <div v-if="(isLoading && !remoteArtist) || artist.aliases.length || artistProfileItems.length || artistTags.length" class="playlist-meta artist-profile">
+          <strong v-if="artist.aliases.length" class="playlist-meta__creator artist-profile__aliases">
+            {{ artist.aliases.join(' / ') }}
+          </strong>
+          <span v-for="item in artistProfileItems" :key="item.key" class="artist-profile__item">
+            <component :is="item.icon" :size="14" aria-hidden="true" />
+            {{ item.text }}
+          </span>
+          <span v-if="isLoading && !remoteArtist && !artistProfileItems.length" class="artist-profile__item">{{ '\u00a0'.repeat(10) }}</span>
+          <span v-if="(isLoading && !remoteArtist) || artistTags.length" class="playlist-meta__tags">{{ artistTags.join(' / ') || '\u00a0' }}</span>
+        </div>
+      </div>
+    </section>
+
+    <section
       v-if="isLoading"
       class="playlist-detail-skeleton"
       aria-busy="true"
       aria-label="正在加载歌手详情"
     >
-      <section class="playlist-detail-skeleton__hero">
-        <span class="playlist-detail-skeleton__cover" />
-        <div class="playlist-detail-skeleton__content">
-          <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--title" />
-          <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--description" />
-          <div class="playlist-detail-skeleton__meta">
-            <span v-for="item in 4" :key="item" class="playlist-detail-skeleton__pill" />
-          </div>
-        </div>
-      </section>
-
       <section class="playlist-detail-skeleton__table" aria-hidden="true">
         <div class="artist-detail-section__title-row artist-track-skeleton-heading">
           <span class="playlist-detail-skeleton__line" />
@@ -48,39 +78,6 @@
     </section>
 
     <template v-else>
-      <section class="playlist-hero">
-        <div class="playlist-cover" :class="`playlist-cover--${artist.type}`">
-          <img
-            v-if="artistCoverUrl"
-            class="playlist-cover__image"
-            :src="artistCoverUrl"
-            :alt="artist.name"
-            loading="eager"
-            decoding="async"
-            fetchpriority="high"
-          />
-        </div>
-
-        <div class="playlist-hero__content">
-          <h1 ref="heroTitle" class="playlist-title">
-            <OverflowMarquee :text="artist.name" :enabled="isMobile2D" :active="!mobileHeaderVisible" />
-          </h1>
-          <div v-if="artist.description" class="playlist-description">
-            <DetailDescription :text="artist.description" title="歌手简介" :subtitle="artist.name" />
-          </div>
-
-          <div v-if="artist.aliases.length || artistProfileItems.length || artistTags.length" class="playlist-meta artist-profile">
-            <strong v-if="artist.aliases.length" class="playlist-meta__creator artist-profile__aliases">
-              {{ artist.aliases.join(' / ') }}
-            </strong>
-            <span v-for="item in artistProfileItems" :key="item.key" class="artist-profile__item">
-              <component :is="item.icon" :size="14" aria-hidden="true" />
-              {{ item.text }}
-            </span>
-            <span v-if="artistTags.length" class="playlist-meta__tags">{{ artistTags.join(' / ') }}</span>
-          </div>
-        </div>
-      </section>
 
       <div v-if="errorMessage" class="playlist-state playlist-state--error">
         {{ errorMessage }}
@@ -110,12 +107,12 @@
                 <button
                   class="artist-track-play"
                   type="button"
-                  aria-label="播放全部热门歌曲"
+                  aria-label="播放热门歌曲"
                   :disabled="!artistTracks.length"
                   @click="playAllFeaturedTracks"
                 >
                   <Play :size="14" fill="currentColor" aria-hidden="true" />
-                  <span>播放全部</span>
+                  <span>播放</span>
                 </button>
               </div>
               <small>{{ artistTracks.length }} 首</small>
@@ -224,12 +221,12 @@
               <button
                 class="artist-track-play"
                 type="button"
-                aria-label="播放全部歌曲"
+                aria-label="播放歌曲"
                 :disabled="!rankedArtistSongs.length"
                 @click="playLoadedArtistSongs"
               >
                 <Play :size="14" fill="currentColor" aria-hidden="true" />
-                <span>播放全部</span>
+                <span>播放</span>
               </button>
               <div class="artist-sort-tabs" role="group" aria-label="歌曲排序">
                 <button
@@ -731,7 +728,7 @@ watch([artist, isLoading, mobileHeaderProgress], ([info, loading, progress]) => 
   })
 }, { immediate: true })
 
-watch([pageRoot, heroTitle, isMobile2D], ([root, title, mobile], _, onCleanup) => {
+watch([pageRoot, heroTitle, isMobile2D, isLoading], ([root, title, mobile], _, onCleanup) => {
   if (mobile && root && title) {
     const observer = new ResizeObserver(scheduleHeaderUpdate)
     observer.observe(root)

@@ -1,0 +1,141 @@
+/* Paint loading placeholders over the real hero, never a second layout. */
+.playlist-detail,
+.album-detail {
+  --detail-skeleton-base: color-mix(in srgb, var(--text-strong) 15%, var(--detail-page-bg, var(--control-bg)));
+  --detail-skeleton-glint: rgba(255, 255, 255, .14);
+}
+
+.detail-hero--loading {
+  pointer-events: none;
+  user-select: none;
+}
+
+.detail-hero--loading :is(
+  .playlist-title,
+  .album-hero__content > h1,
+  .playlist-description,
+  .album-description,
+  .playlist-meta > span,
+  .playlist-meta > strong,
+  .album-meta > span,
+  .playlist-action,
+  .album-action,
+  .album-stats > *
+) {
+  position: relative;
+  color: transparent !important;
+  text-shadow: none;
+}
+
+.detail-hero--loading :is(
+  .playlist-title,
+  .album-hero__content > h1,
+  .playlist-description,
+  .album-description,
+  .playlist-meta > span,
+  .playlist-meta > strong,
+  .album-meta > span,
+  .playlist-action,
+  .album-action,
+  .album-stats > *
+) > * {
+  visibility: hidden;
+}
+
+.detail-hero--loading :is(
+  .playlist-title,
+  .album-hero__content > h1,
+  .playlist-description,
+  .album-description,
+  .playlist-meta > span,
+  .playlist-meta > strong,
+  .album-meta > span,
+  .playlist-action,
+  .album-action,
+  .album-stats > *
+)::after,
+.detail-hero--loading :is(.playlist-cover, .album-cover):not(:has(img))::after {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  width: 100%;
+  height: .72em;
+  margin-inline: auto;
+  overflow: hidden;
+  border-radius: 999px;
+  background:
+    linear-gradient(100deg, transparent 0%, var(--detail-skeleton-glint) 42%, transparent 72%),
+    var(--detail-skeleton-base);
+  background-size: 220% 100%;
+  content: '';
+  pointer-events: none;
+  transform: translateY(-50%);
+  animation: detail-hero-shimmer 1500ms ease-in-out infinite;
+}
+
+.detail-hero--loading :is(.playlist-title, .album-hero__content > h1)::after {
+  max-width: min(520px, 82%);
+  height: .85em;
+}
+
+.detail-hero--loading :is(.playlist-description, .album-description)::after {
+  max-width: 88%;
+}
+
+.detail-hero--loading .playlist-meta > .playlist-meta__updated::after {
+  max-width: 132px;
+}
+
+.detail-hero--loading .playlist-meta > .playlist-meta__tags::after {
+  max-width: 116px;
+}
+
+.detail-hero--loading .playlist-meta > .playlist-avatar {
+  background: transparent;
+}
+
+.detail-hero--loading .playlist-meta > .playlist-avatar::after,
+.detail-hero--loading .playlist-actions > .playlist-action::after,
+.detail-hero--loading .album-actions > .album-action::after,
+.detail-hero--loading :is(.playlist-cover, .album-cover):not(:has(img))::after {
+  inset: 0;
+  width: auto;
+  height: auto;
+  border-radius: inherit;
+  transform: none;
+}
+
+.detail-hero--loading .playlist-actions .playlist-action,
+.detail-hero--loading .album-actions .album-action {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  opacity: 1;
+}
+.detail-hero--loading :is(.playlist-action, .album-action)::before {
+  visibility: hidden;
+}
+
+.detail-hero--loading .playlist-actions .playlist-action:disabled,
+.detail-hero--loading .album-actions .album-action:disabled {
+  opacity: 1;
+}
+
+.detail-hero--loading .playlist-description:empty::after {
+  content: none;
+}
+
+html[data-layout='mobile-2d'] .detail-hero--loading .playlist-actions .playlist-action::after {
+  inset-block: 2px;
+}
+
+@keyframes detail-hero-shimmer {
+  from { background-position: 180% 0; }
+  to { background-position: -40% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detail-hero--loading *::after {
+    animation: none;
+  }
+}

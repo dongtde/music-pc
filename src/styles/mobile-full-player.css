@@ -38,7 +38,7 @@ html[data-layout='mobile-2d'] .full-player-page--mobile :is(.full-player__close,
 html[data-layout='mobile-2d'] .full-player-page--mobile .full-player__close { left: 20px; }
 html[data-layout='mobile-2d'] .full-player-page--mobile .full-player__view-switch { right: 20px; }
 
-.mobile-full-player { position: absolute; inset: 0; z-index: 2; touch-action: pan-y; }
+.mobile-full-player { position: absolute; inset: 0; z-index: 2; touch-action: pan-y pinch-zoom; }
 .mobile-full-player__tabs {
   position: absolute;
   top: calc(12px + var(--mobile-top-inset));
@@ -114,7 +114,7 @@ html[data-layout='mobile-2d'] .full-player-page--mobile .mobile-full-player__lyr
   min-height: 0;
 }
 html[data-layout='mobile-2d'] .full-player-page--mobile .mobile-full-player__lyrics::before { display: none; }
-html[data-layout='mobile-2d'] .full-player-page--mobile .full-player__lyrics-scroll { padding-inline: 0; mask-image: linear-gradient(180deg, transparent, #000 8%, #000 82%, transparent); }
+html[data-layout='mobile-2d'] .full-player-page--mobile .full-player__lyrics-scroll { padding-inline: 0; touch-action: pinch-zoom; overscroll-behavior: contain; mask-image: linear-gradient(180deg, transparent, #000 8%, #000 82%, transparent); }
 html[data-layout='mobile-2d'] .full-player-page--mobile .full-player__lyric-line { min-height: 60px; padding: 12px 0; color: rgba(255, 255, 255, .48); text-align: left; transform: none; }
 html[data-layout='mobile-2d'] .full-player-page--mobile .full-player__lyric-text { font-weight: 400; line-height: 1.6; }
 html[data-layout='mobile-2d'] .full-player-page--mobile .full-player__lyric-line.active .full-player__lyric-text { font-weight: 550; }

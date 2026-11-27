@@ -5,31 +5,75 @@
     @scroll.passive="handlePageScroll"
   >
     <section
+      v-if="loading || podcast"
+      class="playlist-hero"
+      :class="{ 'detail-hero--loading': loading }"
+      :aria-busy="loading"
+      :aria-hidden="loading || undefined"
+      :inert="loading"
+    >
+      <div class="playlist-cover" :class="`playlist-cover--${podcast?.type || podcastPreview?.coverType || 'stage'}`">
+        <img
+          v-if="podcast?.coverUrl || podcastPreview?.coverUrl"
+          class="playlist-cover__image"
+          :src="podcast?.coverUrl || podcastPreview?.coverUrl"
+          :alt="podcast?.title || podcastPreview?.title || '电台详情'"
+          loading="eager"
+          decoding="async"
+          fetchpriority="high"
+        />
+      </div>
+
+      <div class="playlist-hero__content">
+        <h1 ref="heroTitle" class="playlist-title">
+          <OverflowMarquee :text="podcast?.title || podcastPreview?.title || '电台详情'" :enabled="isMobile2D" :active="!loading && !mobileHeaderVisible" />
+        </h1>
+        <div class="playlist-description">
+          <DetailDescription
+            :text="podcast?.description || (loading && !podcast ? '\u00a0' : '')"
+            title="电台简介"
+            :subtitle="podcast?.title || podcastPreview?.title || '电台详情'"
+          />
+        </div>
+
+        <div class="playlist-meta">
+          <span class="playlist-avatar">
+            <img
+              v-if="podcast?.creatorAvatarUrl"
+              :src="podcast.creatorAvatarUrl"
+              :alt="podcast.creator"
+              loading="lazy"
+              decoding="async"
+            />
+            <RadioTower v-else :size="14" />
+          </span>
+          <strong class="playlist-meta__creator">{{ podcast?.creator || '音乐电台' }}</strong>
+          <span v-if="podcast?.lastUpdated" class="playlist-meta__updated">更新于 {{ podcast.lastUpdated }}</span>
+          <span class="playlist-meta__count">{{ podcast?.programCountLabel || `${total} 首歌曲` }}</span>
+          <span class="playlist-meta__listeners">{{ podcast?.playCountLabel || '连续播放' }}</span>
+          <span class="playlist-meta__tags">{{ podcast?.category ? `${podcast.category} / ` : '' }}FM {{ podcast?.id || route.params.id }}</span>
+        </div>
+
+        <div class="playlist-actions">
+          <button
+            class="playlist-action playlist-action--primary"
+            type="button"
+            :disabled="loading || !programs.length"
+            @click="playAll"
+          >
+            <Play :size="18" fill="currentColor" />
+            <span>播放</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section
       v-if="loading && !podcast"
       class="playlist-detail-skeleton"
       aria-busy="true"
       aria-label="正在加载电台详情"
     >
-      <section class="playlist-detail-skeleton__hero">
-        <span class="playlist-detail-skeleton__cover" />
-        <div class="playlist-detail-skeleton__content">
-          <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--title" />
-          <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--description" />
-          <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--description-short" />
-          <div class="playlist-detail-skeleton__meta">
-            <span class="playlist-detail-skeleton__avatar" />
-            <span
-              v-for="item in 5"
-              :key="`podcast-detail-meta-${item}`"
-              class="playlist-detail-skeleton__pill"
-            />
-          </div>
-          <div class="playlist-detail-skeleton__actions">
-            <span class="playlist-detail-skeleton__button playlist-detail-skeleton__button--primary" />
-          </div>
-        </div>
-      </section>
-
       <section class="playlist-detail-skeleton__table" aria-hidden="true">
         <header class="playlist-table__head">
           <span>标题</span>
@@ -57,62 +101,6 @@
     </section>
 
     <template v-else-if="podcast">
-      <section class="playlist-hero">
-        <div class="playlist-cover" :class="`playlist-cover--${podcast.type}`">
-          <img
-            v-if="podcast.coverUrl"
-            class="playlist-cover__image"
-            :src="podcast.coverUrl"
-            :alt="podcast.title"
-            loading="eager"
-            decoding="async"
-            fetchpriority="high"
-          />
-        </div>
-
-        <div class="playlist-hero__content">
-          <h1 ref="heroTitle" class="playlist-title">
-            <OverflowMarquee :text="podcast.title" :enabled="isMobile2D" :active="!mobileHeaderVisible" />
-          </h1>
-          <div class="playlist-description">
-            <DetailDescription
-              :text="podcast.description"
-              title="电台简介"
-              :subtitle="podcast.title"
-            />
-          </div>
-
-          <div class="playlist-meta">
-            <span class="playlist-avatar">
-              <img
-                v-if="podcast.creatorAvatarUrl"
-                :src="podcast.creatorAvatarUrl"
-                :alt="podcast.creator"
-                loading="lazy"
-                decoding="async"
-              />
-              <RadioTower v-else :size="14" />
-            </span>
-            <strong class="playlist-meta__creator">{{ podcast.creator || '音乐电台' }}</strong>
-            <span v-if="podcast.lastUpdated" class="playlist-meta__updated">更新于 {{ podcast.lastUpdated }}</span>
-            <span class="playlist-meta__count">{{ podcast.programCountLabel || `${total} 首歌曲` }}</span>
-            <span class="playlist-meta__listeners">{{ podcast.playCountLabel || '连续播放' }}</span>
-            <span class="playlist-meta__tags">{{ podcast.category ? `${podcast.category} / ` : '' }}FM {{ podcast.id }}</span>
-          </div>
-
-          <div class="playlist-actions">
-            <button
-              class="playlist-action playlist-action--primary"
-              type="button"
-              :disabled="!programs.length"
-              @click="playAll"
-            >
-              <Play :size="18" fill="currentColor" />
-              <span>播放全部</span>
-            </button>
-          </div>
-        </div>
-      </section>
 
       <div v-if="errorMessage" class="playlist-state playlist-state--error">
         {{ errorMessage }}

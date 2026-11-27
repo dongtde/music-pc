@@ -5,42 +5,92 @@
     @scroll.passive="handlePageScroll"
   >
     <section
+      class="playlist-hero"
+      :class="{ 'detail-hero--loading': isLoading }"
+      :aria-busy="isLoading"
+      :aria-hidden="isLoading || undefined"
+      :inert="isLoading"
+    >
+      <div class="playlist-cover" :class="`playlist-cover--${playlist.type}`">
+        <img
+          v-if="playlist.coverUrl"
+          class="playlist-cover__image"
+          :src="playlist.coverUrl"
+          :alt="playlist.title"
+          loading="eager"
+          decoding="async"
+          fetchpriority="high"
+        />
+      </div>
+
+      <div class="playlist-hero__content">
+        <h1 ref="heroTitle" class="playlist-title">
+          <OverflowMarquee :text="playlist.title" :enabled="isMobile2D" :active="!isLoading && !mobileHeaderVisible" />
+        </h1>
+        <div class="playlist-description">
+          <DetailDescription
+            :text="playlist.description || (isLoading && !remotePlaylist ? '\u00a0' : '')"
+            title="歌单简介"
+            :subtitle="playlist.title"
+          />
+        </div>
+
+        <div class="playlist-meta">
+          <span class="playlist-avatar">
+            <img
+              v-if="playlist.creatorAvatarUrl"
+              :src="playlist.creatorAvatarUrl"
+              :alt="playlist.creator"
+              loading="lazy"
+              decoding="async"
+            />
+            <template v-else>{{ creatorInitial }}</template>
+          </span>
+          <strong class="playlist-meta__creator">{{ playlist.creator }}</strong>
+          <span class="playlist-meta__updated">{{ playlist.updated || (isLoading && !remotePlaylist ? '\u00a0' : '') }}</span>
+          <span class="playlist-meta__count">{{ playlist.trackCount }} 首歌</span>
+          <span class="playlist-meta__listeners">{{ playlist.listeners }} 次播放</span>
+          <span v-if="(isLoading && !remotePlaylist) || playlist.tags?.length" class="playlist-meta__tags">{{
+            playlist.tags?.join(' / ') || '\u00a0'
+          }}</span>
+        </div>
+
+        <div class="playlist-actions">
+          <button
+            class="playlist-action playlist-action--primary"
+            type="button"
+            :disabled="isLoading || !playlistTracks.length || playAllLoading"
+            @click="playAllPlaylistTracks"
+          >
+            <Play :size="18" fill="currentColor" />
+            <span>播放</span>
+          </button>
+          <button
+            v-if="isRemotePlaylist"
+            class="playlist-action"
+            type="button"
+            :disabled="isLoading || (commentsLoading && !comments.length)"
+            @click="openCommentsModal"
+          >
+            <MessageCircle :size="17" />
+            <span>评论 {{ commentTotal }}</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section
       v-if="isLoading"
       class="playlist-detail-skeleton"
       aria-busy="true"
       aria-label="歌单详情加载中"
     >
-      <section class="playlist-detail-skeleton__hero">
-        <span class="playlist-detail-skeleton__cover" />
-
-        <div class="playlist-detail-skeleton__content">
-          <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--title" />
-          <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--description" />
-          <span class="playlist-detail-skeleton__line playlist-detail-skeleton__line--description-short" />
-
-          <div class="playlist-detail-skeleton__meta">
-            <span class="playlist-detail-skeleton__avatar" />
-            <span
-              v-for="item in 5"
-              :key="`playlist-meta-skeleton-${item}`"
-              class="playlist-detail-skeleton__pill"
-            />
-          </div>
-
-          <div class="playlist-detail-skeleton__actions">
-            <span class="playlist-detail-skeleton__button playlist-detail-skeleton__button--primary" />
-            <span class="playlist-detail-skeleton__button" />
-          </div>
-        </div>
-      </section>
-
       <section class="playlist-detail-skeleton__table" aria-hidden="true">
         <header class="playlist-table__head">
           <span>标题</span>
           <span>专辑</span>
           <span>时长</span>
         </header>
-
         <div class="playlist-detail-skeleton__rows">
           <article
             v-for="item in 10"
@@ -62,74 +112,6 @@
     </section>
 
     <template v-else>
-      <section class="playlist-hero">
-        <div class="playlist-cover" :class="`playlist-cover--${playlist.type}`">
-          <img
-            v-if="playlist.coverUrl"
-            class="playlist-cover__image"
-            :src="playlist.coverUrl"
-            :alt="playlist.title"
-            loading="eager"
-            decoding="async"
-            fetchpriority="high"
-          />
-        </div>
-
-        <div class="playlist-hero__content">
-          <h1 ref="heroTitle" class="playlist-title">
-            <OverflowMarquee :text="playlist.title" :enabled="isMobile2D" :active="!mobileHeaderVisible" />
-          </h1>
-          <div class="playlist-description">
-            <DetailDescription
-              :text="playlist.description"
-              title="歌单简介"
-              :subtitle="playlist.title"
-            />
-          </div>
-
-          <div class="playlist-meta">
-            <span class="playlist-avatar">
-              <img
-                v-if="playlist.creatorAvatarUrl"
-                :src="playlist.creatorAvatarUrl"
-                :alt="playlist.creator"
-                loading="lazy"
-                decoding="async"
-              />
-              <template v-else>{{ creatorInitial }}</template>
-            </span>
-            <strong class="playlist-meta__creator">{{ playlist.creator }}</strong>
-            <span class="playlist-meta__updated">{{ playlist.updated }}</span>
-            <span class="playlist-meta__count">{{ playlist.trackCount }} 首歌</span>
-            <span class="playlist-meta__listeners">{{ playlist.listeners }} 次播放</span>
-            <span v-if="playlist.tags?.length" class="playlist-meta__tags">{{
-              playlist.tags.join(' / ')
-            }}</span>
-          </div>
-
-          <div class="playlist-actions">
-            <button
-              class="playlist-action playlist-action--primary"
-              type="button"
-              :disabled="!playlistTracks.length || playAllLoading"
-              @click="playAllPlaylistTracks"
-            >
-              <Play :size="18" fill="currentColor" />
-              <span>播放全部</span>
-            </button>
-            <button
-              v-if="isRemotePlaylist"
-              class="playlist-action"
-              type="button"
-              :disabled="commentsLoading && !comments.length"
-              @click="openCommentsModal"
-            >
-              <MessageCircle :size="17" />
-              <span>评论 {{ commentTotal }}</span>
-            </button>
-          </div>
-        </div>
-      </section>
 
       <div v-if="errorMessage" class="playlist-state playlist-state--error">
         {{ errorMessage }}

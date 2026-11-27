@@ -6,7 +6,7 @@
     :data-page="renderedPage"
     :data-page-preview="previewPage"
     :data-page-phase="pageAnimating ? 'settling' : pageDragging ? 'dragging' : 'idle'"
-    @pointerdown="startSwipe"
+    @pointerdown.capture="startSwipe"
     @pointermove.capture="moveSwipe"
     @pointerup.capture="finishSwipe"
     @pointercancel="cancelSwipe"
@@ -90,6 +90,7 @@
                   :ref="setLyricsScroller"
                   class="mobile-full-player__lyrics"
                   variant="full"
+                  vertical-drag-only
                   :lines="lines"
                   :active-index="activeIndex"
                   :current-time="currentTime"

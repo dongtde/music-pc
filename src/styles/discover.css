@@ -1,4 +1,10 @@
-﻿.discover-page {
+﻿.discover > .tabs {
+  margin-bottom: var(--page-nav-gap);
+}
+
+.discover-page {
+  display: flow-root;
+  padding-top: 0;
   animation: page-in 260ms ease both;
 }
 
@@ -183,16 +189,12 @@
   overflow: visible;
 }
 
-.playlists-page {
-  padding-top: 14px;
-}
-
 .playlist-category-strip {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px 14px;
-  padding-bottom: 26px;
+  margin-bottom: 0;
 }
 
 .playlist-category-chip {
@@ -524,7 +526,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 24px;
-  margin: 34px 0;
+  margin: 0;
 }
 
 .chart-summary-card {
@@ -702,14 +704,14 @@
 }
 
 .chart-section + .chart-section {
-  margin-top: 38px;
+  margin-top: 0;
 }
 
 .region-chart-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 30px 24px;
-  padding-bottom: 28px;
+  padding-bottom: 0;
 }
 
 .region-chart-card {
@@ -843,10 +845,6 @@
   display: block;
   margin-top: 4px;
   color: var(--text-muted);
-}
-
-.artists-page {
-  padding-top: 22px;
 }
 
 .artist-filter-panel {
@@ -1090,10 +1088,6 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-.albums-page {
-  padding-top: 14px;
 }
 
 .album-filter-row {
@@ -1608,7 +1602,7 @@
   position: relative;
   width: 100%;
   height: auto;
-  margin: 14px 0 40px;
+  margin: 0 0 40px;
   overflow: hidden;
   border: 0;
   border-radius: 0;
@@ -1891,6 +1885,17 @@
 
 .section-title.compact {
   margin: 0;
+}
+
+.playlists-page > .section-title,
+.chart-section > .section-title {
+  display: flex;
+  margin-block: var(--section-heading-gap);
+}
+
+.playlists-skeleton > .skeleton-title,
+.chart-section > .skeleton-title {
+  margin-block: var(--section-heading-gap);
 }
 
 .recommend-carousel-head {
@@ -2793,7 +2798,7 @@
   width: 100%;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
-  margin: 14px 0 40px;
+  margin: 0 0 40px;
 }
 
 .skeleton-hero-card {
@@ -3203,7 +3208,7 @@
   .playlist-category-strip {
     flex-wrap: nowrap;
     overflow-x: auto;
-    padding-bottom: 16px;
+    padding-bottom: 0;
   }
 
   .playlist-category-chip {

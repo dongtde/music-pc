@@ -1,44 +1,5 @@
 <template>
   <section class="discover-page artists-page">
-    <div class="artist-filter-panel" aria-label="歌手筛选">
-      <div>
-        <strong>语种</strong>
-        <button
-          v-for="item in areaFilters"
-          :key="item.value"
-          type="button"
-          :class="{ active: filters.area === item.value }"
-          @click="setFilter('area', item.value)"
-        >
-          {{ item.label }}
-        </button>
-      </div>
-      <div>
-        <strong>分类</strong>
-        <button
-          v-for="item in typeFilters"
-          :key="item.value"
-          type="button"
-          :class="{ active: filters.type === item.value }"
-          @click="setFilter('type', item.value)"
-        >
-          {{ item.label }}
-        </button>
-      </div>
-      <div>
-        <strong>筛选</strong>
-        <button
-          v-for="item in initialFilters"
-          :key="item.value"
-          type="button"
-          :class="{ active: filters.initial === item.value }"
-          @click="setFilter('initial', item.value)"
-        >
-          {{ item.label }}
-        </button>
-      </div>
-    </div>
-
     <section
       v-if="skeletonVisible"
       class="artists-skeleton"
@@ -46,7 +7,6 @@
       aria-label="正在加载歌手"
     >
       <section class="skeleton-section skeleton-section--artist-rank">
-        <span class="skeleton-title skeleton-title--small" />
         <div class="artist-rank-list">
           <article
             v-for="item in ARTIST_RANK_SKELETON_COUNT"
@@ -78,10 +38,8 @@
       <strong>歌手加载失败</strong>
       <button type="button" @click="reload">重试</button>
     </div>
-    <template v-else>
-      <section v-if="topArtists.length" class="artist-rank-panel">
-        <h2 class="section-title compact artist-rank-title">热榜歌手</h2>
-        <div class="artist-rank-list">
+    <section v-else-if="topArtists.length" class="artist-rank-panel">
+      <div class="artist-rank-list">
           <router-link
             v-for="artist in topArtists"
             :key="artist.id"
@@ -107,8 +65,49 @@
           </router-link>
         </div>
       </section>
+      <div class="artist-filter-panel" aria-label="歌手筛选">
+        <div>
+          <strong>语种</strong>
+          <button
+            v-for="item in areaFilters"
+            :key="item.value"
+            type="button"
+            :class="{ active: filters.area === item.value }"
+            @click="setFilter('area', item.value)"
+          >
+            {{ item.label }}
+          </button>
+        </div>
+        <div>
+          <strong>分类</strong>
+          <button
+            v-for="item in typeFilters"
+            :key="item.value"
+            type="button"
+            :class="{ active: filters.type === item.value }"
+            @click="setFilter('type', item.value)"
+          >
+            {{ item.label }}
+          </button>
+        </div>
+        <div>
+          <strong>筛选</strong>
+          <button
+            v-for="item in initialFilters"
+            :key="item.value"
+            type="button"
+            :class="{ active: filters.initial === item.value }"
+            @click="setFilter('initial', item.value)"
+          >
+            {{ item.label }}
+          </button>
+        </div>
+      </div>
 
-      <section class="artist-library-section">
+      <section
+        v-if="!skeletonVisible && !(error && !hasArtistContent)"
+        class="artist-library-section"
+      >
         <header class="artist-library-head">
           <h2 class="section-title compact artist-library-title">分类歌手</h2>
           <small>{{ artists.length }} 位歌手</small>
@@ -177,7 +176,6 @@
           <span v-else-if="!hasMore && artists.length">没有更多歌手了</span>
         </div>
       </section>
-    </template>
   </section>
 </template>
 
@@ -223,7 +221,6 @@ const initialFilters = [
   { label: '热门', value: -1 },
   ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     .split('')
-    .slice(0, 10)
     .map((letter) => ({ label: letter, value: letter.toLowerCase() })),
 ];
 

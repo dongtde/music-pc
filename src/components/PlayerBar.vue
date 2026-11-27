@@ -153,7 +153,11 @@
         :active-value="activePlaybackQualityValue"
         :options="playbackQualityOptions"
         :loading="player.state.isLoading"
+        :immersive="fullPlayerOpen"
+        :cover-style="currentTrackCoverStyle"
+        :detail-cover-style="fullPlayerOpen ? null : detailCoverStyle"
         @toggle="toggleQualityMenu"
+        @close="closePlayerPopovers"
         @select="selectPlaybackQuality"
       />
       <PlayerDesktopLyricsButton
@@ -181,7 +185,7 @@
   </footer>
 
   <Teleport to="body">
-    <button v-if="isMobile && (modeMenuOpen || qualityMenuOpen || visualizerMenuOpen)" class="mobile-player-backdrop" type="button" aria-label="关闭播放面板" @click="closePlayerPopovers" />
+    <button v-if="isMobile && (modeMenuOpen || visualizerMenuOpen)" class="mobile-player-backdrop" type="button" aria-label="关闭播放面板" @click="closePlayerPopovers" />
   </Teleport>
 
   <CommentModal
@@ -307,6 +311,7 @@ let fullPlayerBackgroundTaskTimer = 0
 let lastQueueTrackKey = ''
 let lastQueueTrackRequestedAt = 0
 let miniPlayerSwipe = null
+let playModeNotice = null
 let miniPlayerSuppressClickUntil = 0
 
 const fallbackCoverPalette = {
@@ -543,6 +548,7 @@ watch([fullPlayerOpen, isMobile, fullPlayerMobilePage], ([open, mobile, page]) =
   else delete document.documentElement.dataset.playerPage
 }, { immediate: true })
 watch(fullPlayerMobilePage, closePlayerPopovers)
+watch(isMobile, closePlayerPopovers)
 watch(() => props.homePlayer, (active, previous) => {
   if (!active && !previous) return
   fullPlayerMobilePage.value = 'cover'
@@ -560,6 +566,15 @@ watch(fullPlayerVisualizerMode, (mode) => {
 })
 
 function toggleModeMenu() {
+  if (isMobile.value) {
+    const index = playModes.findIndex(mode => mode.value === playMode.value)
+    const nextMode = playModes[(index + 1) % playModes.length]
+    closePlayerPopovers()
+    selectPlayMode(nextMode.value)
+    playModeNotice?.destroy()
+    playModeNotice = message.info(nextMode.label, { duration: 1500, showIcon: false })
+    return
+  }
   modeMenuOpen.value = !modeMenuOpen.value
   volumeMenuOpen.value = false
   queueMenuOpen.value = false
@@ -1179,6 +1194,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  playModeNotice?.destroy()
   cancelMiniPlayerSwipe()
   window.removeEventListener('resize', syncPlayerBarHeight)
   document.removeEventListener('pointerdown', handleOutsideClick)

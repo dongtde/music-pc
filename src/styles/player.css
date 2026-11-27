@@ -951,30 +951,27 @@
   opacity: 1;
 }
 
-.play-controls > .play-button.play-button--loading::before {
-  position: absolute;
-  inset: 4px;
-  border: 2px solid rgba(255, 255, 255, 0.28);
-  border-top-color: rgba(255, 255, 255, 0.92);
-  border-radius: 50%;
-  content: '';
-  animation: play-button-loading-ring 900ms linear infinite;
+.play-button__loading-dots {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 
-.play-controls > .play-button.play-button--loading::after {
-  position: absolute;
-  inset: 9px;
+.play-button__loading-dots > span {
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.16);
-  content: '';
-  animation: play-button-loading-pulse 1200ms ease-in-out infinite;
+  background: currentColor;
+  opacity: .35;
+  animation: play-button-loading-dot 1200ms ease-in-out infinite;
 }
 
-.play-button__loading-icon {
-  position: relative;
-  z-index: 1;
-  animation: play-button-loading-icon 900ms linear infinite;
-}
+.play-button__loading-dots > span:nth-child(1) { animation-delay: -320ms; }
+.play-button__loading-dots > span:nth-child(2) { animation-delay: -160ms; }
 
 .mode-button.active,
 .volume-button.active,
@@ -1182,27 +1179,16 @@
   box-shadow: 0 0 0 2px var(--player-bg);
 }
 
-@keyframes play-button-loading-ring {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes play-button-loading-icon {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes play-button-loading-pulse {
+@keyframes play-button-loading-dot {
   0%,
+  60%,
   100% {
-    opacity: 0.22;
-    transform: scale(0.74);
+    opacity: .35;
+    transform: scale(.8);
   }
 
-  50% {
-    opacity: 0.46;
+  30% {
+    opacity: 1;
     transform: scale(1);
   }
 }
@@ -1220,10 +1206,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .play-controls > .play-button.play-button--loading::before,
-  .play-controls > .play-button.play-button--loading::after,
-  .play-button__loading-icon {
+  .play-button__loading-dots > span {
     animation: none;
+    opacity: .65;
+    transform: none;
   }
 
   .track-summary__marquee.is-overflowing .track-summary__marquee-frame {

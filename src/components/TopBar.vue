@@ -1,6 +1,7 @@
 <template>
   <header
     class="topbar"
+    ref="topbarRoot"
     :class="{
       'topbar--search-page': isMobileSearchPage,
       'topbar--detail': isMobileDetail,
@@ -335,6 +336,7 @@ import { prepareArtistCover } from '../utils/artistPreview'
 import { getPlaybackErrorDisplay } from '../utils/playbackError'
 import { isAbortError } from '../utils/request'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
+import { useDetailBackContrast } from '../composables/useDetailBackContrast'
 
 const props = defineProps({
   back: { type: Function, default: null },
@@ -445,10 +447,17 @@ const isMobilePlaylist = computed(() => isMobile.value && Boolean(route.meta.cov
 const currentPlaylistHeader = computed(() => props.playlistHeader?.path === route.path
   ? props.playlistHeader
   : { title: '', progress: 0, visible: false, collapsed: false })
+const topbarRoot = ref(null)
+const backContrastStyle = useDetailBackContrast(
+  topbarRoot,
+  isMobilePlaylist,
+  () => currentPlaylistHeader.value.coverUrl,
+  () => currentPlaylistHeader.value.progress ?? 0
+)
 const playlistHeaderStyle = computed(() => {
   if (!isMobilePlaylist.value) return undefined
   const progress = currentPlaylistHeader.value.progress ?? (currentPlaylistHeader.value.visible ? 1 : 0)
-  return { '--playlist-header-opacity': Math.max(0, Math.min(1, progress)) }
+  return { '--playlist-header-opacity': Math.max(0, Math.min(1, progress)), ...backContrastStyle.value }
 })
 const mobilePageTitle = computed(() => {
   const root = route.path.split('/')[1]

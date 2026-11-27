@@ -29,14 +29,15 @@
       </button>
 
       <button
+        v-if="!isMobile"
         class="full-player__view-switch"
         type="button"
         :aria-pressed="is3DView"
         :aria-label="is3DView ? '返回歌词播放器' : '切换到 3D 播放器'"
         @click="togglePlayerView"
       >
-        <component :is="isMobile && !is3DView ? Grid2X2 : is3DView ? AlignLeft : Box" :size="isMobile ? 23 : 17" />
-        <span v-if="!isMobile">{{ is3DView ? '歌词页面' : '3D 播放器' }}</span>
+        <component :is="is3DView ? AlignLeft : Box" :size="17" />
+        <span>{{ is3DView ? '歌词页面' : '3D 播放器' }}</span>
       </button>
       <nav v-if="homeMode && isMobile && !is3DView" class="full-player__home-sections" aria-label="首页分类">
         <button class="active" type="button" aria-pressed="true" @click="$emit('home-section', 'music')">音乐</button>
@@ -190,7 +191,7 @@ import {
   ref,
   watch,
 } from 'vue';
-import { AlignLeft, Box, ChevronDown, Grid2X2 } from 'lucide-vue-next';
+import { AlignLeft, Box, ChevronDown } from 'lucide-vue-next';
 import { getCachedTrackLyrics } from '../services/lyrics';
 import { usePlayerStore } from '../stores/player';
 import { useThemeStore } from '../stores/theme';

@@ -1,7 +1,3 @@
-.app-shell--cover-detail .artist-detail .playlist-detail-skeleton {
-  --playlist-skeleton-base: color-mix(in srgb, var(--detail-page-bg) 84%, var(--text-strong));
-}
-
 .artist-profile {
   overflow-wrap: anywhere;
 }
@@ -413,18 +409,9 @@
 .artist-album-grid--skeleton,
 .artist-video-grid--skeleton,
 .artist-intro-skeleton {
-  --artist-skeleton-base: color-mix(in srgb, var(--control-bg) 78%, var(--accent));
-  --artist-skeleton-glint: rgba(255, 255, 255, 0.14);
-  --artist-skeleton-outline: rgba(var(--accent-rgb), 0.14);
-}
-
-:root[data-theme='light'] .artist-tab-skeleton,
-:root[data-theme='light'] .artist-album-grid--skeleton,
-:root[data-theme='light'] .artist-video-grid--skeleton,
-:root[data-theme='light'] .artist-intro-skeleton {
-  --artist-skeleton-base: color-mix(in srgb, var(--control-bg) 90%, var(--accent));
-  --artist-skeleton-glint: rgba(255, 255, 255, 0.72);
-  --artist-skeleton-outline: rgba(var(--accent-rgb), 0.1);
+  --artist-skeleton-base: var(--detail-skeleton-base);
+  --artist-skeleton-glint: var(--detail-skeleton-glint);
+  --artist-skeleton-outline: transparent;
 }
 
 .artist-tab-skeleton__line,

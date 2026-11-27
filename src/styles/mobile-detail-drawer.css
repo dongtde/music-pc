@@ -36,7 +36,7 @@ html[data-layout='mobile-2d'] .mobile-detail-drawer {
 html[data-layout='mobile-2d'] .mobile-detail-page {
   --mobile-header-height: 56px;
   --mobile-nav-height: 0px;
-  --page-player-clearance: calc(var(--mobile-mini-height) + var(--mobile-bottom-inset));
+  --page-player-clearance: calc(var(--mobile-mini-height) + var(--mobile-bottom-inset) + 6px);
   position: absolute;
   inset: 0;
   display: flex;
@@ -74,8 +74,9 @@ html[data-layout='mobile-2d'][data-theme='light'] .mobile-detail-page.app-shell-
 }
 
 /* Keep one shared transport above the sheet, without the bottom navigation gap. */
-html[data-layout='mobile-2d'] .app-shell.app-shell--mobile-detail > .player {
+html[data-layout='mobile-2d'] .app-shell:is(.app-shell--detail-page, .app-shell--mobile-detail) > .player {
   --mobile-nav-height: 0px;
+  --mobile-player-bottom-gap: 6px;
   display: grid;
 }
 

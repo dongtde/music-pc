@@ -11,11 +11,9 @@
     :disabled="loading"
     @click="$emit('toggle-play')"
   >
-    <Loader2
-      v-if="loading"
-      class="play-button__loading-icon"
-      :size="22"
-    />
+    <span v-if="loading" class="play-button__loading-dots" aria-hidden="true">
+      <span v-for="dot in 3" :key="dot" />
+    </span>
     <Pause v-else-if="playing" :size="22" fill="currentColor" />
     <Play v-else :size="22" fill="currentColor" />
   </button>
@@ -26,7 +24,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { Loader2, Pause, Play, SkipBack, SkipForward } from 'lucide-vue-next'
+import { Pause, Play, SkipBack, SkipForward } from 'lucide-vue-next'
 
 const props = defineProps({
   loading: {
